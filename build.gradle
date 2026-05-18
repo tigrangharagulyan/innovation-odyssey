@@ -1,0 +1,44 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+repositories {
+    mavenCentral()
+}
+
+ext.gdxVersion = '1.12.1'
+
+dependencies {
+    implementation "com.badlogicgames.gdx:gdx:$gdxVersion"
+    implementation "com.badlogicgames.gdx:gdx-box2d:$gdxVersion"
+    implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
+    runtimeOnly    "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
+    runtimeOnly    "com.badlogicgames.gdx:gdx-box2d-platform:$gdxVersion:natives-desktop"
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src']
+            exclude '**/TeaVMLauncher.java'   // web-only; compiled by teavm subproject
+        }
+        resources.srcDirs = ['assets']
+    }
+}
+
+application {
+    mainClass = 'com.odyssey.DesktopLauncher'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+run {
+    workingDir = projectDir
+    if (System.getProperty('os.name').toLowerCase().contains('mac')) {
+        jvmArgs '-XstartOnFirstThread'
+    }
+}
