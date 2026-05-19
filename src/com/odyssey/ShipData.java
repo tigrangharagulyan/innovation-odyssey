@@ -2,6 +2,43 @@ package com.odyssey;
 
 public final class ShipData {
 
+    /** Mutable state stored in each bumper body's userData for per-bumper hit animation. */
+    public static final class BumperHitData {
+        public long lastHitMs = 0L;
+    }
+
+    public static final class PlanetProfile {
+        public final String name;
+        public final float distance;
+        public final float gravity;
+        public final String atmosphere;
+        public final String rewardLabel;
+        public final String unlockedBuildingA;
+        public final String unlockedBuildingB;
+
+        public PlanetProfile(String name, float distance, float gravity, String atmosphere,
+                             String rewardLabel, String unlockedBuildingA, String unlockedBuildingB) {
+            this.name = name;
+            this.distance = distance;
+            this.gravity = gravity;
+            this.atmosphere = atmosphere;
+            this.rewardLabel = rewardLabel;
+            this.unlockedBuildingA = unlockedBuildingA;
+            this.unlockedBuildingB = unlockedBuildingB;
+        }
+    }
+
+    public static final PlanetProfile[] PLANETS = {
+        new PlanetProfile("Solara", 1000f, 1.0f, "Stable", "Baseline Diagnostics",
+            "Habitat Hub", "Solar Relay"),
+        new PlanetProfile("Nova Terra", 4200f, 1.4f, "Thin", "Wormhole Tech",
+            "Terraforming Station", "Research Outpost"),
+        new PlanetProfile("Cryon Reach", 7600f, 0.7f, "Frozen", "Cryo Suspension",
+            "Quantum Farm", "Fusion Dock"),
+        new PlanetProfile("Helios Forge", 12000f, 2.2f, "Volatile", "Overdrive Core",
+            "Plasma Refinery", "Orbital Shipyard")
+    };
+
     private static ShipData instance;
 
     public float totalJoules           = 0f;
@@ -18,6 +55,18 @@ public final class ShipData {
     public float planetGravityMultiplier = 1.0f;
     public float accumulatedDist       = 0f;   // total AU covered across all runs
     public int   sectorReached         = -1;   // -1=none, 0-3 = sector index
+    public int currentPlanetIndex      = 0;
+    public int selectedPlanetIndex     = 1;
+    public int arrivalsCompleted       = 0;
+    public boolean arrivalReady        = false;
+    public String lastArrivalPlanetName = "";
+    public float lastArrivalEnergyUsed  = 0f;
+    public float lastArrivalJourneyDays = 0f;
+    public float crystals               = 0f;   // second currency — spent on bumpers & gravity wells
+    public float bumperSparkValue       = 20f;  // ◆ earned per regular bumper hit (raised by overdrive)
+    // Pending collision events drained each frame by EngineeringLabScreen: {worldX, worldY, value, colorType}
+    // colorType: 0 = joules (orange), 1 = crystals (cyan)
+    public final com.badlogic.gdx.utils.Array<float[]> pendingContactEvents = new com.badlogic.gdx.utils.Array<>();
 
     // Demo level: Solara System defaults
     public static final float SOLARA_GRAVITY   = 1.0f;
@@ -44,11 +93,27 @@ public final class ShipData {
         sectorReached          = -1;
         powerGenerated         = 0f;
         energyAtLastLaunch     = 0f;
+        currentPlanetIndex     = 0;
+        selectedPlanetIndex    = 1;
+        arrivalsCompleted      = 0;
+        arrivalReady           = false;
+        lastArrivalPlanetName  = "";
+        lastArrivalEnergyUsed  = 0f;
+        lastArrivalJourneyDays = 0f;
+        crystals               = 0f;
+        bumperSparkValue       = 20f;
+        pendingContactEvents.clear();
     }
 
     public void addJoules(float joules) {
         totalJoules     += joules;
         powerGenerated  += joules;
+    }
+
+    public void addCrystals(float c)    { crystals += c; }
+    public boolean spendCrystals(float cost) {
+        if (crystals >= cost) { crystals -= cost; return true; }
+        return false;
     }
 
     public boolean spend(float cost) {
@@ -57,6 +122,48 @@ public final class ShipData {
             return true;
         }
         return false;
+    }
+
+    public PlanetProfile getCurrentPlanet() {
+        return PLANETS[currentPlanetIndex];
+    }
+
+    public PlanetProfile getSelectedPlanet() {
+        return PLANETS[selectedPlanetIndex];
+    }
+
+    public void selectPlanet(int index) {
+        selectedPlanetIndex = Math.max(0, Math.min(index, PLANETS.length - 1));
+    }
+
+    public void commitSelectedPlanet() {
+        PlanetProfile planet = getSelectedPlanet();
+        targetPlanetDistance = planet.distance;
+        planetGravityMultiplier = planet.gravity;
+    }
+
+    public void markArrival(float routeDistance, float energySpent) {
+        PlanetProfile planet = getSelectedPlanet();
+        currentPlanetIndex = selectedPlanetIndex;
+        targetPlanetDistance = planet.distance;
+        planetGravityMultiplier = planet.gravity;
+        arrivalReady = true;
+        arrivalsCompleted++;
+        lastArrivalPlanetName = planet.name;
+        lastArrivalEnergyUsed = energySpent;
+        lastArrivalJourneyDays = Math.max(3f, routeDistance / 300f);
+        accumulatedDist = 0f;
+        sectorReached = -1;
+        energyAtLastLaunch = powerGenerated;
+    }
+
+    public void claimArrivalReward() {
+        arrivalReady = false;
+        bumperEnergyMult += 0.5f;
+        collisionEnergyMult += 0.25f;
+        wallEnergyMult += 0.15f;
+        internBoostStrength += 0.15f;
+        totalJoules += 150f + arrivalsCompleted * 50f;
     }
 
 }

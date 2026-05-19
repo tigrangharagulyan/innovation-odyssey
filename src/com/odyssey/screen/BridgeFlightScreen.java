@@ -6,6 +6,7 @@ import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
@@ -20,32 +21,43 @@ public class BridgeFlightScreen extends ScreenAdapter {
 
     // ---- Route constants -------------------------------------------------------
 
-    public static final float   TOTAL_ROUTE   = 25000f;
-    // Gaps grow: 2000 → 4000 → 8000 → 11000 AU, requiring JPS ≈ 111 / 222 / 444 / 611
-    public static final float[] SECTOR_DISTS  = {300f, 6000f, 14000f, 25000f};
     private static final String[] SECTOR_NAMES = {
-        "CHECKPOINT I", "CHECKPOINT II", "CHECKPOINT III", "EMBER PRIME"
+        "CHECKPOINT I", "CHECKPOINT II", "CHECKPOINT III", "ARRIVAL"
     };
     private static final String[] SECTOR_PERKS = {
         "Elastic Walls",
-        "Resonance",
+        "Gravity Wells + Extra Slots",
         "Wall x3 + Coll x2 + Free Intern",
-        "OVERDRIVE!"
+        "Colony Landing"
+    };
+    private static final String[] SECTOR_PERK_DESCS = {
+        "Interns bounce off walls with more force",
+        "Unlock gravity wells · Bumper cap 4 · Intern cap 8",
+        "Wall sparks ×3 · Collision sparks ×2 · Free intern added to bay",
+        "Mission complete — colony established!"
     };
     // Energy produced since last launch × scale = AU gained this run.
-    public  static final float ENERGY_AU_SCALE = 0.5f;
+    // Energy-delta needed per segment (not cumulative): 2K → 10K → 100K → 10M
+    public static final float[] CHECKPOINT_ENERGIES = {2_000f, 10_000f, 50_000f, 100_000f};
+    // Scale = 1 so route position IS energy delta (no unit conversion)
+    public  static final float ENERGY_AU_SCALE = 1.0f;
 
     // ---- Layout ----------------------------------------------------------------
 
-    private static final float W = 1280f, H = 720f;
+    private static final float W = 480f, H = 854f;
     private static final float LINE_Y  = H * 0.50f;
-    private static final float LINE_X0 = 100f;
-    private static final float LINE_X1 = 1180f;
+    private static final float LINE_X0 = 40f;
+    private static final float LINE_X1 = 440f;
     private static final float LINE_LEN = LINE_X1 - LINE_X0;
 
     // Rocket animation speed (pixels/s)
     private static final float ROCKET_SPEED = 90f;
-    private static final float HOLD_TIME    = 3.5f;
+
+    // Action button (drawn with SpriteBatch, hit-tested on touch)
+    private static final float BTN_W = 320f;
+    private static final float BTN_H = 60f;
+    private static final float BTN_X = (W - BTN_W) / 2f;
+    private static final float BTN_Y = 28f;
 
     // ---- Fields ----------------------------------------------------------------
 
@@ -65,10 +77,13 @@ public class BridgeFlightScreen extends ScreenAdapter {
     private float   rocketX;
     private float   rocketTargetX;
     private boolean animDone      = false;
-    private float   holdTimer     = 0f;
     private int     prevSector;       // sectorReached before this run
+    private final Vector3 touchVec = new Vector3();
     private int     newHighSector;    // highest sector reached after this run
     private boolean newPerkReached;
+    private float   totalRoute;
+    private float[] sectorDists;
+    private boolean arrived;
 
     // ---- Construction ----------------------------------------------------------
 
@@ -89,15 +104,7 @@ public class BridgeFlightScreen extends ScreenAdapter {
     // ---- Texture generators ----------------------------------------------------
 
     private Texture genBackground() {
-        Pixmap pm = new Pixmap((int)W, (int)H, Pixmap.Format.RGBA8888);
-        pm.setBlending(Pixmap.Blending.None);
-        pm.setColor(0.01f, 0.01f, 0.07f, 1f);
-        pm.fill();
-        pm.setColor(1f, 1f, 1f, 0.9f);
-        java.util.Random rng = new java.util.Random(99991L);
-        for (int i = 0; i < 280; i++)
-            pm.drawPixel(rng.nextInt((int)W), rng.nextInt((int)H));
-        Texture t = new Texture(pm); pm.dispose(); return t;
+        return new Texture("backgrounds/flight_bg.png");
     }
 
     private Texture genPixel() {
@@ -149,29 +156,59 @@ public class BridgeFlightScreen extends ScreenAdapter {
     public void resetFlight() {
         ShipData sd  = ShipData.get();
         animDone     = false;
-        holdTimer    = 0f;
         prevSector   = sd.sectorReached;
+        sectorDists  = buildSectorDistances(0f);
+        totalRoute   = sectorDists[sectorDists.length - 1];
+        arrived      = false;
 
-        float startDist = prevSector >= 0 ? SECTOR_DISTS[prevSector] : 0f;
+        float startDist = prevSector >= 0 ? sectorDists[prevSector] : 0f;
         rocketX = distToX(startDist);
 
         float energyThisRun = sd.powerGenerated - sd.energyAtLastLaunch;
         sd.energyAtLastLaunch = sd.powerGenerated;
         float gained   = energyThisRun * ENERGY_AU_SCALE;
-        float newAccum = Math.min(startDist + gained, TOTAL_ROUTE);
+        float newAccum = Math.min(startDist + gained, totalRoute);
         rocketTargetX  = distToX(newAccum);
 
         newHighSector  = prevSector;
-        for (int i = 0; i < SECTOR_DISTS.length; i++)
-            if (newAccum >= SECTOR_DISTS[i]) newHighSector = i;
+        for (int i = 0; i < sectorDists.length; i++)
+            if (newAccum >= sectorDists[i]) newHighSector = i;
 
         newPerkReached     = newHighSector > prevSector;
         sd.accumulatedDist = newAccum;
         sd.sectorReached   = newHighSector;
+        arrived = newAccum >= totalRoute;
     }
 
     private float distToX(float dist) {
-        return LINE_X0 + (dist / TOTAL_ROUTE) * LINE_LEN;
+        if (sectorDists == null || totalRoute <= 0f) return LINE_X0;
+        // Piecewise linear: each segment (→CP I, →CP II, →CP III, →ARRIVAL) gets equal visual width
+        // so checkpoints sit at 25 / 50 / 75 / 100 % regardless of their energy gap
+        int    n       = sectorDists.length;
+        float  segW    = LINE_LEN / n;
+        float  prevDist = 0f, segStart = 0f;
+        for (int i = 0; i < n; i++) {
+            float segEnd  = segStart + segW;
+            float distEnd = sectorDists[i];
+            if (dist <= distEnd || i == n - 1) {
+                float t = (distEnd > prevDist)
+                    ? Math.min((dist - prevDist) / (distEnd - prevDist), 1f)
+                    : 1f;
+                return LINE_X0 + segStart + t * segW;
+            }
+            prevDist = distEnd;
+            segStart = segEnd;
+        }
+        return LINE_X1;
+    }
+
+    public static float[] buildSectorDistances(float ignored) {
+        // Cumulative energy positions — route position = energy delta
+        float c1 = CHECKPOINT_ENERGIES[0];
+        float c2 = c1 + CHECKPOINT_ENERGIES[1];
+        float c3 = c2 + CHECKPOINT_ENERGIES[2];
+        float c4 = c3 + CHECKPOINT_ENERGIES[3];
+        return new float[] { c1, c2, c3, c4 };
     }
 
     // ---- Lifecycle -------------------------------------------------------------
@@ -191,11 +228,14 @@ public class BridgeFlightScreen extends ScreenAdapter {
                 animDone = true;
             }
         } else {
-            holdTimer += delta;
-            if (holdTimer >= HOLD_TIME || Gdx.input.justTouched()
-                    || Gdx.input.isKeyJustPressed(Input.Keys.ANY_KEY)) {
-                finish();
-                return;
+            if (Gdx.input.justTouched()) {
+                touchVec.set(Gdx.input.getX(), Gdx.input.getY(), 0);
+                viewport.unproject(touchVec);
+                if (touchVec.x >= BTN_X && touchVec.x <= BTN_X + BTN_W &&
+                        touchVec.y >= BTN_Y && touchVec.y <= BTN_Y + BTN_H) {
+                    finish();
+                    return;
+                }
             }
         }
 
@@ -221,7 +261,7 @@ public class BridgeFlightScreen extends ScreenAdapter {
 
         // JPS readout
         font.setColor(1f, 1f, 0.5f, 1f);
-        String jpsStr = String.format("Power core: %.0f J  |  Distance covered: %.0f AU",
+        String jpsStr = String.format("Energy: %.0f E  |  Distance covered: %.0f AU",
             ShipData.get().powerGenerated,
             ShipData.get().accumulatedDist);
         layout.setText(font, jpsStr);
@@ -238,16 +278,16 @@ public class BridgeFlightScreen extends ScreenAdapter {
 
         // SOLARA label
         font.setColor(0.4f, 0.8f, 1f, 1f);
-        font.draw(batch, "SOLARA", LINE_X0 - 58f, LINE_Y + 8f);
+        font.draw(batch, ShipData.get().getCurrentPlanet().name.toUpperCase(), LINE_X0 - 58f, LINE_Y + 8f);
 
         // EMBER label
         font.setColor(1f, 0.5f, 0.2f, 1f);
-        font.draw(batch, "EMBER", LINE_X1 + 4f, LINE_Y + 8f);
+        font.draw(batch, ShipData.get().getSelectedPlanet().name.toUpperCase(), LINE_X1 + 4f, LINE_Y + 8f);
 
         // Sector markers
         float dotR = 12f;
-        for (int i = 0; i < SECTOR_DISTS.length; i++) {
-            float sx = distToX(SECTOR_DISTS[i]);
+        for (int i = 0; i < sectorDists.length; i++) {
+            float sx = distToX(sectorDists[i]);
             boolean alreadyHad = (i <= prevSector);
             boolean justPassed = (!alreadyHad && rocketX >= sx);
 
@@ -284,9 +324,9 @@ public class BridgeFlightScreen extends ScreenAdapter {
         // Landing result overlay
         if (animDone) {
             font.getData().setScale(1.5f);
-            if (newHighSector >= SECTOR_DISTS.length - 1) {
+            if (arrived) {
                 font.setColor(1f, 0.5f, 0.2f, 1f);
-                drawCentered("ARRIVED AT EMBER PRIME!", H * 0.25f);
+                drawCentered("ARRIVED AT " + ShipData.get().getSelectedPlanet().name.toUpperCase() + "!", H * 0.25f);
             } else if (newHighSector >= 0) {
                 font.setColor(0.27f, 1f, 0.55f, 1f);
                 drawCentered("LANDED: " + SECTOR_NAMES[newHighSector], H * 0.25f);
@@ -297,13 +337,39 @@ public class BridgeFlightScreen extends ScreenAdapter {
             font.getData().setScale(1f);
 
             if (newPerkReached) {
+                font.getData().setScale(1f);
                 font.setColor(1f, 1f, 0.4f, 1f);
                 drawCentered("NEW PERK: " + SECTOR_PERKS[newHighSector], H * 0.17f);
+                font.getData().setScale(0.80f);
+                font.setColor(0.78f, 0.82f, 0.88f, 1f);
+                drawCentered(SECTOR_PERK_DESCS[newHighSector], H * 0.135f);
+                if (newHighSector == 0) {
+                    font.getData().setScale(0.72f);
+                    font.setColor(1f, 0.85f, 0.25f, 0.90f);
+                    drawCentered("Next upgrade: Speed Keep — reach 5.0 r/s in the bay", H * 0.105f);
+                }
+                font.getData().setScale(1f);
             }
 
-            font.setColor(0.55f, 0.55f, 0.55f, 1f);
-            drawCentered(String.format("Returning to bay in %.0f s  (click to skip)",
-                Math.max(0, HOLD_TIME - holdTimer)), H * 0.09f);
+            // Action button
+            String btnText = arrived
+                ? "LAND ON " + ShipData.get().getSelectedPlanet().name.toUpperCase() + "  ▶"
+                : newHighSector >= 0
+                    ? "CLAIM REWARD  &  RETURN TO BAY  ▶"
+                    : "RETURN TO BAY  ▶";
+            boolean btnIsArrival = arrived;
+            if (btnIsArrival) batch.setColor(0.78f, 0.32f, 0.04f, 0.95f);
+            else              batch.setColor(0.05f, 0.50f, 0.22f, 0.95f);
+            batch.draw(texPixel, BTN_X, BTN_Y, BTN_W, BTN_H);
+            // Button border highlight
+            batch.setColor(1f, 1f, 1f, 0.18f);
+            batch.draw(texPixel, BTN_X, BTN_Y + BTN_H - 2f, BTN_W, 2f);
+            batch.draw(texPixel, BTN_X, BTN_Y, BTN_W, 2f);
+            font.getData().setScale(0.88f);
+            font.setColor(1f, 1f, 1f, 1f);
+            layout.setText(font, btnText);
+            font.draw(batch, btnText, (W - layout.width) / 2f, BTN_Y + BTN_H * 0.60f);
+            font.getData().setScale(1f);
         }
 
         batch.end();
@@ -315,10 +381,13 @@ public class BridgeFlightScreen extends ScreenAdapter {
     }
 
     private void finish() {
-        if (newHighSector >= SECTOR_DISTS.length - 1)
-            game.transitionTo(GameState.GALACTIC_MAP);
-        else
+        if (arrived) {
+            ShipData sd = ShipData.get();
+            sd.markArrival(totalRoute, totalRoute / ENERGY_AU_SCALE);
+            game.transitionTo(GameState.NOVA_TERRA_ARRIVAL);
+        } else {
             game.transitionTo(GameState.ENGINEERING_LAB);
+        }
     }
 
     @Override

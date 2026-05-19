@@ -3,137 +3,158 @@ package com.odyssey.screen;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.Stage;
-import com.badlogic.gdx.scenes.scene2d.ui.*;
+import com.badlogic.gdx.scenes.scene2d.ui.ButtonGroup;
+import com.badlogic.gdx.scenes.scene2d.ui.Image;
+import com.badlogic.gdx.scenes.scene2d.ui.Label;
+import com.badlogic.gdx.scenes.scene2d.ui.Table;
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
+import com.badlogic.gdx.utils.Align;
+import com.badlogic.gdx.utils.Scaling;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.odyssey.GameState;
 import com.odyssey.OdysseyGame;
 import com.odyssey.ShipData;
 
-/**
- * Destination selection + prestige parameter calculation.
- * Prestige multiplier = sqrt(distance) * gravityMultiplier — displayed before commit.
- */
 public class GalacticMapScreen extends ScreenAdapter {
-
-    // Demo destinations for Solara System
-    private static final Planet[] PLANETS = {
-        new Planet("Solara Prime",  1000f, 1.0f),
-        new Planet("Ember IV",      2500f, 1.8f),
-        new Planet("Frostheim",     5000f, 0.6f),
-        new Planet("Nova Rift",    12000f, 3.2f),
-    };
 
     private final OdysseyGame game;
     private final Stage ui;
+    private final Texture backgroundTexture;
 
-    private Label prestigeLabel;
-    private int   selectedIndex = 0;
+    private Label routeLabel;
+    private Label specsLabel;
+    private Label rewardLabel;
 
     public GalacticMapScreen(OdysseyGame game) {
         this.game = game;
-        this.ui   = new Stage(new ScreenViewport());
-        buildUI();
+        this.ui = new Stage(new ScreenViewport());
+        this.backgroundTexture = new Texture("backgrounds/map_bg.png");
+        buildUi();
     }
 
-    private void buildUI() {
+    private void buildUi() {
+        Image bg = new Image(backgroundTexture);
+        bg.setFillParent(true);
+        bg.setScaling(Scaling.fill);
+        ui.addActor(bg);
+
         Table root = new Table();
         root.setFillParent(true);
-        root.center();
+        root.pad(18f);
+        root.bottom();
 
-        Label title = new Label("Galactic Map — Solara System", game.skin, "title");
-        prestigeLabel = new Label("", game.skin);
+        Table card = new Table();
+        card.setBackground(game.skin.getDrawable("card_medium"));
+        card.pad(20f, 22f, 20f, 22f);
+
+        Label title = new Label("Galactic Map", game.skin, "title");
+        routeLabel = new Label("", game.skin);
+        specsLabel = new Label("", game.skin);
+        rewardLabel = new Label("", game.skin);
+        for (Label label : new Label[] {routeLabel, specsLabel, rewardLabel}) {
+            label.setWrap(true);
+            label.setAlignment(Align.center);
+        }
 
         ButtonGroup<TextButton> group = new ButtonGroup<>();
         group.setMaxCheckCount(1);
         group.setMinCheckCount(1);
 
         Table planetList = new Table();
-        for (int i = 0; i < PLANETS.length; i++) {
-            final int idx   = i;
-            Planet p        = PLANETS[i];
-            TextButton btn  = new TextButton(
-                String.format("%s  |  %.0f AU  |  G×%.1f", p.name, p.distance, p.gravity),
+        for (int i = 0; i < ShipData.PLANETS.length; i++) {
+            final int index = i;
+            ShipData.PlanetProfile planet = ShipData.PLANETS[i];
+            TextButton button = new TextButton(
+                String.format("%s  |  %.1f ly  |  %.1fG", planet.name, planet.distance / 1000f, planet.gravity),
                 game.skin, "toggle");
-            if (i == 0) btn.setChecked(true);
-            btn.addListener(new ChangeListener() {
-                @Override public void changed(ChangeEvent e, Actor a) {
-                    if (((TextButton) a).isChecked()) {
-                        selectedIndex = idx;
-                        refreshPrestige();
+            button.setChecked(i == ShipData.get().selectedPlanetIndex);
+            button.addListener(new ChangeListener() {
+                @Override public void changed(ChangeEvent event, Actor actor) {
+                    if (((TextButton) actor).isChecked()) {
+                        ShipData.get().selectPlanet(index);
+                        refreshDetails();
                     }
                 }
             });
-            group.add(btn);
-            planetList.add(btn).width(480).padBottom(8).row();
+            group.add(button);
+            planetList.add(button).width(420f).height(62f).padBottom(8f).row();
         }
 
-        TextButton btnCommit = new TextButton("Set Destination & Return", game.skin);
-        btnCommit.addListener(new ChangeListener() {
-            @Override public void changed(ChangeEvent e, Actor a) {
-                commitDestination();
+        TextButton setJump = new TextButton("Set Jump", game.skin);
+        TextButton departure = new TextButton("Departure Lab", game.skin);
+        TextButton menu = new TextButton("Main Menu", game.skin);
+
+        setJump.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent event, Actor actor) {
+                ShipData.get().commitSelectedPlanet();
+                game.transitionTo(GameState.ENGINEERING_LAB);
+            }
+        });
+        departure.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent event, Actor actor) {
+                game.transitionTo(GameState.ENGINEERING_LAB);
+            }
+        });
+        menu.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent event, Actor actor) {
                 game.transitionTo(GameState.MAIN_MENU);
             }
         });
 
-        TextButton btnBack = new TextButton("< Back", game.skin);
-        btnBack.addListener(new ChangeListener() {
-            @Override public void changed(ChangeEvent e, Actor a) {
-                game.transitionTo(GameState.MAIN_MENU);
-            }
-        });
+        Table actionRow = new Table();
+        actionRow.add(departure).width(200f).height(64f).padRight(8f);
+        actionRow.add(setJump).width(200f).height(64f);
 
-        root.add(title).padBottom(24).row();
-        root.add(planetList).padBottom(16).row();
-        root.add(prestigeLabel).padBottom(16).row();
-        root.add(btnCommit).padBottom(8).row();
-        root.add(btnBack).row();
+        card.add(title).center().padBottom(12f).row();
+        card.add(routeLabel).width(420f).padBottom(10f).row();
+        card.add(planetList).padBottom(12f).row();
+        card.add(specsLabel).width(420f).padBottom(8f).row();
+        card.add(rewardLabel).width(420f).padBottom(16f).row();
+        card.add(actionRow).padBottom(8f).row();
+        card.add(menu).width(408f).height(60f).row();
+
+        root.add(card).width(470f).bottom();
         ui.addActor(root);
-
-        refreshPrestige();
     }
 
-    private void refreshPrestige() {
-        Planet p = PLANETS[selectedIndex];
-        // Prestige multiplier: reward scaling for harder destinations
-        float prestige = (float) Math.sqrt(p.distance) * p.gravity;
-        prestigeLabel.setText(String.format(
-            "Prestige Multiplier: %.2f×  (distance=%.0f AU, G=%.1f)",
-            prestige, p.distance, p.gravity));
-    }
-
-    private void commitDestination() {
-        Planet p = PLANETS[selectedIndex];
+    private void refreshDetails() {
         ShipData sd = ShipData.get();
-        sd.targetPlanetDistance    = p.distance;
-        sd.planetGravityMultiplier = p.gravity;
+        ShipData.PlanetProfile current = sd.getCurrentPlanet();
+        ShipData.PlanetProfile selected = sd.getSelectedPlanet();
+        routeLabel.setText(String.format(
+            "Current location: %s\nDestination: %s",
+            current.name, selected.name));
+        specsLabel.setText(String.format(
+            "Distance: %.1f light years   |   Gravity: %.1fG\nAtmosphere: %s",
+            selected.distance / 1000f, selected.gravity, selected.atmosphere));
+        rewardLabel.setText(String.format(
+            "Arrival reward: %s\nUnlocks: %s, %s",
+            selected.rewardLabel, selected.unlockedBuildingA, selected.unlockedBuildingB));
     }
 
-    @Override public void show() { Gdx.input.setInputProcessor(ui); }
+    @Override public void show() {
+        Gdx.input.setInputProcessor(ui);
+        refreshDetails();
+    }
 
     @Override
     public void render(float delta) {
-        Gdx.gl.glClearColor(0.02f, 0.02f, 0.10f, 1f);
+        Gdx.gl.glClearColor(0.02f, 0.02f, 0.09f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
         ui.act(delta);
         ui.draw();
     }
 
-    @Override public void resize(int w, int h) { ui.getViewport().update(w, h, true); }
-    @Override public void dispose() { ui.dispose(); }
+    @Override public void resize(int width, int height) {
+        ui.getViewport().update(width, height, true);
+    }
 
-    // ---- Inner data record ---------------------------------------------------
-
-    private static final class Planet {
-        final String name;
-        final float  distance;
-        final float  gravity;
-        Planet(String name, float distance, float gravity) {
-            this.name     = name;
-            this.distance = distance;
-            this.gravity  = gravity;
-        }
+    @Override public void dispose() {
+        ui.dispose();
+        backgroundTexture.dispose();
     }
 }
