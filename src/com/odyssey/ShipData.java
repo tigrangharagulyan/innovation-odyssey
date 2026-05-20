@@ -2,8 +2,13 @@ package com.odyssey;
 
 public final class ShipData {
 
-    /** Mutable state stored in each bumper body's userData for per-bumper hit animation. */
+    /** Mutable state stored in each standard bumper body's userData for per-bumper hit animation. */
     public static final class BumperHitData {
+        public long lastHitMs = 0L;
+    }
+
+    /** Mutable state stored in each gravity-well (attractor) body's userData for per-hit animation. */
+    public static final class AttractorHitData {
         public long lastHitMs = 0L;
     }
 
@@ -31,8 +36,10 @@ public final class ShipData {
     public static final PlanetProfile[] PLANETS = {
         new PlanetProfile("Solara", 1000f, 1.0f, "Stable", "Baseline Diagnostics",
             "Habitat Hub", "Solar Relay"),
-        new PlanetProfile("Nova Terra", 4200f, 1.4f, "Thin", "Wormhole Tech",
-            "Terraforming Station", "Research Outpost"),
+        new PlanetProfile("Ember IV", 2500f, 1.6f, "Volcanic", "Industrial Mastery",
+            "Forge Hub", "Plasma Relay"),                                            // Level 2
+        new PlanetProfile("Frostheim", 5000f, 0.4f, "Frozen", "Cryo Tech",
+            "Ice Lab", "Frost Relay"),
         new PlanetProfile("Cryon Reach", 7600f, 0.7f, "Frozen", "Cryo Suspension",
             "Quantum Farm", "Fusion Dock"),
         new PlanetProfile("Helios Forge", 12000f, 2.2f, "Volatile", "Overdrive Core",

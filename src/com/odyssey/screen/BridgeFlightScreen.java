@@ -202,12 +202,17 @@ public class BridgeFlightScreen extends ScreenAdapter {
         return LINE_X1;
     }
 
+    // Frostheim (distance 5000f) uses larger energy thresholds — matches EngineeringLabScreen
+    private static final float[] FROSTHEIM_CHECKPOINT_ENERGIES = {6_000f, 24_000f, 120_000f, 150_000f};
+
     public static float[] buildSectorDistances(float ignored) {
-        // Cumulative energy positions — route position = energy delta
-        float c1 = CHECKPOINT_ENERGIES[0];
-        float c2 = c1 + CHECKPOINT_ENERGIES[1];
-        float c3 = c2 + CHECKPOINT_ENERGIES[2];
-        float c4 = c3 + CHECKPOINT_ENERGIES[3];
+        float[] e = ShipData.get().targetPlanetDistance == 5000f
+            ? FROSTHEIM_CHECKPOINT_ENERGIES
+            : CHECKPOINT_ENERGIES;
+        float c1 = e[0];
+        float c2 = c1 + e[1];
+        float c3 = c2 + e[2];
+        float c4 = c3 + e[3];
         return new float[] { c1, c2, c3, c4 };
     }
 

@@ -2,19 +2,16 @@ package com.odyssey.physics;
 
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.*;
-import com.badlogic.gdx.utils.TimeUtils;
 import com.odyssey.ShipData;
 
 public class EnergyContactListener implements ContactListener {
 
-    private final Vector2 velA    = new Vector2();
-    private final Vector2 velB    = new Vector2();
     private final Vector2 normVec = new Vector2();
 
-    // Sparks (◆) earned per collision type
+    // Sparks (◆/❅) earned per collision type
     private static final float SPARK_INTERN_INTERN = 20f;  // multiplied by collisionEnergyMult
     private static final float SPARK_WALL          = 0.5f; // every ring/wall hit
-    private static final float SPARK_GRAVITY        = 50f;  // extra on gravity well contact
+    private static final float SPARK_GRAVITY       = 50f;  // gravity-well core contact
 
     @Override
     public void beginContact(Contact contact) {
@@ -25,49 +22,84 @@ public class EnergyContactListener implements ContactListener {
         Body bodyA = fA.getBody();
         Body bodyB = fB.getBody();
 
-        boolean aIsIntern     = bodyA.getUserData() instanceof String && ((String)bodyA.getUserData()).startsWith("INTERN");
-        boolean bIsIntern     = bodyB.getUserData() instanceof String && ((String)bodyB.getUserData()).startsWith("INTERN");
-        boolean aIsBumper     = bodyA.getUserData() instanceof ShipData.BumperHitData;
-        boolean bIsBumper     = bodyB.getUserData() instanceof ShipData.BumperHitData;
-        boolean fixtureIsBump = "BUMPER".equals(fA.getUserData()) || "BUMPER".equals(fB.getUserData());
-        boolean attractorHit  = fixtureIsBump && !aIsBumper && !bIsBumper; // gravity-well core, not regular bumper
-        boolean bumperHit     = aIsBumper || bIsBumper || fixtureIsBump;
+        // ---- Classify each body by its userData token ----
+        boolean aIsIntern = bodyA.getUserData() instanceof String
+                            && ((String) bodyA.getUserData()).startsWith("INTERN");
+        boolean bIsIntern = bodyB.getUserData() instanceof String
+                            && ((String) bodyB.getUserData()).startsWith("INTERN");
+
+        // Cryo-Vent impulse is handled entirely in stepPhysics — skip here
+        boolean aIsCryo = "CRYO_VENT".equals(bodyA.getUserData());
+        boolean bIsCryo = "CRYO_VENT".equals(bodyB.getUserData());
+        if (aIsCryo || bIsCryo) return;
+
+        // Ember IV: Kinetic Blade slam — award +35 J per impact
+        boolean aIsBlade = "KINETIC_BLADE".equals(bodyA.getUserData());
+        boolean bIsBlade = "KINETIC_BLADE".equals(bodyB.getUserData());
+        if (aIsBlade || bIsBlade) {
+            if (aIsIntern || bIsIntern) {
+                ShipData sd2 = ShipData.get();
+                sd2.addJoules(35f);
+                queueFloatNum(contact, bodyA, bodyB, 35f, 0, sd2);
+            }
+            return;
+        }
+
+        // Standard bumpers carry a BumperHitData instance for per-hit flash animation
+        boolean aIsStdBumper = bodyA.getUserData() instanceof ShipData.BumperHitData;
+        boolean bIsStdBumper = bodyB.getUserData() instanceof ShipData.BumperHitData;
+
+        // fixtureIsBump catches attractor core (Level 1: "BUMPER") and Tesla-Coil core (Level 2: "TESLA_COIL_CORE")
+        boolean fixtureIsBump = "BUMPER".equals(fA.getUserData())
+                             || "BUMPER".equals(fB.getUserData())
+                             || "TESLA_COIL_CORE".equals(fA.getUserData())
+                             || "TESLA_COIL_CORE".equals(fB.getUserData());
+
+        boolean attractorHit = fixtureIsBump && !aIsStdBumper && !bIsStdBumper;
+        boolean bumperHit    = aIsStdBumper || bIsStdBumper || fixtureIsBump;
 
         ShipData sd = ShipData.get();
 
         if (aIsIntern && bIsIntern) {
-            // Intern-intern: primary spark source
+            // ---- Intern-intern collision: primary Spark / Frost-Shard source ----
             float sparks = SPARK_INTERN_INTERN * sd.collisionEnergyMult;
             sd.addCrystals(sparks);
             queueFloatNum(contact, bodyA, bodyB, sparks, 1, sd);
 
-            // Velocity boost to keep chaos alive
-            velA.set(bodyA.getLinearVelocity());
-            velB.set(bodyB.getLinearVelocity());
+            // Mutual separation impulse keeps the chaos alive
             normVec.set(bodyB.getPosition()).sub(bodyA.getPosition());
             if (normVec.len2() > 0.0001f) {
                 normVec.nor();
                 float boost = sd.internBoostStrength;
-                bodyA.applyLinearImpulse(-normVec.x * boost, -normVec.y * boost,
+                bodyA.applyLinearImpulse(
+                    -normVec.x * boost, -normVec.y * boost,
                     bodyA.getPosition().x, bodyA.getPosition().y, true);
-                bodyB.applyLinearImpulse( normVec.x * boost,  normVec.y * boost,
+                bodyB.applyLinearImpulse(
+                     normVec.x * boost,  normVec.y * boost,
                     bodyB.getPosition().x, bodyB.getPosition().y, true);
             }
-        } else {
-            if (bumperHit) {
-                float bonus     = attractorHit ? SPARK_GRAVITY : sd.bumperSparkValue;
-                int   colorType = attractorHit ? 2 : 3; // 3 = bumper (gold), 2 = gravity (purple), 1 = intern (cyan)
-                sd.addCrystals(bonus);
-                long nowMs = TimeUtils.millis();
-                if (aIsBumper) ((ShipData.BumperHitData) bodyA.getUserData()).lastHitMs = nowMs;
-                if (bIsBumper) ((ShipData.BumperHitData) bodyB.getUserData()).lastHitMs = nowMs;
-                queueFloatNum(contact, bodyA, bodyB, bonus, colorType, sd);
-            } else {
-                sd.addCrystals(SPARK_WALL);
+
+        } else if (bumperHit) {
+            // ---- Standard bumper or gravity-well / Tesla-Coil core contact ----
+            float bonus     = attractorHit ? SPARK_GRAVITY : sd.bumperSparkValue;
+            int   colorType = attractorHit ? 2 : 3;
+            sd.addCrystals(bonus);
+            queueFloatNum(contact, bodyA, bodyB, bonus, colorType, sd);
+            // Stamp hit time so each body's renderer can drive its own flash animation
+            if (aIsStdBumper) ((ShipData.BumperHitData)   bodyA.getUserData()).lastHitMs = System.currentTimeMillis();
+            if (bIsStdBumper) ((ShipData.BumperHitData)   bodyB.getUserData()).lastHitMs = System.currentTimeMillis();
+            if (attractorHit) {
+                long ts = System.currentTimeMillis();
+                if (bodyA.getUserData() instanceof ShipData.AttractorHitData)
+                    ((ShipData.AttractorHitData) bodyA.getUserData()).lastHitMs = ts;
+                if (bodyB.getUserData() instanceof ShipData.AttractorHitData)
+                    ((ShipData.AttractorHitData) bodyB.getUserData()).lastHitMs = ts;
             }
+
+        } else {
+            // ---- Wall / ring contact: tiny passive trickle ----
+            sd.addCrystals(SPARK_WALL);
         }
-        // Note: Joules are no longer generated by collisions.
-        // They are earned passively by ring speed × intern count in EngineeringLabScreen.stepPhysics().
     }
 
     private void queueFloatNum(Contact contact, Body bA, Body bB, float value, int colorType, ShipData sd) {
