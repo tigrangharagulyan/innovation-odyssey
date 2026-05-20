@@ -202,6 +202,18 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private static final int   SP_MAX      = 5;
     private com.badlogic.gdx.graphics.g2d.BitmapFont floatFont;
     private com.badlogic.gdx.graphics.g2d.GlyphLayout floatLayout;
+
+    // ── Floating number entries (colored by source) ──
+    private static final class FloatEntry {
+        float wx, wy;   // world-space spawn position
+        float value;
+        int   colorType; // 0=energy, 1=SP, 2=attractor, 3=bumper
+        float age;       // seconds since spawn
+        float driftX;    // horizontal arc drift (world units/sec)
+        static final float LIFETIME = 1.2f;
+    }
+    private final com.badlogic.gdx.utils.Array<FloatEntry> activeFloats = new com.badlogic.gdx.utils.Array<>();
+
     private TextButton btnAdd;
     private TextButton btnBumper;
     private TextButton btnGravityWell;
@@ -1889,8 +1901,28 @@ public class EngineeringLabScreen extends ScreenAdapter {
         renderCam.update();
         batch.setProjectionMatrix(renderCam.combined);
 
-        // Drain pending collision events
-        ShipData.get().pendingContactEvents.clear();
+        // Drain contact events → spawn float entries
+        com.badlogic.gdx.utils.Array<float[]> events = ShipData.get().pendingContactEvents;
+        for (int ei = 0; ei < events.size; ei++) {
+            float[] ev = events.get(ei);
+            FloatEntry fe = new FloatEntry();
+            fe.wx        = ev[0];
+            fe.wy        = ev[1];
+            fe.value     = ev[2];
+            fe.colorType = (int) ev[3];
+            fe.age       = 0f;
+            fe.driftX    = (MathUtils.random() - 0.5f) * 0.6f;  // slight arc
+            activeFloats.add(fe);
+        }
+        events.clear();
+
+        // Advance and cull floats
+        for (int ei = activeFloats.size - 1; ei >= 0; ei--) {
+            FloatEntry fe = activeFloats.get(ei);
+            fe.age += delta;
+            if (fe.age >= FloatEntry.LIFETIME) activeFloats.removeIndex(ei);
+        }
+
 
         batch.begin();
         drawHudBar();
@@ -1907,6 +1939,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         drawTeslaCoils();
         drawCryoVents();
         drawInterns();
+        drawFloatNumbers();
         drawPlacementPreview();
         drawHeartbeatPulse();
         batch.end();
@@ -2512,6 +2545,37 @@ public class EngineeringLabScreen extends ScreenAdapter {
             batch.setColor(OdysseyTheme.TEXT_PRI);
             batch.draw(texPixel, barX + barW * fill - 1f, barY - 2f, 2f, barH + 4f);
         }
+    }
+
+    private void drawFloatNumbers() {
+        for (int i = 0; i < activeFloats.size; i++) {
+            FloatEntry fe = activeFloats.get(i);
+            float t      = fe.age / FloatEntry.LIFETIME;
+            float alpha  = t < 0.15f ? t / 0.15f : 1f - (t - 0.15f) / 0.85f;
+            alpha = Math.max(0f, alpha);
+
+            // World → screen
+            float sx = fe.wx * PPM + fe.driftX * PPM * fe.age * 60f;
+            float sy = fe.wy * PPM + fe.age * 55f;  // float upward ~55px/s
+
+            // Color by source
+            Color c = switch (fe.colorType) {
+                case 0  -> OdysseyTheme.FLOAT_E;
+                case 1  -> OdysseyTheme.FLOAT_SP;
+                case 2  -> OdysseyTheme.FLOAT_SPECIAL;
+                default -> OdysseyTheme.FLOAT_BUMPER;
+            };
+
+            // Scale by magnitude: base 14px at ≤20, max 22px at ≥200
+            float scale = 0.55f + Math.min(1f, fe.value / 200f) * 0.35f;
+
+            floatFont.getData().setScale(scale);
+            floatFont.setColor(c.r, c.g, c.b, alpha);
+            String text = "+" + formatNumber(fe.value);
+            floatLayout.setText(floatFont, text);
+            floatFont.draw(batch, text, sx - floatLayout.width * 0.5f, sy);
+        }
+        floatFont.getData().setScale(1f);
     }
 
     private void drawBackground() {
