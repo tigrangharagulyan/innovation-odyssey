@@ -185,6 +185,16 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private Label topPerksHeaderLabel;
     private Label topPerksListLabel;
 
+    // ── HUD strip ──
+    private Label hudPlanetLabel;
+    private Label hudEnergyLabel;
+    private Label hudRateLabel;
+    private Label hudSpLabel;
+    private float hudBarFill = 0f;   // 0..1, current fill fraction
+
+    // ── Perk readout strip ──
+    private Label perkCollLabel, perkWallLabel, perkBoostLabel, perkBumpLabel;
+
     // Space Points feed: last 5 gains shown at top of centrifuge  {age, value, colorType}
     private final Array<float[]> spacePointsQueue = new Array<>();
     private static final float SP_LIFETIME = 4.0f;
@@ -1264,6 +1274,35 @@ public class EngineeringLabScreen extends ScreenAdapter {
         topPanel.add(topCenter).expandX().top().center();
         topPanel.add(topRight).width(148f).top().right().padLeft(4f);
 
+        // ── HUD strip ──
+        Table hudStrip = new Table();
+        hudStrip.setBackground(game.skin.newDrawable("white", OdysseyTheme.PANEL_BG));
+        hudStrip.pad(5f, 10f, 5f, 10f);
+
+        hudPlanetLabel = new Label("SOLARA", game.skin);
+        hudPlanetLabel.setColor(OdysseyTheme.ACCENT_E);
+        hudPlanetLabel.setFontScale(0.62f);
+
+        hudEnergyLabel = new Label("0/8.0KE", game.skin);
+        hudEnergyLabel.setColor(OdysseyTheme.TEXT_PRI);
+        hudEnergyLabel.setFontScale(0.60f);
+
+        hudRateLabel = new Label("0 E/s", game.skin);
+        hudRateLabel.setColor(OdysseyTheme.TEXT_DIM);
+        hudRateLabel.setFontScale(0.60f);
+
+        hudSpLabel = new Label("0 SP", game.skin);
+        hudSpLabel.setColor(OdysseyTheme.ACCENT_SP);
+        hudSpLabel.setFontScale(0.60f);
+
+        hudStrip.add(hudPlanetLabel).padRight(10f);
+        hudStrip.add(new com.badlogic.gdx.scenes.scene2d.ui.Container<>()).expandX().fillX();
+        hudStrip.add(hudEnergyLabel).padRight(10f);
+        hudStrip.add(hudRateLabel).padRight(10f);
+        hudStrip.add(hudSpLabel);
+
+        root.add(hudStrip).growX().row();
+
         root.add(topPanel).growX().row();
 
         // -- CENTRIFUGE ZONE: transparent overlay — expands to fill space, holds JUMP READY button --
@@ -1389,6 +1428,23 @@ public class EngineeringLabScreen extends ScreenAdapter {
         tileRow.add(btnGravityWell).size(btnSz, btnSz).pad(3);
         tileRow.add(btnFlight).size(btnSz, btnSz).pad(3);
         panel.add(tileRow).center().padBottom(4).row();
+
+        // ── Perk readout strip ──
+        Table perkStrip = new Table();
+        perkStrip.setBackground(game.skin.newDrawable("white", OdysseyTheme.SPACE_BG));
+        perkStrip.defaults().expandX().fillX().pad(2f, 4f, 2f, 4f);
+
+        perkCollLabel  = new Label("Coll x1.0", game.skin);
+        perkWallLabel  = new Label("Wall x1.0", game.skin);
+        perkBoostLabel = new Label("Boost x1.5", game.skin);
+        perkBumpLabel  = new Label("Bump x5.0", game.skin);
+        for (Label l : new Label[]{perkCollLabel, perkWallLabel, perkBoostLabel, perkBumpLabel}) {
+            l.setAlignment(com.badlogic.gdx.utils.Align.center);
+            l.setFontScale(0.52f);
+            l.setColor(OdysseyTheme.TEXT_DIM);
+            perkStrip.add(l);
+        }
+        panel.add(perkStrip).growX().row();
 
         root.add(panel).growX().row();
 
@@ -1829,6 +1885,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         ShipData.get().pendingContactEvents.clear();
 
         batch.begin();
+        drawHudBar();
         drawBackground();
         drawCentrifuge();
         drawEmberHub();
@@ -1861,6 +1918,25 @@ public class EngineeringLabScreen extends ScreenAdapter {
         crystalsLabel.setText(sparkSym + " " + (int) sd.crystals);
         jpsLabel.setText("OUTPUT: " + formatNumber(sd.currentJPS) + " E/s");
         outputLabel.setText(formatNumber(sd.currentJPS) + " E/s");
+
+        // Update HUD strip
+        float eDelta = energyDeltaSinceLaunch();
+        float eCost  = nextCheckpointEnergyCost();
+        hudBarFill = eCost > 0 ? eDelta / eCost : 0f;
+        hudPlanetLabel.setText(sd.getCurrentPlanet().name.toUpperCase());
+        if (eCost >= 1_000f)
+            hudEnergyLabel.setText(String.format("%.1f/%.0fKE", eDelta/1000f, eCost/1000f));
+        else
+            hudEnergyLabel.setText(String.format("%.0f/%.0fE", eDelta, eCost));
+        hudRateLabel.setText(formatNumber(sd.currentJPS) + " E/s");
+        String sparkSym2 = isFrostheim() ? "FS" : "SP";
+        hudSpLabel.setText((int) sd.crystals + " " + sparkSym2);
+
+        // Perk strip — highlight multipliers above base value
+        updatePerkLabel(perkCollLabel,  "Coll",  sd.collisionEnergyMult, 1.0f);
+        updatePerkLabel(perkWallLabel,  "Wall",  sd.wallEnergyMult,       1.0f);
+        updatePerkLabel(perkBoostLabel, "Boost", sd.internBoostStrength,  1.5f);
+        updatePerkLabel(perkBumpLabel,  "Bump",  sd.bumperEnergyMult,     5.0f);
         int cap = internCap();
 
         float ringNow = centrifugeBody.getAngularVelocity();
@@ -1997,8 +2073,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
         }
 
         // ---- LAUNCH / progress button ----
-        float eDelta  = energyDeltaSinceLaunch();
-        float eCost   = nextCheckpointEnergyCost();
+        eDelta  = energyDeltaSinceLaunch();
+        eCost   = nextCheckpointEnergyCost();
         boolean jumpReady      = eDelta >= eCost;
         boolean workforceGated = ember && balls.size < 12;   // Objective 4: 12/12 gate
         String cpName = nextCPName();
@@ -2401,6 +2477,24 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private void drawFontCentered(String text, float cx, float y) {
         floatLayout.setText(floatFont, text);
         floatFont.draw(batch, text, cx - floatLayout.width * 0.5f, y);
+    }
+
+    private void drawHudBar() {
+        float barY  = RENDER_H - 38f;
+        float barX  = 80f;
+        float barW  = RENDER_W - 160f;
+        float barH  = 3f;
+
+        batch.setColor(OdysseyTheme.PANEL_BORDER);
+        batch.draw(texPixel, barX, barY, barW, barH);
+
+        float fill = Math.min(1f, hudBarFill);
+        if (fill > 0f) {
+            batch.setColor(OdysseyTheme.ACCENT_E);
+            batch.draw(texPixel, barX, barY, barW * fill, barH);
+            batch.setColor(OdysseyTheme.TEXT_PRI);
+            batch.draw(texPixel, barX + barW * fill - 1f, barY - 2f, 2f, barH + 4f);
+        }
     }
 
     private void drawBackground() {
@@ -3930,6 +4024,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
             case 2:  return "CP III";
             default: return "LAND!";
         }
+    }
+
+    private void updatePerkLabel(Label label, String name, float value, float base) {
+        label.setText(name + " x" + String.format("%.1f", value));
+        label.setColor(value > base ? OdysseyTheme.ACCENT_E : OdysseyTheme.TEXT_DIM);
     }
 
     private static String formatNumber(float v) {
