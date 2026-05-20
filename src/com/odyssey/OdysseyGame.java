@@ -128,36 +128,38 @@ public class OdysseyGame extends Game {
         s.add("badge_panel",      new NinePatch(badgePanelTex,      20, 20, 20, 20));
 
         // Label styles
-        LabelStyle def     = new LabelStyle(font,  Color.WHITE);
-        LabelStyle title   = new LabelStyle(large, Color.CYAN);
-        LabelStyle heading = new LabelStyle(medium, Color.WHITE);
-        LabelStyle accent  = new LabelStyle(font, new Color(0.63f, 0.96f, 0.72f, 1f));
+        LabelStyle def     = new LabelStyle(font,  OdysseyTheme.TEXT_PRI);
+        LabelStyle title   = new LabelStyle(large, OdysseyTheme.ACCENT_E);
+        LabelStyle heading = new LabelStyle(medium, OdysseyTheme.TEXT_PRI);
+        LabelStyle accent  = new LabelStyle(font, OdysseyTheme.ACCENT_GO);
         s.add("default", def);
         s.add("title",   title);
         s.add("heading", heading);
         s.add("accent",  accent);
 
-        // TextButton default
+        // ── TextButton default — dark panel, white text, state driven by setColor() ──
+        // The drawable is a solid white pixel; each button calls setColor() each frame
+        // to apply BTN_LOCKED / BTN_BUYABLE / BTN_GO etc. from OdysseyTheme.
         TextButton.TextButtonStyle btn = new TextButton.TextButtonStyle();
-        btn.font             = font;
-        btn.up               = s.getDrawable("button_primary");
-        btn.over             = s.getDrawable("button_secondary");
-        btn.down             = s.newDrawable("button_secondary", new Color(0.85f, 0.85f, 0.9f, 1f));
-        btn.disabled         = s.getDrawable("button_disabled");
-        btn.fontColor        = Color.WHITE;
-        btn.downFontColor    = new Color(0.96f, 0.96f, 1f, 1f);
-        btn.disabledFontColor = new Color(0.72f, 0.75f, 0.83f, 1f);
+        btn.font              = font;
+        btn.up                = s.newDrawable("white", OdysseyTheme.PANEL_BG);
+        btn.over              = s.newDrawable("white", OdysseyTheme.BTN_AVAILABLE);
+        btn.down              = s.newDrawable("white", OdysseyTheme.BTN_ACTIVE);
+        btn.disabled          = s.newDrawable("white", OdysseyTheme.BTN_LOCKED);
+        btn.fontColor         = OdysseyTheme.TEXT_PRI;
+        btn.downFontColor     = OdysseyTheme.TEXT_PRI;
+        btn.disabledFontColor = OdysseyTheme.TEXT_DIM;
         s.add("default", btn);
 
-        // TextButton toggle (for planet selection in GalacticMap)
+        // Toggle (planet selection in GalacticMap) — unchanged behavior, new colors
         TextButton.TextButtonStyle tog = new TextButton.TextButtonStyle();
-        tog.font            = font;
-        tog.up              = s.getDrawable("button_secondary");
-        tog.over            = s.newDrawable("button_secondary", new Color(1f, 1f, 1f, 1f));
-        tog.down            = s.newDrawable("button_secondary", new Color(0.85f, 0.9f, 1f, 1f));
-        tog.checked         = s.getDrawable("button_primary");
-        tog.fontColor       = Color.WHITE;
-        tog.checkedFontColor = Color.WHITE;
+        tog.font             = font;
+        tog.up               = s.newDrawable("white", OdysseyTheme.PANEL_BG);
+        tog.over             = s.newDrawable("white", OdysseyTheme.BTN_AVAILABLE);
+        tog.down             = s.newDrawable("white", OdysseyTheme.BTN_ACTIVE);
+        tog.checked          = s.newDrawable("white", OdysseyTheme.BTN_BUYABLE);
+        tog.fontColor        = OdysseyTheme.TEXT_PRI;
+        tog.checkedFontColor = OdysseyTheme.TEXT_PRI;
         s.add("toggle", tog);
 
         // ProgressBar horizontal
