@@ -79,6 +79,7 @@ public class BridgeFlightScreen extends ScreenAdapter {
     private float   rocketX;
     private float   rocketTargetX;
     private boolean animDone      = false;
+    private float   landFlash     = 0f;
     private int     prevSector;       // sectorReached before this run
     private final Vector3 touchVec = new Vector3();
     private int     newHighSector;    // highest sector reached after this run
@@ -235,8 +236,9 @@ public class BridgeFlightScreen extends ScreenAdapter {
         if (!animDone) {
             rocketX += ROCKET_SPEED * delta;
             if (rocketX >= rocketTargetX) {
-                rocketX  = rocketTargetX;
-                animDone = true;
+                rocketX   = rocketTargetX;
+                animDone  = true;
+                landFlash = 0.35f;
             }
         } else {
             if (Gdx.input.justTouched()) {
@@ -381,6 +383,14 @@ public class BridgeFlightScreen extends ScreenAdapter {
             layout.setText(font, btnText);
             font.draw(batch, btnText, (W - layout.width) / 2f, BTN_Y + BTN_H * 0.60f);
             font.getData().setScale(1f);
+        }
+
+        if (landFlash > 0f) {
+            landFlash = Math.max(0f, landFlash - delta);
+            float fa = (landFlash / 0.35f) * 0.45f;
+            batch.setColor(1f, 1f, 1f, fa);
+            batch.draw(texPixel, 0, 0, W, H);
+            batch.setColor(1f, 1f, 1f, 1f);
         }
 
         batch.end();

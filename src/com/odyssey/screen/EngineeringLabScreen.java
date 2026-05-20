@@ -280,6 +280,14 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private String notifTitle = "";
     private String notifBody  = "";
 
+    // Milestone celebration overlay (slides up from bottom)
+    private static final float CELEB_HOLD  = 3.5f;
+    private static final float CELEB_SLIDE = 0.30f;
+    private float  celebTimer  = 0f;
+    private float  celebSlideY = 0f;
+    private String celebTitle  = "";
+    private String celebBody   = "";
+
     // Free-intern-at-max state
     private boolean freeInternGiven = false;
     private float   centrifugeRpmMax = CENTRIFUGE_RPM_MAX; // bumped to 10.0 when free intern fires
@@ -340,10 +348,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private static final int   PULSE_HISTORY_MAX = 5;
     private static final float PULSE_DURATION    = 5.0f;  // each entry fades over 5 s
 
-    // Screen shake (Tier-3 Supernova trigger)
-    private float shakeTimer                   = 0f;
-    private static final float SHAKE_DURATION  = 0.05f;
-    private static final float SHAKE_MAG       = 4f;
+    // Screen shake (parameterized)
+    private float shakeTimer    = 0f;
+    private float shakeDuration = 0.05f;
+    private float shakeMag      = 4f;
 
     // ---- Construction -----------------------------------------------------------
 
@@ -1479,6 +1487,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     internAddedTimer    = INTERN_ADDED_HOLD;
                     showNotif("3RD INTERN UNLOCKED", "Cap now 3 · Keep generating for CP I");
                     SoundManager.get().playHire();
+                    triggerShake(2f, 0.06f);
                 }
                 // Ember IV pre-CP-I: 1200◆ unlocks AND spawns the 3rd intern
                 if (isEmberIV() && !emberThirdInternUnlocked && sd2.sectorReached < 0
@@ -1493,6 +1502,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     internAddedTimer    = INTERN_ADDED_HOLD;
                     showNotif("3RD INTERN UNLOCKED", "Cap now 3 · Reach CP I for 5 interns");
                     SoundManager.get().playHire();
+                    triggerShake(2f, 0.06f);
                 }
                 if (balls.size < internCap() && sd2.spendCrystals(internCost())) {
                     internAddedOldSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
@@ -1503,6 +1513,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     internAddedNewSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
                     internAddedTimer    = INTERN_ADDED_HOLD;
                     SoundManager.get().playHire();
+                    triggerShake(2f, 0.06f);
                 }
             }
         });
@@ -1805,26 +1816,30 @@ public class EngineeringLabScreen extends ScreenAdapter {
         if (sr >= 0 && !milestoneAchieved[0]) {
             milestoneAchieved[0] = true;
             applyElasticWalls();
-            showNotif("PERK UNLOCKED", MILESTONE_NAMES[0] + "\n" + MILESTONE_DESCS[0]);
+            showCeleb("PERK UNLOCKED", MILESTONE_NAMES[0] + "\n" + MILESTONE_DESCS[0]);
             SoundManager.get().playMilestone();
+            triggerShake(4f, 0.12f);
         }
         if (sr >= 2 && !milestoneAchieved[2]) {
             milestoneAchieved[2] = true;
             ShipData.get().wallEnergyMult = 3f;
-            showNotif("PERK UNLOCKED", MILESTONE_NAMES[2] + "\n" + MILESTONE_DESCS[2]);
+            showCeleb("PERK UNLOCKED", MILESTONE_NAMES[2] + "\n" + MILESTONE_DESCS[2]);
             SoundManager.get().playMilestone();
+            triggerShake(4f, 0.12f);
         }
         if (sr >= 2 && !milestoneAchieved[3]) {
             milestoneAchieved[3] = true;
             ShipData.get().collisionEnergyMult = 2f;
-            showNotif("PERK UNLOCKED", MILESTONE_NAMES[3] + "\n" + MILESTONE_DESCS[3]);
+            showCeleb("PERK UNLOCKED", MILESTONE_NAMES[3] + "\n" + MILESTONE_DESCS[3]);
             SoundManager.get().playMilestone();
+            triggerShake(4f, 0.12f);
         }
         if (sr >= 3 && !milestoneAchieved[5]) {
             milestoneAchieved[5] = true;
             applyOverdrive();
-            showNotif("PERK UNLOCKED", MILESTONE_NAMES[5] + "\n" + MILESTONE_DESCS[5]);
+            showCeleb("PERK UNLOCKED", MILESTONE_NAMES[5] + "\n" + MILESTONE_DESCS[5]);
             SoundManager.get().playMilestone();
+            triggerShake(4f, 0.12f);
         }
     }
 
@@ -1892,7 +1907,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         // Screen shake: offset camera for SHAKE_DURATION seconds, then snap back
         if (shakeTimer > 0f) {
             shakeTimer = Math.max(0f, shakeTimer - delta);
-            float mag = SHAKE_MAG * (shakeTimer / SHAKE_DURATION);
+            float mag = shakeMag * (shakeTimer / shakeDuration);
             renderCam.position.x = RENDER_W * 0.5f + (MathUtils.random() - 0.5f) * 2f * mag;
             renderCam.position.y = RENDER_H * 0.5f + (MathUtils.random() - 0.5f) * 2f * mag;
         } else {
@@ -2271,6 +2286,16 @@ public class EngineeringLabScreen extends ScreenAdapter {
             batch.begin();
             drawNotifOverlay();
             batch.end();
+        }
+
+        if (celebTimer > 0f) {
+            if (inputHit) {
+                celebTimer = 0f;
+            } else {
+                batch.begin();
+                drawCelebOverlay();
+                batch.end();
+            }
         }
     }
 
@@ -3311,6 +3336,56 @@ public class EngineeringLabScreen extends ScreenAdapter {
         batch.setColor(1f, 1f, 1f, 1f);
     }
 
+    private void showCeleb(String title, String body) {
+        celebTitle  = title;
+        celebBody   = body;
+        celebTimer  = CELEB_HOLD;
+        celebSlideY = -200f;
+    }
+
+    private void drawCelebOverlay() {
+        if (celebTimer <= 0f) return;
+        celebTimer = Math.max(0f, celebTimer - Gdx.graphics.getDeltaTime());
+
+        float slideProgress = Math.min(1f, (CELEB_HOLD - celebTimer) / CELEB_SLIDE);
+        float ease = 1f - (float) Math.pow(1f - slideProgress, 3.0);
+        float targetY = RENDER_H * 0.28f;
+        celebSlideY = -200f + (targetY + 200f) * ease;
+
+        float alpha = celebTimer < 0.5f ? celebTimer / 0.5f : 1f;
+
+        // Dark overlay
+        batch.setColor(0f, 0f, 0f, 0.65f * alpha);
+        batch.draw(texPixel, 0, 0, RENDER_W, RENDER_H);
+
+        // Card
+        float cw = 360f, ch = 120f;
+        float cx = (RENDER_W - cw) * 0.5f;
+        float cy = celebSlideY;
+        batch.setColor(OdysseyTheme.PANEL_BG.r, OdysseyTheme.PANEL_BG.g, OdysseyTheme.PANEL_BG.b, alpha);
+        batch.draw(texPixel, cx, cy, cw, ch);
+        batch.setColor(OdysseyTheme.ACCENT_E.r, OdysseyTheme.ACCENT_E.g, OdysseyTheme.ACCENT_E.b, alpha);
+        batch.draw(texPixel, cx, cy + ch - 2f, cw, 2f);
+
+        // Title
+        floatFont.getData().setScale(1.10f);
+        floatFont.setColor(OdysseyTheme.ACCENT_SP.r, OdysseyTheme.ACCENT_SP.g, OdysseyTheme.ACCENT_SP.b, alpha);
+        drawFontCentered(celebTitle, RENDER_W * 0.5f, cy + ch - 22f);
+
+        // Body lines
+        floatFont.getData().setScale(0.75f);
+        floatFont.setColor(OdysseyTheme.TEXT_PRI.r, OdysseyTheme.TEXT_PRI.g, OdysseyTheme.TEXT_PRI.b, alpha);
+        String[] lines = celebBody.split("\n");
+        float lineY = cy + ch - 52f;
+        for (String line : lines) {
+            drawFontCentered(line, RENDER_W * 0.5f, lineY);
+            lineY -= 22f;
+        }
+
+        floatFont.getData().setScale(1f);
+        batch.setColor(1f, 1f, 1f, 1f);
+    }
+
     private void drawInternAddedOverlay() {
         float t = internAddedTimer / INTERN_ADDED_HOLD;
         float alpha = t > 0.85f ? (1f - t) / 0.15f   // fade in (first 15% of hold time reversed)
@@ -3564,7 +3639,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     for (int f = 0; f < fx.size; f++) fx.get(f).setDensity(3.5f);
                     b.resetMassData();
                 }
-                showNotif("⚙ CP I — HEAVY CHASSIS", "Intern density → 3.5 · Tanks take hits harder");
+                showCeleb("CP I — HEAVY CHASSIS", "Intern density 3.5\nTanks take hits harder");
+                triggerShake(8f, 0.20f);
             }
 
             // CP II — Magnetic Rim (6.5 r/s): wall restitution boost to 0.88
@@ -3575,7 +3651,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 emberMagneticRim = true;
                 Array<Fixture> wallFx = centrifugeBody.getFixtureList();
                 for (int i = 0; i < wallFx.size; i++) wallFx.get(i).setRestitution(0.88f);
-                showNotif("⚙ CP II — MAGNETIC RIM", "Wall restitution → 0.88 · Interns roll the ring");
+                showCeleb("CP II — MAGNETIC RIM", "Wall restitution 0.88\nInterns roll the ring");
+                triggerShake(8f, 0.20f);
             }
 
             // CP III — Hub Resonance (7.5 r/s): hub cycle 20s → 10s
@@ -3584,7 +3661,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 milestoneAchieved[3] = true;
                 ShipData.get().sectorReached = 2;
                 hubCycleLength = 10f;
-                showNotif("⚙ CP III — HUB RESONANCE", "Hub cycle halved · Blast fires every 20s");
+                showCeleb("CP III — HUB RESONANCE", "Hub cycle halved\nBlast fires every 20s");
+                triggerShake(8f, 0.20f);
             }
 
             // Status label
@@ -3618,7 +3696,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     balls.get(i).setLinearDamping(0.005f);
                     balls.get(i).setAngularDamping(0.005f);
                 }
-                showNotif("❅ CP I — SUPERCONDUCTOR", "Friction-Zero · Interns arc freely in 0.4G");
+                showCeleb("CP I — SUPERCONDUCTOR", "Friction-Zero\nInterns arc freely in 0.4G");
+                triggerShake(8f, 0.20f);
             }
 
             // CP II — Absolute Zero Resonance (6.0 r/s)
@@ -3628,7 +3707,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 ShipData.get().sectorReached = 1;
                 Array<Fixture> wallFx = centrifugeBody.getFixtureList();
                 for (int i = 0; i < wallFx.size; i++) wallFx.get(i).setRestitution(0.94f);
-                showNotif("❅ CP II — ABSOLUTE ZERO", "Wall restitution → 0.94 · Perfect elastic bounce");
+                showCeleb("CP II — ABSOLUTE ZERO", "Wall restitution 0.94\nPerfect elastic bounce");
+                triggerShake(8f, 0.20f);
             }
 
             // CP III — Blizzard Overdrive (7.0 r/s)
@@ -3639,7 +3719,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 teslaHarvestRate = 30f;
                 ShipData.get().maxInternSpeed = 8.5f;
                 decisionTable.setVisible(true);
-                showNotif("❅ CP III — BLIZZARD OVERDRIVE", "Choose your evolution path");
+                showCeleb("CP III — BLIZZARD OVERDRIVE", "Choose your evolution path");
+                triggerShake(8f, 0.20f);
             }
 
             // Status label
@@ -3937,7 +4018,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 if (pulseHistory.size > PULSE_HISTORY_MAX)
                     pulseHistory.removeIndex(PULSE_HISTORY_MAX);
                 // Tier-3 Supernova: reactor-breathing screen shake
-                if (accumulatedSparksThisSecond >= 10_000f) shakeTimer = SHAKE_DURATION;
+                if (accumulatedSparksThisSecond >= 10_000f) triggerShake(4f, 0.05f);
             }
             pulseTimer                  = 0f;
             accumulatedSparksThisSecond = 0f;
@@ -4105,6 +4186,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
             case 2:  return "CP III";
             default: return "LAND!";
         }
+    }
+
+    private void triggerShake(float mag, float duration) {
+        shakeMag      = mag;
+        shakeDuration = duration;
+        shakeTimer    = duration;
     }
 
     private void updatePerkLabel(Label label, String name, float value, float base) {

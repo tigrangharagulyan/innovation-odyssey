@@ -14,6 +14,7 @@ import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.odyssey.GameState;
 import com.odyssey.OdysseyGame;
+import com.odyssey.OdysseyTheme;
 import com.odyssey.ShipData;
 
 public class MainMenuScreen extends ScreenAdapter {
@@ -60,6 +61,7 @@ public class MainMenuScreen extends ScreenAdapter {
 
     private float rocketX, rocketY, rocketAngle;
     private int   currentIdx;
+    private float animTime = 0f;
     private final Vector3 tv = new Vector3();
 
     public MainMenuScreen(OdysseyGame game) {
@@ -152,7 +154,8 @@ public class MainMenuScreen extends ScreenAdapter {
 
     @Override
     public void render(float delta) {
-        Gdx.gl.glClearColor(0.024f, 0.034f, 0.065f, 1f);
+        animTime += delta;
+        Gdx.gl.glClearColor(OdysseyTheme.SPACE_BG.r, OdysseyTheme.SPACE_BG.g, OdysseyTheme.SPACE_BG.b, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
         viewport.apply();
 
@@ -301,6 +304,38 @@ public class MainMenuScreen extends ScreenAdapter {
             sr.setColor(0.20f, 1f, 0.40f, 0.80f);
             sr.circle(cx, cy, r + 5f, 32);
             sr.circle(cx, cy, r + 9f, 32);
+            sr.end();
+        }
+
+        // Pulse ring on current active planet
+        if (currentIdx < COL.length) {
+            float pulse = 1.0f + 0.08f * com.badlogic.gdx.math.MathUtils.sin(animTime * com.badlogic.gdx.math.MathUtils.PI);
+            float pr = NR[currentIdx] * pulse + 6f;
+            sr.begin(ShapeRenderer.ShapeType.Line);
+            sr.setColor(OdysseyTheme.ACCENT_E.r, OdysseyTheme.ACCENT_E.g, OdysseyTheme.ACCENT_E.b, 0.40f);
+            sr.circle(NX[currentIdx], NY[currentIdx], pr, 32);
+            sr.end();
+        }
+
+        // Checkpoint progress arc on current planet
+        int sectorReached = ShipData.get().sectorReached;
+        if (currentIdx < COL.length && sectorReached >= 0) {
+            float arcFraction = (sectorReached + 1) / 4f;
+            float arcR = NR[currentIdx] + 4f;
+            float startAngle = 90f;
+            float sweepAngle = 360f * arcFraction;
+            int segments = Math.max(4, (int)(sweepAngle / 6f));
+            float prevX = NX[currentIdx] + arcR * com.badlogic.gdx.math.MathUtils.cosDeg(startAngle);
+            float prevY = NY[currentIdx] + arcR * com.badlogic.gdx.math.MathUtils.sinDeg(startAngle);
+            sr.begin(ShapeRenderer.ShapeType.Line);
+            sr.setColor(OdysseyTheme.ACCENT_GO.r, OdysseyTheme.ACCENT_GO.g, OdysseyTheme.ACCENT_GO.b, 0.80f);
+            for (int s = 1; s <= segments; s++) {
+                float ang = startAngle - sweepAngle * s / segments;
+                float nx2 = NX[currentIdx] + arcR * com.badlogic.gdx.math.MathUtils.cosDeg(ang);
+                float ny2 = NY[currentIdx] + arcR * com.badlogic.gdx.math.MathUtils.sinDeg(ang);
+                sr.line(prevX, prevY, nx2, ny2);
+                prevX = nx2; prevY = ny2;
+            }
             sr.end();
         }
     }
