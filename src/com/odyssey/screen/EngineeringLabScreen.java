@@ -25,6 +25,7 @@ import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.odyssey.GameState;
 import com.odyssey.OdysseyGame;
 import com.odyssey.OdysseyTheme;
+import com.odyssey.SoundManager;
 import com.odyssey.ShipData;
 import com.odyssey.physics.EnergyContactListener;
 
@@ -1325,6 +1326,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 sd2.internsLeftOnPlanet[sd2.currentPlanetIndex] = balls.size;
                 sd2.lastFarmingTimestamp = System.currentTimeMillis();
                 sd2.savedFlightJPS = sd2.currentJPS;
+                SoundManager.get().playLaunch();
                 game.transitionTo(GameState.BRIDGE_FLIGHT);
             }
         });
@@ -1464,7 +1466,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     internAddedNewSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
                     internAddedTimer    = INTERN_ADDED_HOLD;
                     showNotif("3RD INTERN UNLOCKED", "Cap now 3 · Keep generating for CP I");
-                    return;
+                    SoundManager.get().playHire();
                 }
                 // Ember IV pre-CP-I: 1200◆ unlocks AND spawns the 3rd intern
                 if (isEmberIV() && !emberThirdInternUnlocked && sd2.sectorReached < 0
@@ -1478,7 +1480,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     internAddedNewSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
                     internAddedTimer    = INTERN_ADDED_HOLD;
                     showNotif("3RD INTERN UNLOCKED", "Cap now 3 · Reach CP I for 5 interns");
-                    return;
+                    SoundManager.get().playHire();
                 }
                 if (balls.size < internCap() && sd2.spendCrystals(internCost())) {
                     internAddedOldSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
@@ -1488,6 +1490,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                               CENTRIFUGE_CY + MathUtils.sin(angle) * r);
                     internAddedNewSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
                     internAddedTimer    = INTERN_ADDED_HOLD;
+                    SoundManager.get().playHire();
                 }
             }
         });
@@ -1563,6 +1566,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 sd2.internsLeftOnPlanet[sd2.currentPlanetIndex] = balls.size;
                 sd2.lastFarmingTimestamp = System.currentTimeMillis();
                 sd2.savedFlightJPS = sd2.currentJPS;
+                SoundManager.get().playLaunch();
                 game.transitionTo(GameState.BRIDGE_FLIGHT);
             }
         });
@@ -1790,21 +1794,25 @@ public class EngineeringLabScreen extends ScreenAdapter {
             milestoneAchieved[0] = true;
             applyElasticWalls();
             showNotif("PERK UNLOCKED", MILESTONE_NAMES[0] + "\n" + MILESTONE_DESCS[0]);
+            SoundManager.get().playMilestone();
         }
         if (sr >= 2 && !milestoneAchieved[2]) {
             milestoneAchieved[2] = true;
             ShipData.get().wallEnergyMult = 3f;
             showNotif("PERK UNLOCKED", MILESTONE_NAMES[2] + "\n" + MILESTONE_DESCS[2]);
+            SoundManager.get().playMilestone();
         }
         if (sr >= 2 && !milestoneAchieved[3]) {
             milestoneAchieved[3] = true;
             ShipData.get().collisionEnergyMult = 2f;
             showNotif("PERK UNLOCKED", MILESTONE_NAMES[3] + "\n" + MILESTONE_DESCS[3]);
+            SoundManager.get().playMilestone();
         }
         if (sr >= 3 && !milestoneAchieved[5]) {
             milestoneAchieved[5] = true;
             applyOverdrive();
             showNotif("PERK UNLOCKED", MILESTONE_NAMES[5] + "\n" + MILESTONE_DESCS[5]);
+            SoundManager.get().playMilestone();
         }
     }
 
@@ -1918,6 +1926,15 @@ public class EngineeringLabScreen extends ScreenAdapter {
         crystalsLabel.setText(sparkSym + " " + (int) sd.crystals);
         jpsLabel.setText("OUTPUT: " + formatNumber(sd.currentJPS) + " E/s");
         outputLabel.setText(formatNumber(sd.currentJPS) + " E/s");
+
+        SoundManager.get().update(delta);
+
+        // Drain bumper sound events
+        ShipData snd = ShipData.get();
+        while (snd.pendingBumperSounds > 0) {
+            SoundManager.get().playBumper();
+            snd.pendingBumperSounds--;
+        }
 
         // Update HUD strip
         float eDelta = energyDeltaSinceLaunch();

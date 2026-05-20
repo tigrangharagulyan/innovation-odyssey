@@ -45,6 +45,18 @@ public class EnergyContactListener implements ContactListener {
             return;
         }
 
+        // Ember IV: Volcanic Spring-Pad contact — award +25 SP burst per hit
+        boolean aIsSpringPad = "SPRING_PAD".equals(fA.getUserData());
+        boolean bIsSpringPad = "SPRING_PAD".equals(fB.getUserData());
+        if (aIsSpringPad || bIsSpringPad) {
+            if (aIsIntern || bIsIntern) {
+                ShipData sdSp = ShipData.get();
+                sdSp.addCrystals(25f);
+                queueFloatNum(contact, bodyA, bodyB, 25f, 1, sdSp);
+            }
+            return;
+        }
+
         // Standard bumpers carry a BumperHitData instance for per-hit flash animation
         boolean aIsStdBumper = bodyA.getUserData() instanceof ShipData.BumperHitData;
         boolean bIsStdBumper = bodyB.getUserData() instanceof ShipData.BumperHitData;
@@ -84,6 +96,7 @@ public class EnergyContactListener implements ContactListener {
             float bonus     = attractorHit ? SPARK_GRAVITY : sd.bumperSparkValue;
             int   colorType = attractorHit ? 2 : 3;
             sd.addCrystals(bonus);
+            sd.pendingBumperSounds++;
             queueFloatNum(contact, bodyA, bodyB, bonus, colorType, sd);
             // Stamp hit time so each body's renderer can drive its own flash animation
             if (aIsStdBumper) ((ShipData.BumperHitData)   bodyA.getUserData()).lastHitMs = System.currentTimeMillis();

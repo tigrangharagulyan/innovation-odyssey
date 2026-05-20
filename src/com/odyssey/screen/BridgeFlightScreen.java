@@ -17,6 +17,7 @@ import com.odyssey.GameState;
 import com.odyssey.OdysseyGame;
 import com.odyssey.ShipData;
 import com.odyssey.OdysseyTheme;
+import com.odyssey.SoundManager;
 
 public class BridgeFlightScreen extends ScreenAdapter {
 
@@ -399,6 +400,7 @@ public class BridgeFlightScreen extends ScreenAdapter {
             // Checkpoint reached: wipe energy so the player starts fresh for the next segment.
             // Crystals (space points) are deliberately preserved.
             ShipData sd = ShipData.get();
+            SoundManager.get().playCheckpoint();
             sd.totalJoules        = 0f;
             sd.energyAtLastLaunch = sd.powerGenerated;
             game.transitionTo(GameState.ENGINEERING_LAB);
