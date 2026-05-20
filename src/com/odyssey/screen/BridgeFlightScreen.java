@@ -16,6 +16,7 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.odyssey.GameState;
 import com.odyssey.OdysseyGame;
 import com.odyssey.ShipData;
+import com.odyssey.OdysseyTheme;
 
 public class BridgeFlightScreen extends ScreenAdapter {
 
@@ -164,10 +165,14 @@ public class BridgeFlightScreen extends ScreenAdapter {
         float startDist = prevSector >= 0 ? sectorDists[prevSector] : 0f;
         rocketX = distToX(startDist);
 
+        // Only ever advance ONE checkpoint per launch — cap target at the very next marker
+        int   nextSector = Math.min(prevSector + 1, sectorDists.length - 1);
+        float targetDist = sectorDists[nextSector];
+
         float energyThisRun = sd.powerGenerated - sd.energyAtLastLaunch;
         sd.energyAtLastLaunch = sd.powerGenerated;
         float gained   = energyThisRun * ENERGY_AU_SCALE;
-        float newAccum = Math.min(startDist + gained, totalRoute);
+        float newAccum = Math.min(startDist + gained, targetDist);  // never skip a checkpoint
         rocketTargetX  = distToX(newAccum);
 
         newHighSector  = prevSector;
@@ -244,7 +249,7 @@ public class BridgeFlightScreen extends ScreenAdapter {
             }
         }
 
-        Gdx.gl.glClearColor(0f, 0f, 0f, 1f);
+        Gdx.gl.glClearColor(OdysseyTheme.SPACE_BG.r, OdysseyTheme.SPACE_BG.g, OdysseyTheme.SPACE_BG.b, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         viewport.apply();
@@ -273,11 +278,11 @@ public class BridgeFlightScreen extends ScreenAdapter {
         font.draw(batch, jpsStr, (W - layout.width) / 2f, H - 68f);
 
         // Route line (gray base)
-        batch.setColor(0.35f, 0.35f, 0.35f, 1f);
+        batch.setColor(OdysseyTheme.PANEL_BORDER);
         batch.draw(texPixel, LINE_X0, LINE_Y - 2f, LINE_LEN, 4f);
 
         // Green progress up to rocketX
-        batch.setColor(0.27f, 1f, 0.55f, 0.5f);
+        batch.setColor(OdysseyTheme.ACCENT_GO_DIM);
         float coveredLen = Math.max(0, rocketX - LINE_X0);
         batch.draw(texPixel, LINE_X0, LINE_Y - 2f, coveredLen, 4f);
 
@@ -297,11 +302,11 @@ public class BridgeFlightScreen extends ScreenAdapter {
             boolean justPassed = (!alreadyHad && rocketX >= sx);
 
             if (alreadyHad)
-                batch.setColor(0.27f, 1f, 0.55f, 1f);   // green — carried over
+                batch.setColor(OdysseyTheme.ACCENT_GO);
             else if (justPassed)
-                batch.setColor(1f, 0.85f, 0.2f, 1f);    // yellow — new this run
+                batch.setColor(OdysseyTheme.ACCENT_SP);
             else
-                batch.setColor(0.28f, 0.28f, 0.28f, 1f); // gray — not yet
+                batch.setColor(OdysseyTheme.PANEL_BORDER);
 
             batch.draw(texDot, sx - dotR, LINE_Y - dotR, dotR * 2, dotR * 2);
 
@@ -363,8 +368,8 @@ public class BridgeFlightScreen extends ScreenAdapter {
                     ? "CLAIM REWARD  &  RETURN TO BAY  ▶"
                     : "RETURN TO BAY  ▶";
             boolean btnIsArrival = arrived;
-            if (btnIsArrival) batch.setColor(0.78f, 0.32f, 0.04f, 0.95f);
-            else              batch.setColor(0.05f, 0.50f, 0.22f, 0.95f);
+            if (btnIsArrival) batch.setColor(OdysseyTheme.ACCENT_WARN.r, OdysseyTheme.ACCENT_WARN.g, OdysseyTheme.ACCENT_WARN.b, 0.95f);
+            else              batch.setColor(OdysseyTheme.BTN_GO.r, OdysseyTheme.BTN_GO.g, OdysseyTheme.BTN_GO.b, 0.95f);
             batch.draw(texPixel, BTN_X, BTN_Y, BTN_W, BTN_H);
             // Button border highlight
             batch.setColor(1f, 1f, 1f, 0.18f);
@@ -391,6 +396,11 @@ public class BridgeFlightScreen extends ScreenAdapter {
             sd.markArrival(totalRoute, totalRoute / ENERGY_AU_SCALE);
             game.transitionTo(GameState.NOVA_TERRA_ARRIVAL);
         } else {
+            // Checkpoint reached: wipe energy so the player starts fresh for the next segment.
+            // Crystals (space points) are deliberately preserved.
+            ShipData sd = ShipData.get();
+            sd.totalJoules        = 0f;
+            sd.energyAtLastLaunch = sd.powerGenerated;
             game.transitionTo(GameState.ENGINEERING_LAB);
         }
     }
