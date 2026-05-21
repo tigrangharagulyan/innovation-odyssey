@@ -1,0 +1,93 @@
+plugins {
+    id 'com.android.application'
+}
+
+configurations {
+    natives
+}
+
+android {
+    namespace 'com.odyssey'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.odyssey.innovationodyssey'
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    sourceSets {
+        main {
+            manifest.srcFile 'src/main/AndroidManifest.xml'
+            java.srcDirs = [file('src/main/java'), rootProject.file('src')]
+            java.exclude '**/TeaVMLauncher.java'
+            java.exclude '**/DesktopLauncher.java'
+            java.exclude 'Main.java'
+            assets.srcDirs = [rootProject.file('assets')]
+            res.srcDirs = ['src/main/res']
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+        }
+    }
+}
+
+ext.gdxVersion = '1.12.1'
+
+dependencies {
+    implementation "com.badlogicgames.gdx:gdx:$gdxVersion"
+    implementation "com.badlogicgames.gdx:gdx-box2d:$gdxVersion"
+    implementation "com.badlogicgames.gdx:gdx-freetype:$gdxVersion"
+    implementation "com.badlogicgames.gdx:gdx-backend-android:$gdxVersion"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-armeabi-v7a"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-arm64-v8a"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86_64"
+    natives "com.badlogicgames.gdx:gdx-box2d-platform:$gdxVersion:natives-armeabi-v7a"
+    natives "com.badlogicgames.gdx:gdx-box2d-platform:$gdxVersion:natives-arm64-v8a"
+    natives "com.badlogicgames.gdx:gdx-box2d-platform:$gdxVersion:natives-x86"
+    natives "com.badlogicgames.gdx:gdx-box2d-platform:$gdxVersion:natives-x86_64"
+    natives "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-armeabi-v7a"
+    natives "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-arm64-v8a"
+    natives "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-x86"
+    natives "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-x86_64"
+}
+
+// Copy native .so files into the jniLibs folders
+task copyAndroidNatives {
+    def filesDir = projectDir
+
+    doFirst {
+        file("src/main/jniLibs/armeabi-v7a").mkdirs()
+        file("src/main/jniLibs/arm64-v8a").mkdirs()
+        file("src/main/jniLibs/x86").mkdirs()
+        file("src/main/jniLibs/x86_64").mkdirs()
+        configurations.natives.copy().each { jar ->
+            def outputDir = null
+            if     (jar.name.endsWith("natives-armeabi-v7a.jar")) outputDir = file("src/main/jniLibs/armeabi-v7a")
+            else if(jar.name.endsWith("natives-arm64-v8a.jar"))   outputDir = file("src/main/jniLibs/arm64-v8a")
+            else if(jar.name.endsWith("natives-x86.jar"))         outputDir = file("src/main/jniLibs/x86")
+            else if(jar.name.endsWith("natives-x86_64.jar"))      outputDir = file("src/main/jniLibs/x86_64")
+            if (outputDir != null) {
+                copy { from zipTree(jar); into outputDir; include "*.so" }
+            }
+        }
+    }
+}
+
+tasks.whenTaskAdded { packageTask ->
+    if (packageTask.name.contains("package")) {
+        packageTask.dependsOn copyAndroidNatives
+    }
+}

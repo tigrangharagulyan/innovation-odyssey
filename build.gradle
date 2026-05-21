@@ -1,7 +1,25 @@
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.3.2'
+    }
+}
+
 plugins {
     id 'java'
     id 'application'
 }
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
 
 repositories {
     mavenCentral()
@@ -13,8 +31,10 @@ dependencies {
     implementation "com.badlogicgames.gdx:gdx:$gdxVersion"
     implementation "com.badlogicgames.gdx:gdx-box2d:$gdxVersion"
     implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
+    implementation "com.badlogicgames.gdx:gdx-freetype:$gdxVersion"
     runtimeOnly    "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
     runtimeOnly    "com.badlogicgames.gdx:gdx-box2d-platform:$gdxVersion:natives-desktop"
+    runtimeOnly    "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-desktop"
 }
 
 sourceSets {

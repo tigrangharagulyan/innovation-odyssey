@@ -10,7 +10,7 @@ public class EnergyContactListener implements ContactListener {
 
     // Sparks (◆/❅) earned per collision type
     private static final float SPARK_INTERN_INTERN = 20f;  // multiplied by collisionEnergyMult
-    private static final float SPARK_WALL          = 0.5f; // every ring/wall hit
+    private static final float SPARK_WALL          = 1f;   // every ring/wall hit
     private static final float SPARK_GRAVITY       = 50f;  // gravity-well core contact
 
     @Override
@@ -41,6 +41,18 @@ public class EnergyContactListener implements ContactListener {
                 ShipData sd2 = ShipData.get();
                 sd2.addJoules(35f);
                 queueFloatNum(contact, bodyA, bodyB, 35f, 0, sd2);
+            }
+            return;
+        }
+
+        // Ember IV: Volcanic Spring-Pad contact — award +25 SP burst per hit
+        boolean aIsSpringPad = "SPRING_PAD".equals(fA.getUserData());
+        boolean bIsSpringPad = "SPRING_PAD".equals(fB.getUserData());
+        if (aIsSpringPad || bIsSpringPad) {
+            if (aIsIntern || bIsIntern) {
+                ShipData sdSp = ShipData.get();
+                sdSp.addCrystals(25f);
+                queueFloatNum(contact, bodyA, bodyB, 25f, 1, sdSp);
             }
             return;
         }
@@ -81,9 +93,10 @@ public class EnergyContactListener implements ContactListener {
 
         } else if (bumperHit) {
             // ---- Standard bumper or gravity-well / Tesla-Coil core contact ----
-            float bonus     = attractorHit ? SPARK_GRAVITY : sd.bumperSparkValue;
+            float bonus     = attractorHit ? SPARK_GRAVITY * sd.gravityMult : sd.bumperSparkValue * sd.bumperMult;
             int   colorType = attractorHit ? 2 : 3;
             sd.addCrystals(bonus);
+            sd.pendingBumperSounds++;
             queueFloatNum(contact, bodyA, bodyB, bonus, colorType, sd);
             // Stamp hit time so each body's renderer can drive its own flash animation
             if (aIsStdBumper) ((ShipData.BumperHitData)   bodyA.getUserData()).lastHitMs = System.currentTimeMillis();
@@ -96,9 +109,11 @@ public class EnergyContactListener implements ContactListener {
                     ((ShipData.AttractorHitData) bodyB.getUserData()).lastHitMs = ts;
             }
 
-        } else {
+        } else if (aIsIntern || bIsIntern) {
             // ---- Wall / ring contact: tiny passive trickle ----
-            sd.addCrystals(SPARK_WALL);
+            float wallGain = SPARK_WALL * sd.wallEnergyMult;
+            sd.addCrystals(wallGain);
+            queueFloatNum(contact, bodyA, bodyB, wallGain, 0, sd); // color 0 = energy (green)
         }
     }
 

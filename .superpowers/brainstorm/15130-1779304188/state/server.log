@@ -1,0 +1,7 @@
+{"type":"server-started","port":53965,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:53965","screen_dir":"/Users/rockbitegames/IdeaProjects/Odyssey/.superpowers/brainstorm/15130-1779304188/content","state_dir":"/Users/rockbitegames/IdeaProjects/Odyssey/.superpowers/brainstorm/15130-1779304188/state"}
+{"type":"screen-added","file":"/Users/rockbitegames/IdeaProjects/Odyssey/.superpowers/brainstorm/15130-1779304188/content/color-palette.html"}
+{"type":"screen-added","file":"/Users/rockbitegames/IdeaProjects/Odyssey/.superpowers/brainstorm/15130-1779304188/content/button-layout.html"}
+{"type":"screen-added","file":"/Users/rockbitegames/IdeaProjects/Odyssey/.superpowers/brainstorm/15130-1779304188/content/button-b-revised.html"}
+{"type":"screen-added","file":"/Users/rockbitegames/IdeaProjects/Odyssey/.superpowers/brainstorm/15130-1779304188/content/button-b-v2.html"}
+{"type":"screen-added","file":"/Users/rockbitegames/IdeaProjects/Odyssey/.superpowers/brainstorm/15130-1779304188/content/lab-layout.html"}
+{"type":"server-stopped","reason":"idle timeout"}

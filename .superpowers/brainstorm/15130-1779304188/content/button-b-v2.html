@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #080810;
+    font-family: 'Rajdhani', sans-serif;
+    color: #C8D8F0;
+    padding: 20px;
+    min-height: 100vh;
+  }
+
+  h2 { color: #C8D8F0; font-size: 16px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 4px; }
+  .subtitle { color: #3A4A6A; font-size: 11px; font-family: 'Share Tech Mono', monospace; margin-bottom: 22px; letter-spacing: 1px; }
+
+  .demo-label {
+    color: #3A4A6A;
+    font-size: 9px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-family: 'Share Tech Mono', monospace;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #12182A;
+    padding-bottom: 5px;
+  }
+  .demo-section { margin-bottom: 22px; }
+
+  /* ── HUD STRIP ── */
+  .hud {
+    background: #0B0D18;
+    border-left: 2px solid #2255CC;
+    padding: 9px 14px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 12px;
+    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  }
+  .hud-planet {
+    font-family: 'Share Tech Mono', monospace;
+    color: #2255CC;
+    font-size: 10px;
+    letter-spacing: 2px;
+    min-width: 64px;
+  }
+  .hud-bar-wrap {
+    flex: 1;
+    height: 3px;
+    background: #12182A;
+    position: relative;
+  }
+  .hud-bar-fill {
+    height: 100%;
+    width: 40%;
+    background: #2255CC;
+    position: relative;
+    animation: barPulse 2.4s ease-in-out infinite;
+  }
+  .hud-bar-fill::after {
+    content: '';
+    position: absolute;
+    right: 0; top: -2px;
+    width: 3px; height: 7px;
+    background: #88AAFF;
+  }
+  @keyframes barPulse {
+    0%, 100% { opacity: 0.7; }
+    50%       { opacity: 1; }
+  }
+  .hud-val {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: #8899BB;
+    white-space: nowrap;
+  }
+  .hud-val b { color: #C8D8F0; font-weight: normal; }
+  .hud-sp {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: #CC9900;
+  }
+
+  /* ── BUTTON GRID ── */
+  .btn-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 5px;
+  }
+
+  .btn {
+    padding: 11px 5px 9px;
+    text-align: center;
+    cursor: pointer;
+    position: relative;
+    transition: filter 0.1s;
+    clip-path: polygon(6px 0%, 100% 0%, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0% 100%, 0% 6px);
+  }
+  .btn:active { filter: brightness(1.3); }
+
+  .btn-sym {
+    display: block;
+    font-size: 13px;
+    font-family: 'Share Tech Mono', monospace;
+    letter-spacing: -1px;
+    margin-bottom: 5px;
+    line-height: 1;
+  }
+  .btn-label {
+    display: block;
+    font-size: 8px;
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    line-height: 1.2;
+  }
+  .btn-sub {
+    display: block;
+    font-size: 8px;
+    font-family: 'Share Tech Mono', monospace;
+    margin-top: 3px;
+    line-height: 1;
+  }
+
+  /* LOCKED */
+  .btn-locked {
+    background: #0A0C14;
+    cursor: not-allowed;
+  }
+  .btn-locked .btn-sym   { color: #1E2438; }
+  .btn-locked .btn-label { color: #1E2438; }
+  .btn-locked .btn-sub   { color: #1E2438; }
+
+  /* AVAILABLE (unlocked, can't afford) */
+  .btn-available {
+    background: #0C0F1C;
+    border-left: 1px solid #1E2A48;
+  }
+  .btn-available .btn-sym   { color: #3A4A7A; }
+  .btn-available .btn-label { color: #3A4A7A; }
+  .btn-available .btn-sub   { color: #283050; }
+
+  /* BUYABLE */
+  .btn-buyable {
+    background: #0C0F1C;
+    border-left: 1px solid #2255CC;
+  }
+  .btn-buyable .btn-sym   { color: #88AAEE; }
+  .btn-buyable .btn-label { color: #C8D8F0; }
+  .btn-buyable .btn-sub   { color: #CC9900; }
+
+  /* ACTIVE / PLACING */
+  .btn-active {
+    background: #0C1020;
+    border-left: 2px solid #2255CC;
+    border-top: 1px solid #2255CC;
+  }
+  .btn-active .btn-sym   { color: #88AAEE; animation: blink 0.9s step-end infinite; }
+  .btn-active .btn-label { color: #88AAEE; }
+  .btn-active .btn-sub   { color: #2255CC; }
+  @keyframes blink { 50% { opacity: 0.3; } }
+
+  /* LAUNCH — NOT READY */
+  .btn-launch-locked {
+    background: #080E08;
+    border-left: 1px solid #163316;
+  }
+  .btn-launch-locked .btn-sym   { color: #1F4A1F; }
+  .btn-launch-locked .btn-label { color: #2A5A2A; }
+  .btn-launch-locked .btn-sub   { color: #1A3A1A; font-size: 7px; }
+
+  /* LAUNCH — READY */
+  .btn-launch {
+    background: #0A1E0C;
+    border-left: 2px solid #00FF44;
+    border-top: 1px solid #00CC33;
+    cursor: pointer;
+    animation: launchPulse 1.6s ease-in-out infinite;
+  }
+  .btn-launch .btn-sym   { color: #00FF44; font-size: 15px; }
+  .btn-launch .btn-label { color: #00FF44; }
+  .btn-launch .btn-sub   { color: #00CC33; }
+  @keyframes launchPulse {
+    0%, 100% { border-left-color: #00AA33; border-top-color: #007722; }
+    50%       { border-left-color: #00FF44; border-top-color: #00CC33; box-shadow: inset 0 0 12px rgba(0,255,68,0.08); }
+  }
+
+  /* ── FLOAT NUMBER PREVIEW ── */
+  .float-preview {
+    background: #0B0D18;
+    border-left: 2px solid #12182A;
+    padding: 10px 14px;
+    margin-top: 4px;
+    position: relative;
+    height: 70px;
+    overflow: hidden;
+    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  }
+  .float-num {
+    position: absolute;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    animation: floatUp 2.2s ease-out infinite;
+    pointer-events: none;
+    bottom: 10px;
+  }
+  .fn-sp   { color: #CC9900; left: 15%; animation-delay: 0s;   }
+  .fn-e    { color: #4488FF; left: 48%; animation-delay: 0.8s; }
+  .fn-grav { color: #00CCAA; left: 75%; animation-delay: 1.5s; }
+  @keyframes floatUp {
+    0%   { opacity: 0;   transform: translateY(0)    scale(0.8); }
+    15%  { opacity: 1;   transform: translateY(-12px) scale(1); }
+    85%  { opacity: 0.6; transform: translateY(-42px) scale(1); }
+    100% { opacity: 0;   transform: translateY(-54px) scale(0.9); }
+  }
+</style>
+</head>
+<body>
+
+<h2>Button System — Revised</h2>
+<p class="subtitle">// no emojis · chamfered corners · state via border + tint</p>
+
+<!-- HUD -->
+<div class="demo-section">
+  <div class="demo-label">HUD_STRIP</div>
+  <div class="hud">
+    <span class="hud-planet">SOLARA</span>
+    <div class="hud-bar-wrap"><div class="hud-bar-fill"></div></div>
+    <span class="hud-val"><b>3.2</b>/8.0 KE</span>
+    <span class="hud-val"><b>54</b> E/s</span>
+    <span class="hud-sp">4,230 SP</span>
+  </div>
+</div>
+
+<!-- SCENARIO 1 -->
+<div class="demo-section">
+  <div class="demo-label">STATE_EARLY</div>
+  <div class="btn-grid">
+    <div class="btn btn-buyable">
+      <span class="btn-sym">[+]</span>
+      <span class="btn-label">Hire Orb</span>
+      <span class="btn-sub">80 SP</span>
+    </div>
+    <div class="btn btn-locked">
+      <span class="btn-sym">&#9633;</span>
+      <span class="btn-label">Bumper</span>
+      <span class="btn-sub">-- --</span>
+    </div>
+    <div class="btn btn-locked">
+      <span class="btn-sym">&#9678;</span>
+      <span class="btn-label">Gravity</span>
+      <span class="btn-sub">-- --</span>
+    </div>
+    <div class="btn btn-launch-locked">
+      <span class="btn-sym">&gt;&gt;</span>
+      <span class="btn-label">Launch</span>
+      <span class="btn-sub">3.2/8.0KE</span>
+    </div>
+  </div>
+</div>
+
+<!-- SCENARIO 2 -->
+<div class="demo-section">
+  <div class="demo-label">STATE_MID · placing gravity well</div>
+  <div class="btn-grid">
+    <div class="btn btn-available">
+      <span class="btn-sym">[+]</span>
+      <span class="btn-label">Hire Orb</span>
+      <span class="btn-sub">MAX</span>
+    </div>
+    <div class="btn btn-buyable">
+      <span class="btn-sym">&#9633;</span>
+      <span class="btn-label">Bumper</span>
+      <span class="btn-sub">200 SP</span>
+    </div>
+    <div class="btn btn-active">
+      <span class="btn-sym">&#9678;</span>
+      <span class="btn-label">Placing_</span>
+      <span class="btn-sub">tap ring</span>
+    </div>
+    <div class="btn btn-launch-locked">
+      <span class="btn-sym">&gt;&gt;</span>
+      <span class="btn-label">Launch</span>
+      <span class="btn-sub">6.8/8.0KE</span>
+    </div>
+  </div>
+</div>
+
+<!-- SCENARIO 3 -->
+<div class="demo-section">
+  <div class="demo-label">STATE_LAUNCH_READY</div>
+  <div class="btn-grid">
+    <div class="btn btn-buyable">
+      <span class="btn-sym">[+]</span>
+      <span class="btn-label">Hire Orb</span>
+      <span class="btn-sub">80 SP</span>
+    </div>
+    <div class="btn btn-buyable">
+      <span class="btn-sym">&#9633;</span>
+      <span class="btn-label">Bumper</span>
+      <span class="btn-sub">200 SP</span>
+    </div>
+    <div class="btn btn-available">
+      <span class="btn-sym">&#9678;</span>
+      <span class="btn-label">Gravity</span>
+      <span class="btn-sub">500 SP</span>
+    </div>
+    <div class="btn btn-launch">
+      <span class="btn-sym">&gt;&gt;</span>
+      <span class="btn-label">Launch</span>
+      <span class="btn-sub">CP I READY</span>
+    </div>
+  </div>
+</div>
+
+<!-- FLOATS -->
+<div class="demo-label">FLOAT_NUMBERS</div>
+<div class="float-preview">
+  <span class="float-num fn-sp">+20 SP</span>
+  <span class="float-num fn-e">+8.4 E</span>
+  <span class="float-num fn-grav">+50 G</span>
+</div>
+
+</body>
+</html>
