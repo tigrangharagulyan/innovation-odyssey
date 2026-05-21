@@ -35,7 +35,7 @@ public class BridgeFlightScreen extends ScreenAdapter {
     private static final String[] SECTOR_PERK_DESCS = {
         "Interns bounce off walls with more force",
         "Unlock gravity wells · Bumper cap 4 · Intern cap 8",
-        "Wall sparks ×3 · Collision sparks ×2 · Free intern added to bay",
+        "Wall sparks x3 · Collision sparks x2 · Free intern added to bay",
         "Mission complete — colony established!"
     };
     // Energy produced since last launch × scale = AU gained this run.
@@ -96,7 +96,7 @@ public class BridgeFlightScreen extends ScreenAdapter {
         cam      = new OrthographicCamera();
         viewport = new FitViewport(W, H, cam);
         cam.position.set(W / 2f, H / 2f, 0f);
-        font   = new BitmapFont();
+        font   = game.skin.getFont("float");
         layout = new GlyphLayout();
         texBg     = genBackground();
         texPixel  = genPixel();
@@ -366,10 +366,10 @@ public class BridgeFlightScreen extends ScreenAdapter {
 
             // Action button
             String btnText = arrived
-                ? "LAND ON " + ShipData.get().getSelectedPlanet().name.toUpperCase() + "  ▶"
+                ? "LAND ON " + ShipData.get().getSelectedPlanet().name.toUpperCase() + "  >>"
                 : newHighSector >= 0
-                    ? "CLAIM REWARD  &  RETURN TO BAY  ▶"
-                    : "RETURN TO BAY  ▶";
+                    ? "CLAIM REWARD  &  RETURN TO BAY  >>"
+                    : "RETURN TO BAY  >>";
             boolean btnIsArrival = arrived;
             if (btnIsArrival) batch.setColor(OdysseyTheme.ACCENT_WARN.r, OdysseyTheme.ACCENT_WARN.g, OdysseyTheme.ACCENT_WARN.b, 0.95f);
             else              batch.setColor(OdysseyTheme.BTN_GO.r, OdysseyTheme.BTN_GO.g, OdysseyTheme.BTN_GO.b, 0.95f);
@@ -429,6 +429,6 @@ public class BridgeFlightScreen extends ScreenAdapter {
         texPixel.dispose();
         texDot.dispose();
         texRocket.dispose();
-        font.dispose();
+        // font is owned by skin — do not dispose here
     }
 }

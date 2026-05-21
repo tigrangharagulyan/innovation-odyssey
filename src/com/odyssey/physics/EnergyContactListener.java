@@ -10,7 +10,7 @@ public class EnergyContactListener implements ContactListener {
 
     // Sparks (◆/❅) earned per collision type
     private static final float SPARK_INTERN_INTERN = 20f;  // multiplied by collisionEnergyMult
-    private static final float SPARK_WALL          = 0.5f; // every ring/wall hit
+    private static final float SPARK_WALL          = 1f;   // every ring/wall hit
     private static final float SPARK_GRAVITY       = 50f;  // gravity-well core contact
 
     @Override
@@ -93,7 +93,7 @@ public class EnergyContactListener implements ContactListener {
 
         } else if (bumperHit) {
             // ---- Standard bumper or gravity-well / Tesla-Coil core contact ----
-            float bonus     = attractorHit ? SPARK_GRAVITY : sd.bumperSparkValue;
+            float bonus     = attractorHit ? SPARK_GRAVITY * sd.gravityMult : sd.bumperSparkValue * sd.bumperMult;
             int   colorType = attractorHit ? 2 : 3;
             sd.addCrystals(bonus);
             sd.pendingBumperSounds++;
@@ -109,9 +109,11 @@ public class EnergyContactListener implements ContactListener {
                     ((ShipData.AttractorHitData) bodyB.getUserData()).lastHitMs = ts;
             }
 
-        } else {
+        } else if (aIsIntern || bIsIntern) {
             // ---- Wall / ring contact: tiny passive trickle ----
-            sd.addCrystals(SPARK_WALL);
+            float wallGain = SPARK_WALL * sd.wallEnergyMult;
+            sd.addCrystals(wallGain);
+            queueFloatNum(contact, bodyA, bodyB, wallGain, 0, sd); // color 0 = energy (green)
         }
     }
 

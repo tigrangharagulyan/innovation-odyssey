@@ -115,17 +115,27 @@ public class OdysseyGame extends Game {
         p.color     = Color.WHITE;
         p.shadowColor  = new Color(0f, 0f, 0f, 0.55f);
         p.shadowOffsetX = 1; p.shadowOffsetY = -1;
+        // Extend character set: add multiplication sign and other Latin-1/punctuation used in UI
+        p.characters = FreeTypeFontGenerator.DEFAULT_CHARS
+                     + "×"   // × multiplication sign
+                     + "·"   // · middle dot
+                     + "→"   // → right arrow
+                     + "▶"   // ▶ right-pointing triangle
+                     + "▲"   // ▲ up-pointing triangle
+                     + "✓";  // ✓ check mark
 
         p.size = 17; BitmapFont font   = gen.generateFont(p);
         p.size = 24; BitmapFont medium = gen.generateFont(p);
         p.size = 38; BitmapFont large  = gen.generateFont(p);
         p.size = 13; BitmapFont small  = gen.generateFont(p);
+        p.size = 14; BitmapFont floatF = gen.generateFont(p); // used for batch-drawn overlay text
         gen.dispose();
 
         s.add("font",   font);
         s.add("medium", medium);
         s.add("large",  large);
         s.add("small",  small);
+        s.add("float",  floatF);
 
         Texture panelLargeTex      = new Texture("ui/card_large.png");
         Texture panelMediumTex     = new Texture("ui/card_medium.png");
@@ -203,6 +213,11 @@ public class OdysseyGame extends Game {
         s.add("tile_active_dn",    new NinePatchDrawable(npActive));
         s.add("tile_go_dn",        new NinePatchDrawable(npGo));
         s.add("tile_golocked_dn",  new NinePatchDrawable(npGoLocked));
+        // Green "can afford" variant — used for action tile buttons when purchase is possible
+        Color gcBorder = new Color(0.07f, 0.52f, 0.20f, 1f);
+        Color gcGlow   = new Color(0.18f, 0.92f, 0.40f, 1f);
+        s.add("tile_buygreen",    makeSciBtn(gcGlow, 0.78f, gcBorder, false));
+        s.add("tile_buygreen_dn", makeSciBtn(gcGlow, 0.78f, gcBorder, true));
 
         // Rounded panels for overlays and strips
         s.add("rounded_dark",  makeRoundedPanel(OdysseyTheme.PANEL_BG, 16));
@@ -287,6 +302,11 @@ public class OdysseyGame extends Game {
      * Public API — starts a 0.28 s fade-out, switches screen at the midpoint,
      * then fades back in. Safe to call from any screen at any time.
      */
+    /** Wipes the cached EngineeringLabScreen so the next visit creates a fresh instance. */
+    public void resetLabScreen() {
+        if (labScreen != null) { labScreen.dispose(); labScreen = null; }
+    }
+
     public void transitionTo(GameState next) {
         if (fadingOut || fadingIn) return;   // already mid-transition
         if (next == currentState) return;

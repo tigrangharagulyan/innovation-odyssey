@@ -21,7 +21,11 @@ import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
+import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.scenes.scene2d.ui.Cell;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
@@ -59,7 +63,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private static final float[] CRYO_VENT_COSTS   = {800f, 2_000f, 8_000f, 20_000f, 150_000f};
     private static final float[] TESLA_COIL_COSTS  = {5_000f, 12_000f, 35_000f, 300_000f};
     private static final float CENTRIFUGE_CX       = 4.0f;
-    private static final float CENTRIFUGE_CY       = 7.0f;   // drum sits just above bottom controls panel
+    private static final float CENTRIFUGE_CY       = 8.5f;   // drum sits just above bottom controls panel
     private static final float CENTRIFUGE_R        = 3.0f;   // bigger drum — fills viewport width
     private static final int   CENTRIFUGE_SEGS     = 36;
     private static final float CENTRIFUGE_RPM      = 5.0f;
@@ -68,7 +72,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private static final int   MAX_BUMPERS          = 5;
     private static final int   MAX_GRAVITY_WELLS    = 4;
     private static final float CENTRIFUGE_RPM_BASE   = 1.5f;   // starting ring speed
-    private static final float CENTRIFUGE_RPM_MAX    = 10.0f;   // max ring speed
+    private static final float CENTRIFUGE_RPM_MAX    = 10.5f;   // max ring speed
     private static final float CENTRIFUGE_RPM_ACCEL  = 0.18f;
     private static final float MAX_INTERN_SPEED      = 5.0f;
 
@@ -84,15 +88,15 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private static final float[] GRAVITY_COSTS = {3000, 6000, 20000, 200_000};
     // Ring-speed milestones: auto-unlock in order as ring climbs
     // Index 0 (Elastic Walls) is checkpoint-gated — only unlocked at CP I, never by ring speed
-    private static final float[]  MILESTONE_RPMS  = {99f, 5.0f, 6.0f, 7.0f, 7.5f, 8.0f};
-    private static final String[] MILESTONE_NAMES = {"Elastic Walls", "Speed Keep", "Wall ×3", "Hit ×2", "Free Intern", "Overdrive"};
+    private static final float[]  MILESTONE_RPMS  = {5.25f, 3.5f, 6.75f, 7.5f, 9.5f, 99f};
+    private static final String[] MILESTONE_NAMES = {"Elastic Walls", "Speed Keep", "Wall ×3", "Hit ×2", "Bumper ×3", "-"};
     private static final String[] MILESTONE_DESCS = {
         "Interns bounce off walls harder — more chaos",
         "Interns keep 97% speed after every hit",
         "Each wall touch earns 3× more Space Points",
         "Intern-intern hits earn 2× more Space Points",
-        "A bonus intern is added to your bay for free",
-        "Bumpers give 15× points · intern bounces get a huge kick"
+        "Bumpers deal 3× more Space Points per hit",
+        "-"
     };
 
     // Solara (Level 1) checkpoint energy thresholds
@@ -196,8 +200,16 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private Label hudSpLabel;
     private float hudBarFill = 0f;   // 0..1, current fill fraction
 
-    // ── Perk readout strip ──
-    private Label perkCollLabel, perkWallLabel, perkBoostLabel, perkBumpLabel;
+    // ── Perk readout strip — icon Images (one per milestone slot) ──
+    private com.badlogic.gdx.scenes.scene2d.ui.Image perkIconSpeed, perkIconElas, perkIconWall, perkIconColl, perkIconBump;
+    private Texture texPerkSpeed, texPerkElas, texPerkWall, texPerkColl, texPerkBump;
+    private Texture texIconSP, texIconEnergy;
+    private com.badlogic.gdx.scenes.scene2d.ui.Image uiIconSP, uiIconEnergy;
+
+    // Perk tap popup state
+    private int   activePerkPopup = -1;   // milestone index 0-4, or -1 for none
+    private float perkPopupTimer  = 0f;
+    private static final float PERK_POPUP_DURATION = 2.8f;
 
     // Space Points feed: last 5 gains shown at top of centrifuge  {age, value, colorType}
     private final Array<float[]> spacePointsQueue = new Array<>();
@@ -216,11 +228,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
         static final float LIFETIME = 1.2f;
     }
     private final com.badlogic.gdx.utils.Array<FloatEntry> activeFloats = new com.badlogic.gdx.utils.Array<>();
+    private boolean floatSideTog = false;
 
     private TextButton btnAdd;
     private TextButton btnBumper;
     private TextButton btnGravityWell;
-    private TextButton.TextButtonStyle tileStyleLock, tileStyleNorm, tileStyleBuy, tileStyleAct, tileStyleGo, tileStyleGoLock;
+    private TextButton.TextButtonStyle tileStyleLock, tileStyleNorm, tileStyleBuy, tileStyleBuyGreen, tileStyleAct, tileStyleGo, tileStyleGoLock;
     private TextButton[] perkButtons;
     private Label[]      perkDescLabels;
     private Table        rightPerksTable;
@@ -236,6 +249,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private final Vector2     pullVec    = new Vector2();
     private final Vector3     touchWorld = new Vector3();
     private int   placementMode    = PLACE_NONE;
+    private static final int PLACE_INTERN = 5;
+    private int   dragMode         = PLACE_NONE;
+    private float dragStageX, dragStageY;
     private InputMultiplexer inputMux;
     private float jpsTimer         = 0f;
     private float lastJoules       = 0f;
@@ -267,6 +283,15 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private float currentBallRestitution = BALL_RESTITUTION;
     private float animTime = 0f;  // drives intern wobble animation
     private boolean tutorialDone = false;
+    private boolean tutorialInternDragging = false;
+    private float   tutorialPostDropTimer  = -1f; // counts up after first intern placed; -1 = not started
+    private boolean launchHintShown      = false;
+    private boolean bumperHintShown      = false;
+    private boolean gravityHintShown     = false;
+    private boolean perkIconHintShown    = false;
+    private boolean launchWasReady    = false;
+    private Cell<TextButton> launchBtnCell;
+    private Table rootTable;
     // 0=intro overlay, 1=hire-intern callout, 2=launch callout, 3=done
     private int   tutorialStep    = 0;
     private float tutorialStepAge = 0f;   // time spent on current callout step
@@ -338,6 +363,15 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private Texture texBlade1;   // Variation A — Heavy Carbon-Steel
     private Texture texBlade2;   // Variation B — Sleek Titanium
     private Texture texBlade3;   // Variation C — Reinforced Diamond-Cleaver
+    private Texture texRocket;
+    private Texture texLock;
+
+    // Perk lock images (one per slot)
+    private com.badlogic.gdx.scenes.scene2d.ui.Image lockSpeedImg;
+    private com.badlogic.gdx.scenes.scene2d.ui.Image lockCollImg;
+    private com.badlogic.gdx.scenes.scene2d.ui.Image lockWallImg;
+    private com.badlogic.gdx.scenes.scene2d.ui.Image lockBoostImg;
+    private com.badlogic.gdx.scenes.scene2d.ui.Image lockBumpImg;
 
     // Perks panel rebuild tracking
     private Label perksHeader;
@@ -386,6 +420,15 @@ public class EngineeringLabScreen extends ScreenAdapter {
         texBlade1       = genBladeTextureA(96);
         texBlade2       = genBladeTextureB(96);
         texBlade3       = genBladeTextureC(96);
+        texRocket       = genRocketTexture(56);
+        texLock         = genLockTexture(28);
+        texPerkSpeed    = genPerkIconSpeed(40);
+        texPerkElas     = genPerkIconElas(40);
+        texPerkWall     = genPerkIconWall(40);
+        texPerkColl     = genPerkIconColl(40);
+        texPerkBump     = genPerkIconBump(40);
+        texIconSP       = genIconCrystal(20);
+        texIconEnergy   = genIconBolt(24);
 
         // 1×1 white pixel — used for all colored stick-limb rect drawing
         Pixmap pm1 = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
@@ -893,6 +936,275 @@ public class EngineeringLabScreen extends ScreenAdapter {
         return tex;
     }
 
+    // ---- Perk icon generators -------------------------------------------------
+
+    // Speed Keep — cyan circular arrow
+    private Texture genPerkIconSpeed(int s) {
+        Pixmap pm = new Pixmap(s, s, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        pm.setColor(0f, 0f, 0f, 0f); pm.fill();
+        int cx = s / 2, cy = s / 2, r = s / 2 - 4;
+        pm.setColor(0.20f, 0.95f, 1.00f, 1f);
+        for (int deg = 40; deg <= 360; deg++) {
+            double a = Math.toRadians(deg);
+            int px = cx + (int)(Math.cos(a) * r);
+            int py = cy + (int)(Math.sin(a) * r);
+            pm.fillRectangle(px - 2, py - 2, 4, 4);
+        }
+        // arrowhead at ~40° end
+        double ae = Math.toRadians(40);
+        int ax = cx + (int)(Math.cos(ae) * r), ay = cy + (int)(Math.sin(ae) * r);
+        pm.fillTriangle(ax, ay - 6, ax + 6, ay + 4, ax - 6, ay + 4);
+        Texture t = new Texture(pm); pm.dispose(); return t;
+    }
+
+    // Elastic Walls — orange ball bouncing off wall
+    private Texture genPerkIconElas(int s) {
+        Pixmap pm = new Pixmap(s, s, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        pm.setColor(0f, 0f, 0f, 0f); pm.fill();
+        // Wall on left
+        pm.setColor(1.00f, 0.55f, 0.10f, 1f);
+        pm.fillRectangle(2, 4, 5, s - 8);
+        // Ball at upper-right
+        pm.fillCircle(s - 10, 10, 7);
+        // Bounce line (diagonal from wall to ball)
+        for (int i = 0; i <= 20; i++) {
+            int bx = 7 + i, by = (s - 8) - i;
+            pm.fillRectangle(bx - 1, by - 1, 3, 3);
+        }
+        Texture t = new Texture(pm); pm.dispose(); return t;
+    }
+
+    // Wall ×3 — three vertical blue bars
+    private Texture genPerkIconWall(int s) {
+        Pixmap pm = new Pixmap(s, s, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        pm.setColor(0f, 0f, 0f, 0f); pm.fill();
+        pm.setColor(0.35f, 0.65f, 1.00f, 1f);
+        int bw = 6, bh = s - 8, y0 = 4;
+        pm.fillRectangle(5,       y0, bw, bh);
+        pm.fillRectangle(s/2 - 3, y0, bw, bh);
+        pm.fillRectangle(s - 11,  y0, bw, bh);
+        // small "×3" via two diagonal strokes at bottom-right
+        pm.setColor(1f, 1f, 1f, 0.85f);
+        for (int i = 0; i < 5; i++) { pm.drawPixel(s - 9 + i, s - 6 + i); pm.drawPixel(s - 9 + i, s - 2 - i); }
+        Texture t = new Texture(pm); pm.dispose(); return t;
+    }
+
+    // Coll ×2 — two magenta circles colliding
+    private Texture genPerkIconColl(int s) {
+        Pixmap pm = new Pixmap(s, s, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        pm.setColor(0f, 0f, 0f, 0f); pm.fill();
+        pm.setColor(1.00f, 0.35f, 0.90f, 1f);
+        pm.fillCircle(s / 2 - 8, s / 2, 9);
+        pm.setColor(0.90f, 0.30f, 1.00f, 1f);
+        pm.fillCircle(s / 2 + 8, s / 2, 9);
+        // collision spark (white dot at center)
+        pm.setColor(1f, 1f, 1f, 1f);
+        pm.fillCircle(s / 2, s / 2, 3);
+        Texture t = new Texture(pm); pm.dispose(); return t;
+    }
+
+    // SP currency icon — gold diamond (◆ shape)
+    private Texture genIconCrystal(int s) {
+        Pixmap pm = new Pixmap(s, s, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        pm.setColor(0f, 0f, 0f, 0f); pm.fill();
+        int cx = s / 2, cy = s / 2;
+        int r  = s / 2 - 1;
+        for (int y = 0; y < s; y++) {
+            for (int x = 0; x < s; x++) {
+                float dx = Math.abs(x - cx), dy = Math.abs(y - cy);
+                if (dx / r + dy / r <= 1.0f) {
+                    float depth = 1f - (dx / r + dy / r) * 0.55f;
+                    pm.setColor(depth * 1.00f, depth * 0.82f, depth * 0.08f, 1f); // gold
+                    pm.drawPixel(x, y);
+                }
+            }
+        }
+        // Facet highlight — upper-left face brighter
+        for (int y = 0; y < cy; y++) {
+            for (int x = 0; x < cx; x++) {
+                float dx = Math.abs(x - cx), dy = Math.abs(y - cy);
+                if (dx / r + dy / r <= 1.0f) {
+                    float t2 = 1f - (dx / r + dy / r);
+                    pm.setColor(Math.min(1f, 1.0f * t2 + 0.3f), Math.min(1f, 0.95f * t2 + 0.3f), 0.50f * t2, 0.55f);
+                    pm.drawPixel(x, y);
+                }
+            }
+        }
+        Texture t = new Texture(pm); pm.dispose(); return t;
+    }
+
+    // Energy currency icon — filled lightning bolt
+    private Texture genIconBolt(int s) {
+        // Pixmap y=0 = top; GL renders y-flipped so y=0 appears at bottom of sprite
+        int W = s, H = s + s / 2;
+        Pixmap pm = new Pixmap(W, H, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        pm.setColor(0f, 0f, 0f, 0f); pm.fill();
+        // Upper arm:  leans left (top-right → middle-left)
+        // Notch shelf: right edge kicks far right
+        // Lower arm:  both edges converge to a bottom-center tip
+        float shelf = 0.48f, shelfEnd = 0.59f;
+        for (int y = 0; y < H; y++) {
+            float fy = (float) y / H;
+            float x0, x1;
+            if (fy < shelf) {
+                float t = fy / shelf;
+                x0 = W * (0.38f - t * 0.28f);  // 0.38 → 0.10
+                x1 = W * (0.84f - t * 0.36f);  // 0.84 → 0.48
+            } else if (fy < shelfEnd) {
+                float t = (fy - shelf) / (shelfEnd - shelf);
+                x0 = W * 0.10f;
+                x1 = W * (0.48f + t * 0.44f);  // shelf: 0.48 → 0.92
+            } else {
+                float t = (fy - shelfEnd) / (1f - shelfEnd);
+                x0 = W * (0.10f + t * 0.40f);  // converge to tip: 0.10 → 0.50
+                x1 = W * (0.92f - t * 0.42f);  //                  0.92 → 0.50
+            }
+            int ix0 = Math.max(0, (int) x0);
+            int ix1 = Math.min(W - 1, (int) x1);
+            if (ix1 < ix0) continue;
+            for (int x = ix0; x <= ix1; x++) {
+                float cx = (ix1 > ix0) ? (float)(x - ix0) / (ix1 - ix0) : 0.5f;
+                float b  = 0.80f + 0.20f * (1f - Math.abs(cx * 2f - 1f));
+                pm.setColor(b, b, b * 0.65f, 1f); // warm white (tinted green by Image.setColor)
+                pm.drawPixel(x, y);
+            }
+        }
+        Texture t = new Texture(pm); pm.dispose(); return t;
+    }
+
+    // Bump x3 — yellow circle with 6 radial spikes
+    private Texture genPerkIconBump(int s) {
+        Pixmap pm = new Pixmap(s, s, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        pm.setColor(0f, 0f, 0f, 0f); pm.fill();
+        int cx = s / 2, cy = s / 2;
+        pm.setColor(1.00f, 0.90f, 0.15f, 1f);
+        pm.fillCircle(cx, cy, 7);
+        // 6 spikes
+        int innerR = 8, outerR = s / 2 - 3;
+        for (int i = 0; i < 6; i++) {
+            double a = Math.toRadians(i * 60);
+            int x1 = cx + (int)(Math.cos(a) * innerR), y1 = cy + (int)(Math.sin(a) * innerR);
+            int x2 = cx + (int)(Math.cos(a) * outerR), y2 = cy + (int)(Math.sin(a) * outerR);
+            for (float t2 = 0; t2 <= 1f; t2 += 0.07f) {
+                int px = (int)(x1 + (x2 - x1) * t2), py = (int)(y1 + (y2 - y1) * t2);
+                pm.fillRectangle(px - 2, py - 2, 4, 4);
+            }
+        }
+        Texture t = new Texture(pm); pm.dispose(); return t;
+    }
+
+    // Rocket pointing UP. In Pixmap: large py = top of rendered sprite (LibGDX flips y).
+    private Texture genLockTexture(int s) {
+        Pixmap pm = new Pixmap(s, s, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        // Pixmap y-down: small y = top of rendered sprite in LibGDX
+
+        // Body: bottom 55%
+        int bx = s * 2 / 8, bw = s * 4 / 8;
+        int bodyPmY = s * 42 / 100, bodyH = s * 52 / 100;
+        pm.setColor(0.72f, 0.76f, 0.92f, 1f);
+        pm.fillRectangle(bx, bodyPmY, bw, bodyH);
+
+        // Keyhole: small dark rect in body center
+        pm.setColor(0.08f, 0.10f, 0.22f, 1f);
+        int kw = s / 6, kh = s / 5;
+        pm.fillRectangle(s / 2 - kw / 2, bodyPmY + bodyH / 4, kw, kh);
+
+        // Shackle: two vertical bars + top connector (y-down = top of image)
+        int sw  = s / 6;
+        int sl  = bx + sw / 2, sr = bx + bw - sw - sw / 2;
+        int stY = s * 8 / 100, shH = bodyPmY - stY + sw;
+        pm.setColor(0.72f, 0.76f, 0.92f, 1f);
+        pm.fillRectangle(sl, stY, sw, shH);
+        pm.fillRectangle(sr, stY, sw, shH);
+        pm.fillRectangle(sl, stY, sr - sl + sw, sw);
+        // Hollow inside arch
+        pm.setColor(0f, 0f, 0f, 0f);
+        pm.fillRectangle(sl + sw, stY + sw, sr - sl - sw, shH - sw * 2);
+
+        Texture t = new Texture(pm); pm.dispose(); return t;
+    }
+
+    private Texture genRocketTexture(int size) {
+        Pixmap pm = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        float cx = size * 0.5f;
+        float bodyW   = size * 0.16f;
+        float bodyBot = size * 0.22f;
+        float bodyTop = size * 0.72f;
+        float noseTop = size * 0.92f;
+        float finMaxW = size * 0.36f;
+        float finTop  = size * 0.40f;
+        float finBot  = size * 0.04f;
+
+        for (int py = 0; py < size; py++) {
+            for (int px = 0; px < size; px++) {
+                float dx = px - cx;
+                float fpy = py;
+                // Nose cone (large py = top of sprite)
+                if (fpy >= bodyTop && fpy <= noseTop) {
+                    float t = (fpy - bodyTop) / (noseTop - bodyTop);
+                    float hw = bodyW * (1f - t);
+                    if (Math.abs(dx) <= hw) {
+                        float bright = 0.72f + t * 0.28f;
+                        pm.setColor(bright * 0.82f, bright * 0.90f, bright, 0.97f);
+                        pm.drawPixel(px, py);
+                    }
+                }
+                // Window circle on body
+                float winCY = (bodyBot + bodyTop) * 0.57f;
+                float winR  = bodyW * 0.55f;
+                float wdx = px - cx, wdy = fpy - winCY;
+                float wdist = (float) Math.sqrt(wdx * wdx + wdy * wdy);
+                // Body rectangle
+                if (fpy >= bodyBot && fpy <= bodyTop) {
+                    if (Math.abs(dx) <= bodyW) {
+                        float edgeFade = 1f - Math.abs(dx) / bodyW * 0.55f;
+                        float t = (fpy - bodyBot) / (bodyTop - bodyBot);
+                        float bright = 0.62f + t * 0.22f;
+                        if (wdist < winR) {
+                            // Window
+                            float wt = 1f - wdist / winR;
+                            pm.setColor(0.25f * wt + 0.10f, 0.65f * wt + 0.20f, 1f, 0.97f);
+                        } else {
+                            pm.setColor(bright * edgeFade * 0.82f, bright * edgeFade * 0.90f,
+                                        bright * edgeFade, 0.97f);
+                        }
+                        pm.drawPixel(px, py);
+                    }
+                }
+                // Fins (small py = bottom of sprite)
+                if (fpy >= finBot && fpy <= finTop) {
+                    float t = (fpy - finBot) / (finTop - finBot);
+                    float finHW = bodyW + (finMaxW - bodyW) * (1f - t);
+                    if (Math.abs(dx) >= bodyW * 0.92f && Math.abs(dx) <= finHW) {
+                        float fade = t * 0.7f + 0.3f;
+                        pm.setColor(0.42f * fade, 0.68f * fade, 1f, 0.88f);
+                        pm.drawPixel(px, py);
+                    }
+                }
+                // Engine flame at very bottom
+                float flameTop = bodyBot * 0.75f;
+                if (fpy >= finBot && fpy <= flameTop && Math.abs(dx) <= bodyW * 0.5f) {
+                    float t = (fpy - finBot) / (flameTop - finBot);
+                    float glow = 0.55f + t * 0.45f;
+                    pm.setColor(0.15f + glow * 0.85f, 0.45f + glow * 0.50f, 1f, glow * 0.92f);
+                    pm.drawPixel(px, py);
+                }
+            }
+        }
+        Texture tex = new Texture(pm);
+        pm.dispose();
+        return tex;
+    }
+
     private Texture genGlowTexture(int size) {
         Pixmap pm = new Pixmap(size, size, Pixmap.Format.RGBA8888);
         pm.setBlending(Pixmap.Blending.None);
@@ -1007,7 +1319,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         renderCam = new OrthographicCamera();
         renderViewport = new ExtendViewport(RENDER_W, RENDER_H, renderCam);
         renderCam.position.set(RENDER_W / 2f, RENDER_H / 2f, 0f);
-        floatFont   = new com.badlogic.gdx.graphics.g2d.BitmapFont();
+        floatFont   = game.skin.getFont("float");
         floatLayout = new com.badlogic.gdx.graphics.g2d.GlyphLayout();
     }
 
@@ -1200,6 +1512,63 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
     // ---- UI setup ---------------------------------------------------------------
 
+    // Transparent table layer for icon overlay inside a Stack; touches pass through.
+    private com.badlogic.gdx.scenes.scene2d.Actor makeDotSep() {
+        return new com.badlogic.gdx.scenes.scene2d.Actor() {
+            @Override
+            public void draw(com.badlogic.gdx.graphics.g2d.Batch batch, float parentAlpha) {
+                float cx  = getX() + getWidth() * 0.5f;
+                float cy  = getY() + getHeight() * 0.5f;
+                float sz  = 3f, gap = 6f;
+                batch.setColor(0.40f, 0.45f, 0.62f, 0.65f * parentAlpha);
+                for (int i = -2; i <= 2; i++) {
+                    batch.draw(texPixel, cx + i * gap - sz * 0.5f, cy - sz * 0.5f, sz, sz);
+                }
+                batch.setColor(1f, 1f, 1f, 1f);
+            }
+        };
+    }
+
+    private Stack makePerkSlot(com.badlogic.gdx.scenes.scene2d.ui.Image iconImg,
+                                com.badlogic.gdx.scenes.scene2d.ui.Image lockImg,
+                                int milestoneIdx) {
+        Stack slot = new Stack();
+        slot.setTouchable(Touchable.enabled);  // must be enabled so hit() returns self when no child hits
+        Table iconWrap = new Table();
+        iconWrap.add(iconImg).size(26f, 26f).center();
+        iconWrap.setTouchable(Touchable.disabled);
+        Table lockWrap = new Table();
+        lockImg.setTouchable(Touchable.disabled);
+        lockWrap.setTouchable(Touchable.disabled);
+        lockWrap.add(lockImg).size(22f, 22f).center();
+        slot.add(iconWrap);
+        slot.add(lockWrap);
+        slot.addListener(new com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
+            @Override
+            public void clicked(com.badlogic.gdx.scenes.scene2d.InputEvent event, float x, float y) {
+                if (milestoneAchieved[milestoneIdx]) {
+                    activePerkPopup = milestoneIdx;
+                    perkPopupTimer  = 0f;
+                }
+            }
+        });
+        return slot;
+    }
+
+    private Table makeIconLayer(Texture tex, float iconSize) {
+        return makeIconLayer(new TextureRegion(tex), iconSize);
+    }
+
+    private Table makeIconLayer(TextureRegion region, float iconSize) {
+        Image img = new Image(new TextureRegionDrawable(region));
+        img.setTouchable(Touchable.disabled);
+        Table t = new Table();
+        t.top().padTop(22f);
+        t.add(img).size(iconSize).row();
+        t.setTouchable(Touchable.disabled);
+        return t;
+    }
+
     private void buildUI() {
         ui = new Stage(new ExtendViewport(RENDER_W, RENDER_H));
 
@@ -1208,6 +1577,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // ---- Single full-screen layout table ----
         Table root = new Table();
+        rootTable = root;
         root.setFillParent(true);
 
         // -- TOP PANEL: 3-column tactical grid (planet info | SP rate | active perks) --
@@ -1270,21 +1640,29 @@ public class EngineeringLabScreen extends ScreenAdapter {
         topLeft.add(topCheckpointLabel).left().padTop(2f).row();
         topLeft.add(infoDetails).left().padTop(1f).row();
 
-        // ---- Center column: SP/s rate header + large live value ----
+        // ---- Center column: Energy current/needed ----
         Table topCenter = new Table();
         topCenter.top();
 
-        topSpRateHeaderLabel = new Label("* SP RATE", game.skin);
+        topSpRateHeaderLabel = new Label("ENERGY", game.skin);
         topSpRateHeaderLabel.setFontScale(0.68f);
-        topSpRateHeaderLabel.setColor(0.55f, 0.68f, 1.00f, 0.90f);
+        topSpRateHeaderLabel.setColor(0.25f, 1.00f, 0.45f, 0.90f);
 
-        topSpValueLabel = new Label("0.0 SP/s", game.skin);
-        topSpValueLabel.setFontScale(1.55f);
-        topSpValueLabel.setColor(0.10f, 0.97f, 1f, 1f);
+        topSpValueLabel = new Label("0 / 0", game.skin);
+        topSpValueLabel.setFontScale(1.40f);
+        topSpValueLabel.setColor(0.20f, 1.00f, 0.50f, 1f);
 
         outputLabel = new Label("", game.skin); // hidden — kept to avoid null refs
 
-        topCenter.add(topSpRateHeaderLabel).center().row();
+        uiIconEnergy = new com.badlogic.gdx.scenes.scene2d.ui.Image(
+            new TextureRegionDrawable(new TextureRegion(texIconEnergy)));
+        uiIconEnergy.setColor(0.25f, 1.00f, 0.45f, 0.90f);
+
+        Table energyHeader = new Table();
+        energyHeader.add(uiIconEnergy).size(12f, 18f).padRight(3f);
+        energyHeader.add(topSpRateHeaderLabel);
+
+        topCenter.add(energyHeader).center().row();
         topCenter.add(topSpValueLabel).center().padTop(3f).row();
 
         // ---- Right column: active perks list + menu button ----
@@ -1332,19 +1710,113 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         root.add(topPanel).growX().row();
 
+        // Tile styles needed before energy bar section (btnFlight inserted there)
+        tileStyleLock    = makeTileStyle(game.skin, "tile_locked");
+        tileStyleNorm    = makeTileStyle(game.skin, "tile_available");
+        tileStyleBuy     = makeTileStyle(game.skin, "tile_buyable");
+        tileStyleBuyGreen= makeTileStyle(game.skin, "tile_buygreen");
+        tileStyleAct     = makeTileStyle(game.skin, "tile_active");
+        tileStyleGo      = makeTileStyle(game.skin, "tile_go");
+        tileStyleGoLock  = makeTileStyle(game.skin, "tile_golocked");
+
         // ── Perk multiplier strip ──
-        Table perkStrip = new Table();
-        perkStrip.setBackground(new NinePatchDrawable(game.skin.get("rounded_dark", NinePatch.class)));
-        perkStrip.defaults().pad(4f, 6f, 4f, 6f);
-        perkCollLabel  = new Label("Coll x1.0", game.skin);
-        perkWallLabel  = new Label("Wall x1.0", game.skin);
-        perkBoostLabel = new Label("Boost x1.5", game.skin);
-        perkBumpLabel  = new Label("Bump x5.0", game.skin);
-        for (Label lbl : new Label[]{perkCollLabel, perkWallLabel, perkBoostLabel, perkBumpLabel}) {
-            lbl.setFontScale(0.82f);
-            perkStrip.add(lbl).expandX();
-        }
-        root.add(perkStrip).growX().row();
+        // perkStrip built later — inserted into bottom panel above stats row
+
+        // -- ENERGY BAR: rainbow fill + status label --
+        com.badlogic.gdx.scenes.scene2d.Actor energyBarActor = new com.badlogic.gdx.scenes.scene2d.Actor() {
+            @Override
+            public void draw(com.badlogic.gdx.graphics.g2d.Batch b, float parentAlpha) {
+                float fill  = Math.min(1f, hudBarFill);
+                float pulse = 0.55f + 0.45f * com.badlogic.gdx.math.MathUtils.sin(animTime * 3.5f);
+                boolean fullyUpgraded = isFullyUpgraded();
+                boolean launchReady   = fullyUpgraded && fill >= 1f;
+
+                float bx = getX() + 6f;
+                float bh = getHeight() - 10f;
+                float by = getY() + getHeight() - bh - 4f; // top-aligned, leave space below for text
+                float bw = getWidth() - 12f;
+
+                // Track
+                b.setColor(0.06f, 0.04f, 0.04f, 0.95f * parentAlpha);
+                b.draw(texPixel, bx, by, bw, bh);
+
+                if (fill > 0f) {
+                    float fw = bw * fill;
+                    // Smooth gradient: 12 slices, each interpolates between key colours
+                    // Keys: 0=red, 0.25=orange, 0.5=yellow, 0.75=lime, 1.0=green
+                    float[][] keys = {
+                        {1.00f, 0.05f, 0.00f},  // 0%   red
+                        {1.00f, 0.35f, 0.00f},  // 25%  orange
+                        {1.00f, 0.82f, 0.05f},  // 50%  yellow
+                        {0.55f, 0.98f, 0.10f},  // 75%  lime
+                        {0.10f, 0.95f, 0.28f},  // 100% green
+                    };
+                    int slices = 16;
+                    float sw = fw / slices;
+                    for (int si = 0; si < slices; si++) {
+                        // t = absolute position in the full bar, not relative to fill
+                        float t = ((si + 0.5f) * fw) / (slices * bw);
+                        // find which key segment we're in
+                        float seg  = t * (keys.length - 1);
+                        int   ki   = (int) seg;
+                        float frac = seg - ki;
+                        if (ki >= keys.length - 1) { ki = keys.length - 2; frac = 1f; }
+                        float r = keys[ki][0] + (keys[ki+1][0] - keys[ki][0]) * frac;
+                        float g = keys[ki][1] + (keys[ki+1][1] - keys[ki][1]) * frac;
+                        float bl = keys[ki][2] + (keys[ki+1][2] - keys[ki][2]) * frac;
+                        b.setColor(r, g, bl, parentAlpha);
+                        b.draw(texPixel, bx + si * sw, by, sw + 1f, bh);
+                        // bright core stripe
+                        b.setColor(r * 0.6f + 0.4f, g * 0.6f + 0.4f, bl * 0.6f + 0.4f, 0.55f * parentAlpha);
+                        b.draw(texPixel, bx + si * sw, by + bh * 0.28f, sw + 1f, bh * 0.44f);
+                    }
+
+                    // Outer glow when launch ready
+                    if (launchReady) {
+                        b.setColor(0.10f, 1f, 0.35f, 0.25f * pulse * parentAlpha);
+                        b.draw(texPixel, bx, by - 5f, fw, bh + 10f);
+                    }
+
+                    // Leading edge spark
+                    float sparkW = 3f + 3f * pulse;
+                    b.setColor(1f, 1f, 1f, (0.80f + 0.20f * pulse) * parentAlpha);
+                    b.draw(texPixel, bx + fw - sparkW * 0.5f, by - 2f, sparkW, bh + 4f);
+                }
+
+                // Border
+                float bd = 1f;
+                b.setColor(0.30f, 0.30f, 0.30f, 0.45f * parentAlpha);
+                b.draw(texPixel, bx,           by,           bw, bd);
+                b.draw(texPixel, bx,           by + bh - bd, bw, bd);
+                b.draw(texPixel, bx,           by,           bd, bh);
+                b.draw(texPixel, bx + bw - bd, by,           bd, bh);
+
+                // Status text under bar — only shown at 100%
+                float ty = by - 6f;
+                if (launchReady) {
+                    floatFont.getData().setScale(0.90f);
+                    float tp = 0.60f + 0.40f * pulse;
+                    floatFont.setColor(0.30f, 1f, 0.50f, tp * parentAlpha);
+                    com.badlogic.gdx.graphics.g2d.GlyphLayout gl = new com.badlogic.gdx.graphics.g2d.GlyphLayout(floatFont, "TAP LAUNCH TO TRAVEL!");
+                    floatFont.draw(b, "TAP LAUNCH TO TRAVEL!", bx + (bw - gl.width) * 0.5f, ty);
+                } else if (fill >= 1f && !fullyUpgraded) {
+                    floatFont.getData().setScale(0.90f);
+                    floatFont.setColor(1f, 0.55f, 0.15f, 0.92f * parentAlpha);
+                    com.badlogic.gdx.graphics.g2d.GlyphLayout gl = new com.badlogic.gdx.graphics.g2d.GlyphLayout(floatFont, "MAX OUT ALL UPGRADES TO TRAVEL");
+                    floatFont.draw(b, "MAX OUT ALL UPGRADES TO TRAVEL", bx + (bw - gl.width) * 0.5f, ty);
+                }
+                floatFont.getData().setScale(1f);
+                b.setColor(1f, 1f, 1f, 1f);
+            }
+        };
+        root.add(energyBarActor).growX().height(36f).padBottom(6f).row();
+
+        // Launch button created early so it can be inserted here (before styles are finalized below)
+        btnFlight = new TextButton("LAUNCH", tileStyleGoLock); // style re-applied after tileStyles built
+        btnFlight.setVisible(false);
+        btnFlight.setTouchable(Touchable.disabled);
+        launchBtnCell = root.add(btnFlight).growX().padLeft(10f).padRight(10f).height(0f);
+        root.row();
 
         // -- CENTRIFUGE ZONE: transparent overlay — expands to fill space, holds JUMP READY button --
         Table centrifugeOverlay = new Table();
@@ -1356,7 +1828,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         jumpStyle.over = game.skin.newDrawable("button_primary", new Color(0.12f, 0.92f, 0.42f, 0.95f));
         jumpStyle.fontColor = Color.WHITE;
 
-        btnJumpReady = new TextButton("▲  JUMP READY  ▲\nTAP TO LAUNCH", jumpStyle);
+        btnJumpReady = new TextButton("^ JUMP READY ^\nTAP TO LAUNCH", jumpStyle);
         btnJumpReady.getLabel().setFontScale(0.88f);
         btnJumpReady.setVisible(false);
         btnJumpReady.addListener(new ChangeListener() {
@@ -1427,179 +1899,300 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // Row 1: compact stats strip — SP left | speed center | E right
         crystalsLabel  = new Label("0 SP", game.skin);
-        joulesLabel    = new Label("0 E", game.skin, "accent");
+        joulesLabel    = new Label("", game.skin, "accent"); // hidden — energy shown in top panel
         jpsLabel       = new Label("", game.skin); // blank — E/s removed
-        ringSpeedLabel = new Label("1.5r/s", game.skin);
+        ringSpeedLabel = new Label("1.5 r/s", game.skin);
 
         crystalsLabel.setFontScale(1.10f);
         crystalsLabel.setColor(0.25f, 0.80f, 1.00f, 1f); // cyan-blue = SP
 
-        ringSpeedLabel.setFontScale(0.72f);
+        ringSpeedLabel.setFontScale(1.10f);
         ringSpeedLabel.setColor(0.70f, 0.72f, 0.82f, 1f);
 
-        joulesLabel.setFontScale(1.10f);
-        joulesLabel.setColor(0.25f, 1.00f, 0.45f, 1f); // green = energy
-
-        // Each label lives in its own fixed-size Container — completely isolated from siblings,
-        // so text content changes never cause table reflow and labels never shift position.
+        // Each label lives in its own fixed-size Container — completely isolated from siblings
         crystalsLabel.setAlignment(com.badlogic.gdx.utils.Align.left);
-        ringSpeedLabel.setAlignment(com.badlogic.gdx.utils.Align.center);
-        joulesLabel.setAlignment(com.badlogic.gdx.utils.Align.right);
+        ringSpeedLabel.setAlignment(com.badlogic.gdx.utils.Align.right);
 
-        com.badlogic.gdx.scenes.scene2d.ui.Container<Label> spBox =
-            new com.badlogic.gdx.scenes.scene2d.ui.Container<>(crystalsLabel);
-        spBox.fill().left();
+        uiIconSP = new com.badlogic.gdx.scenes.scene2d.ui.Image(
+            new TextureRegionDrawable(new TextureRegion(texIconSP)));
+        uiIconSP.setColor(1f, 0.90f, 0.20f, 1f); // gold tint
+
+        Table spCell = new Table();
+        spCell.left();
+        spCell.add(uiIconSP).size(14f, 14f).padLeft(2f).padRight(4f);
+        spCell.add(crystalsLabel).left();
+
         com.badlogic.gdx.scenes.scene2d.ui.Container<Label> speedBox =
             new com.badlogic.gdx.scenes.scene2d.ui.Container<>(ringSpeedLabel);
-        speedBox.fill().center();
-        com.badlogic.gdx.scenes.scene2d.ui.Container<Label> eBox =
-            new com.badlogic.gdx.scenes.scene2d.ui.Container<>(joulesLabel);
-        eBox.fill().right();
+        speedBox.fill().right();
 
         Table statsRow = new Table();
-        statsRow.add(spBox).width(155f).height(28f);
-        statsRow.add(speedBox).width(110f).height(28f);
-        statsRow.add(eBox).width(155f).height(28f);
+        statsRow.add(spCell).width(210f).height(28f).left();
+        statsRow.add(speedBox).width(210f).height(28f);
+        // Perk strip — just above stats row, inside bottom panel
+        Table perkStrip = new Table();
+        perkStrip.setBackground(new NinePatchDrawable(game.skin.get("rounded_dark", NinePatch.class)));
+        perkStrip.defaults().padTop(1f).padBottom(1f);
+        TextureRegionDrawable lockDrw = new TextureRegionDrawable(new TextureRegion(texLock));
+        lockSpeedImg = new com.badlogic.gdx.scenes.scene2d.ui.Image(lockDrw);
+        lockCollImg  = new com.badlogic.gdx.scenes.scene2d.ui.Image(lockDrw);
+        lockWallImg  = new com.badlogic.gdx.scenes.scene2d.ui.Image(lockDrw);
+        lockBoostImg = new com.badlogic.gdx.scenes.scene2d.ui.Image(lockDrw);
+        lockBumpImg  = new com.badlogic.gdx.scenes.scene2d.ui.Image(lockDrw);
+        perkIconSpeed = new com.badlogic.gdx.scenes.scene2d.ui.Image(new TextureRegionDrawable(new TextureRegion(texPerkSpeed)));
+        perkIconElas  = new com.badlogic.gdx.scenes.scene2d.ui.Image(new TextureRegionDrawable(new TextureRegion(texPerkElas)));
+        perkIconWall  = new com.badlogic.gdx.scenes.scene2d.ui.Image(new TextureRegionDrawable(new TextureRegion(texPerkWall)));
+        perkIconColl  = new com.badlogic.gdx.scenes.scene2d.ui.Image(new TextureRegionDrawable(new TextureRegion(texPerkColl)));
+        perkIconBump  = new com.badlogic.gdx.scenes.scene2d.ui.Image(new TextureRegionDrawable(new TextureRegion(texPerkBump)));
+
+        perkStrip.add(makePerkSlot(perkIconSpeed, lockSpeedImg, 1)).expandX().padLeft(4f);
+        perkStrip.add(makeDotSep()).width(24f);
+        perkStrip.add(makePerkSlot(perkIconElas,  lockCollImg,  0)).expandX();
+        perkStrip.add(makeDotSep()).width(24f);
+        perkStrip.add(makePerkSlot(perkIconWall,  lockWallImg,  2)).expandX();
+        perkStrip.add(makeDotSep()).width(24f);
+        perkStrip.add(makePerkSlot(perkIconColl,  lockBoostImg, 3)).expandX();
+        perkStrip.add(makeDotSep()).width(24f);
+        perkStrip.add(makePerkSlot(perkIconBump,  lockBumpImg,  4)).expandX().padRight(4f);
+        panel.add(perkStrip).growX().padBottom(3f).row();
+
         panel.add(statsRow).width(420f).padBottom(3).row();
 
         // Row 2: 4 equal boxes side by side — INTERNS | BUMPERS | GRAVITY | ENGAGE JUMP
         // Use a custom button style with card_large as background so no extra wrapper table inflates preferred width
 
-        tileStyleLock   = makeTileStyle(game.skin, "tile_locked");
-        tileStyleNorm   = makeTileStyle(game.skin, "tile_available");
-        tileStyleBuy    = makeTileStyle(game.skin, "tile_buyable");
-        tileStyleAct    = makeTileStyle(game.skin, "tile_active");
-        tileStyleGo     = makeTileStyle(game.skin, "tile_go");
-        tileStyleGoLock = makeTileStyle(game.skin, "tile_golocked");
+        // (tile styles already created above, before energy bar)
+        // Apply proper style + label setup to btnFlight (created early for layout insertion)
+        btnFlight.setStyle(tileStyleGo);
 
-        btnAdd         = new TextButton("[+]\nHIRE ORB\n0 SP",  tileStyleLock);
-        btnBumper      = new TextButton("[ ]\nBUMPER\nCP I",    tileStyleLock);
-        btnGravityWell = new TextButton("(o)\nGRAVITY\nCP II",  tileStyleLock);
-        btnFlight      = new TextButton(">>\nLAUNCH\n-- --",    tileStyleGoLock);
+        btnAdd         = new TextButton("HIRE ORB\n0 SP",  tileStyleLock);
+        btnBumper      = new TextButton("BUMPER\nCP I",    tileStyleLock);
+        btnGravityWell = new TextButton("GRAVITY\nCP II",  tileStyleLock);
 
-        for (TextButton btn : new TextButton[]{btnAdd, btnBumper, btnGravityWell, btnFlight}) {
-            btn.getLabel().setFontScale(0.60f);
+        for (TextButton btn : new TextButton[]{btnAdd, btnBumper, btnGravityWell}) {
+            btn.getLabel().setFontScale(0.80f);
+            btn.getLabel().setAlignment(Align.bottom | Align.center);
+            btn.pad(0f);
+            btn.getLabelCell().expand().bottom().padBottom(18f);
             addPressEffect(btn);
         }
+        // Launch button: single line, centered, bigger font
+        btnFlight.getLabel().setFontScale(0.90f);
+        btnFlight.getLabel().setAlignment(Align.center);
+        btnFlight.pad(0f);
+        btnFlight.getLabelCell().expand().center();
+        addPressEffect(btnFlight);
 
-        // 4 equal squares in a single row
-        float btnSz = (RENDER_W - 20f - 24f) / 4f;  // panel pad 10+10, gaps 3*8=24 → ~109px, capped
+        // 3 bigger squares at bottom
+        float btnSz = (RENDER_W - 20f - 18f) / 3f;  // ~147px
         Table tileRow = new Table();
-        tileRow.add(btnAdd).size(btnSz, btnSz).pad(3);
-        tileRow.add(btnBumper).size(btnSz, btnSz).pad(3);
-        tileRow.add(btnGravityWell).size(btnSz, btnSz).pad(3);
-        tileRow.add(btnFlight).size(btnSz, btnSz).pad(3);
+        Stack stackAdd = new Stack(); stackAdd.add(btnAdd); stackAdd.add(makeIconLayer(texParticle,   62f));
+        Stack stackBmp = new Stack(); stackBmp.add(btnBumper); stackBmp.add(makeIconLayer(texBumper,     58f));
+        Stack stackGrv = new Stack(); stackGrv.add(btnGravityWell); stackGrv.add(makeIconLayer(texGravCenter, 58f));
+        tileRow.add(stackAdd).size(btnSz, btnSz).pad(3);
+        tileRow.add(stackBmp).size(btnSz, btnSz).pad(3);
+        tileRow.add(stackGrv).size(btnSz, btnSz).pad(3);
         panel.add(tileRow).center().padBottom(4).row();
 
         panel.add(new com.badlogic.gdx.scenes.scene2d.ui.Container<>()).height(0).row();
 
         root.add(panel).growX().row();
 
-        // ---- Listeners ----
-        btnAdd.addListener(new ChangeListener() {
-            @Override public void changed(ChangeEvent e, Actor a) {
+        // ---- Listeners — drag-to-place for HIRE/BUMPER/GRAVITY, tap for LAUNCH ----
+        btnAdd.addListener(new com.badlogic.gdx.scenes.scene2d.InputListener() {
+            @Override
+            public boolean touchDown(com.badlogic.gdx.scenes.scene2d.InputEvent event,
+                                     float x, float y, int pointer, int button) {
+                if (button != 0) return false;
                 ShipData sd2 = ShipData.get();
-                // Frostheim pre-CP-I: 800❅ unlocks AND spawns the 3rd intern
+                // During step 1: always capture touch so card hides immediately
+                if (tutorialStep == 1) tutorialInternDragging = true;
+                // Check capacity and affordability before starting actual drag
+                boolean frostheimUnlock = isFrostheim() && !frostheimThirdInternUnlocked
+                        && sd2.sectorReached < 0 && balls.size >= internCap() && sd2.crystals >= 800f;
+                boolean emberUnlock = isEmberIV() && !emberThirdInternUnlocked
+                        && sd2.sectorReached < 0 && balls.size >= internCap() && sd2.crystals >= 1200f;
+                boolean normalHire  = balls.size < internCap() && sd2.crystals >= internCost();
+                if (!frostheimUnlock && !emberUnlock && !normalHire) return tutorialStep == 1; // capture for step 1 even if not affordable
+                dragMode   = PLACE_INTERN;
+                dragStageX = event.getStageX();
+                dragStageY = event.getStageY();
+                return true;
+            }
+            @Override
+            public void touchDragged(com.badlogic.gdx.scenes.scene2d.InputEvent event,
+                                     float x, float y, int pointer) {
+                dragStageX = event.getStageX();
+                dragStageY = event.getStageY();
+            }
+            @Override
+            public void touchUp(com.badlogic.gdx.scenes.scene2d.InputEvent event,
+                                float x, float y, int pointer, int button) {
+                tutorialInternDragging = false;
+                if (dragMode != PLACE_INTERN) { dragMode = PLACE_NONE; return; }
+                dragMode = PLACE_NONE;
+                // Spawn at ghost position (80px above finger) to match visual
+                float spawnSX = dragStageX, spawnSY = dragStageY + 80f;
+                float wx = spawnSX / PPM, wy = spawnSY / PPM;
+                float ddx = wx - CENTRIFUGE_CX, ddy = wy - CENTRIFUGE_CY;
+                if (ddx * ddx + ddy * ddy >= CENTRIFUGE_R * CENTRIFUGE_R) return;
+                ShipData sd2 = ShipData.get();
                 if (isFrostheim() && !frostheimThirdInternUnlocked && sd2.sectorReached < 0
                         && balls.size >= internCap() && sd2.spendCrystals(800f)) {
                     frostheimThirdInternUnlocked = true;
                     internAddedOldSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
-                    float angle = MathUtils.random(MathUtils.PI2);
-                    float r     = MathUtils.random(0.5f, CENTRIFUGE_R * 0.55f);
-                    spawnBall(CENTRIFUGE_CX + MathUtils.cos(angle) * r,
-                              CENTRIFUGE_CY + MathUtils.sin(angle) * r);
+                    spawnBall(wx, wy);
                     internAddedNewSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
                     internAddedTimer    = INTERN_ADDED_HOLD;
                     showNotif("3RD INTERN UNLOCKED", "Cap now 3 · Keep generating for CP I");
                     SoundManager.get().playHire();
                     triggerShake(2f, 0.06f);
+                    return;
                 }
-                // Ember IV pre-CP-I: 1200◆ unlocks AND spawns the 3rd intern
                 if (isEmberIV() && !emberThirdInternUnlocked && sd2.sectorReached < 0
                         && balls.size >= internCap() && sd2.spendCrystals(1200f)) {
                     emberThirdInternUnlocked = true;
                     internAddedOldSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
-                    float angle = MathUtils.random(MathUtils.PI2);
-                    float r     = MathUtils.random(0.5f, CENTRIFUGE_R * 0.55f);
-                    spawnBall(CENTRIFUGE_CX + MathUtils.cos(angle) * r,
-                              CENTRIFUGE_CY + MathUtils.sin(angle) * r);
+                    spawnBall(wx, wy);
                     internAddedNewSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
                     internAddedTimer    = INTERN_ADDED_HOLD;
                     showNotif("3RD INTERN UNLOCKED", "Cap now 3 · Reach CP I for 5 interns");
                     SoundManager.get().playHire();
                     triggerShake(2f, 0.06f);
+                    return;
                 }
                 if (balls.size < internCap() && sd2.spendCrystals(internCost())) {
                     internAddedOldSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
-                    float angle = MathUtils.random(MathUtils.PI2);
-                    float r     = MathUtils.random(0.5f, CENTRIFUGE_R * 0.55f);
-                    spawnBall(CENTRIFUGE_CX + MathUtils.cos(angle) * r,
-                              CENTRIFUGE_CY + MathUtils.sin(angle) * r);
+                    spawnBall(wx, wy);
                     internAddedNewSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
                     internAddedTimer    = INTERN_ADDED_HOLD;
                     SoundManager.get().playHire();
                     triggerShake(2f, 0.06f);
+                    if (tutorialStep == 1 && tutorialPostDropTimer < 0f) tutorialPostDropTimer = 0f;
                 }
             }
         });
-        btnBumper.addListener(new ChangeListener() {
-            @Override public void changed(ChangeEvent e, Actor a) {
+        btnBumper.addListener(new com.badlogic.gdx.scenes.scene2d.InputListener() {
+            @Override
+            public boolean touchDown(com.badlogic.gdx.scenes.scene2d.InputEvent event,
+                                     float x, float y, int pointer, int button) {
+                if (button != 0) return false;
+                ShipData sd2 = ShipData.get();
+                boolean eligible;
                 if (isFrostheim()) {
-                    // Pre-CP-I unlock: 400❅ opens the Cryo-Vent slot
-                    if (!frostheimCryoUnlocked && ShipData.get().sectorReached < 0) {
-                        if (ShipData.get().spendCrystals(400f)) {
+                    eligible = (!frostheimCryoUnlocked && sd2.sectorReached < 0 && sd2.crystals >= 400f)
+                               || (frostheimCryoUnlocked && cryoVents.size < maxCryoVentsAllowed() && sd2.crystals >= cryoVentCost());
+                } else if (isEmberIV()) {
+                    eligible = kineticBlades.size < maxBladesAllowed() && sd2.crystals >= bladeCost();
+                } else {
+                    eligible = bumpers.size < maxBumpersAllowed() && sd2.crystals >= bumperCost();
+                }
+                if (!eligible) return false;
+                dragMode   = isFrostheim() ? PLACE_BUMPER
+                           : isEmberIV()   ? PLACE_BLADE
+                           :                 PLACE_BUMPER;
+                dragStageX = event.getStageX();
+                dragStageY = event.getStageY();
+                return true;
+            }
+            @Override
+            public void touchDragged(com.badlogic.gdx.scenes.scene2d.InputEvent event,
+                                     float x, float y, int pointer) {
+                dragStageX = event.getStageX();
+                dragStageY = event.getStageY();
+            }
+            @Override
+            public void touchUp(com.badlogic.gdx.scenes.scene2d.InputEvent event,
+                                float x, float y, int pointer, int button) {
+                int dm = dragMode;
+                dragMode = PLACE_NONE;
+                if (dm == PLACE_NONE) return;
+                float wx = dragStageX / PPM, wy = (dragStageY + 80f) / PPM;
+                float ddx = wx - CENTRIFUGE_CX, ddy = wy - CENTRIFUGE_CY;
+                if (ddx * ddx + ddy * ddy >= CENTRIFUGE_R * CENTRIFUGE_R) return;
+                ShipData sd2 = ShipData.get();
+                if (isFrostheim()) {
+                    if (!frostheimCryoUnlocked && sd2.sectorReached < 0) {
+                        if (sd2.spendCrystals(400f)) {
                             frostheimCryoUnlocked = true;
-                            placementMode = PLACE_BUMPER;   // 400❅ covers unlock + placement
-                            showNotif("CRYO-VENT UNLOCKED", "Tap inside the centrifuge to place it");
+                            spawnCryoVent(wx, wy);
+                            showNotif("CRYO-VENT UNLOCKED", "First Cryo-Vent placed!");
                         }
-                        return;
+                    } else if (cryoVents.size < maxCryoVentsAllowed() && sd2.spendCrystals(cryoVentCost())) {
+                        spawnCryoVent(wx, wy);
                     }
-                    int maxCV = maxCryoVentsAllowed();
-                    if (maxCV == 0 || cryoVents.size >= maxCV) return;
-                    if (ShipData.get().crystals >= cryoVentCost())
-                        placementMode = (placementMode == PLACE_BUMPER) ? PLACE_NONE : PLACE_BUMPER;
                 } else if (isEmberIV()) {
-                    int maxBl = maxBladesAllowed();
-                    if (maxBl == 0 || kineticBlades.size >= maxBl) return;
-                    if (ShipData.get().crystals >= bladeCost())
-                        placementMode = (placementMode == PLACE_BLADE) ? PLACE_NONE : PLACE_BLADE;
+                    float angleDeg = MathUtils.atan2(ddy, ddx) * MathUtils.radiansToDegrees;
+                    if (kineticBlades.size < maxBladesAllowed() && sd2.spendCrystals(bladeCost())) {
+                        spawnKineticBlade(angleDeg);
+                    }
                 } else {
-                    int maxB = maxBumpersAllowed();
-                    if (maxB == 0 || bumpers.size >= maxB) return;
-                    if (ShipData.get().crystals >= bumperCost())
-                        placementMode = (placementMode == PLACE_BUMPER) ? PLACE_NONE : PLACE_BUMPER;
+                    if (bumpers.size < maxBumpersAllowed() && sd2.spendCrystals(bumperCost())) {
+                        spawnCentrifugeBumper(wx, wy);
+                    }
                 }
             }
         });
-        btnGravityWell.addListener(new ChangeListener() {
-            @Override public void changed(ChangeEvent e, Actor a) {
+        btnGravityWell.addListener(new com.badlogic.gdx.scenes.scene2d.InputListener() {
+            @Override
+            public boolean touchDown(com.badlogic.gdx.scenes.scene2d.InputEvent event,
+                                     float x, float y, int pointer, int button) {
+                if (button != 0) return false;
+                ShipData sd2 = ShipData.get();
                 if (isFrostheim()) {
-                    int maxTC = maxTeslaCoilsAllowed();
-                    if (maxTC == 0 || teslaCoils.size >= maxTC) return;
-                    if (ShipData.get().crystals >= teslaCost())
-                        placementMode = (placementMode == PLACE_GRAVITY) ? PLACE_NONE : PLACE_GRAVITY;
+                    if (teslaCoils.size >= maxTeslaCoilsAllowed()) return false;
+                    if (sd2.crystals < teslaCost()) return false;
                 } else if (isEmberIV()) {
-                    // Hub maxed → switch to Spring-Pad placement mode
-                    if (hubUpgradeTier >= HUB_UPGRADE_COSTS.length) {
-                        if (springPads.size < MAX_SPRING_PADS)
-                            placementMode = (placementMode == PLACE_SPRING_PAD) ? PLACE_NONE : PLACE_SPRING_PAD;
-                        return;
+                    // hub tier purchase: no drag needed, execute immediately on touchDown
+                    if (hubUpgradeTier < HUB_UPGRADE_COSTS.length) {
+                        float cost = HUB_UPGRADE_COSTS[hubUpgradeTier];
+                        if (!sd2.spendCrystals(cost)) return false;
+                        hubUpgradeTier++;
+                        if (hubUpgradeTier == 3) hubCycleLength = 10f;
+                        String[] tierNames = {"Suction Boost x1.35", "Blast Boost x1.50", "Resonance Overdrive"};
+                        showNotif("HUB UPGRADED T" + hubUpgradeTier,
+                            tierNames[hubUpgradeTier - 1] + "\nHub Tier " + hubUpgradeTier + " / 3");
+                        return true;
                     }
-                    // Not yet maxed → purchase next hub upgrade tier
-                    float cost = HUB_UPGRADE_COSTS[hubUpgradeTier];
-                    if (!ShipData.get().spendCrystals(cost)) return;
-                    hubUpgradeTier++;
-                    // Apply tier effect immediately
-                    if (hubUpgradeTier == 3) {
-                        hubCycleLength = 10f;   // Resonance Overdrive: halve the cycle
-                    }
-                    String[] tierNames = {"Suction Boost x1.35", "Blast Boost x1.50", "Resonance Overdrive"};
-                    showNotif("HUB UPGRADED T" + hubUpgradeTier,
-                        tierNames[hubUpgradeTier - 1] + "\nHub Tier " + hubUpgradeTier + " / 3");
+                    if (springPads.size >= MAX_SPRING_PADS) return false;
+                    if (sd2.crystals < springPadCost()) return false;
                 } else {
-                    if (!gravityUnlocked() || attractors.size >= maxGravityAllowed()) return;
-                    if (ShipData.get().crystals >= gravityCost())
-                        placementMode = (placementMode == PLACE_GRAVITY) ? PLACE_NONE : PLACE_GRAVITY;
+                    if (!gravityUnlocked() || attractors.size >= maxGravityAllowed()) return false;
+                    if (sd2.crystals < gravityCost()) return false;
+                }
+                dragMode   = isEmberIV() ? PLACE_SPRING_PAD : PLACE_GRAVITY;
+                dragStageX = event.getStageX();
+                dragStageY = event.getStageY();
+                return true;
+            }
+            @Override
+            public void touchDragged(com.badlogic.gdx.scenes.scene2d.InputEvent event,
+                                     float x, float y, int pointer) {
+                dragStageX = event.getStageX();
+                dragStageY = event.getStageY();
+            }
+            @Override
+            public void touchUp(com.badlogic.gdx.scenes.scene2d.InputEvent event,
+                                float x, float y, int pointer, int button) {
+                int dm = dragMode;
+                dragMode = PLACE_NONE;
+                if (dm == PLACE_NONE) return;
+                float wx = dragStageX / PPM, wy = (dragStageY + 80f) / PPM;
+                float ddx = wx - CENTRIFUGE_CX, ddy = wy - CENTRIFUGE_CY;
+                if (ddx * ddx + ddy * ddy >= CENTRIFUGE_R * CENTRIFUGE_R) return;
+                ShipData sd2 = ShipData.get();
+                if (isFrostheim()) {
+                    if (teslaCoils.size < maxTeslaCoilsAllowed() && sd2.spendCrystals(teslaCost())) {
+                        spawnTeslaCoil(wx, wy);
+                    }
+                } else if (isEmberIV()) {
+                    if (springPads.size < MAX_SPRING_PADS && sd2.spendCrystals(springPadCost())) {
+                        spawnSpringPad(wx, wy);
+                    }
+                } else {
+                    if (attractors.size < maxGravityAllowed() && sd2.spendCrystals(gravityCost())) {
+                        spawnAttractorBumper(wx, wy);
+                    }
                 }
             }
         });
@@ -1704,7 +2297,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         decisionTable.background(game.skin.newDrawable("white", new Color(0f, 0.05f, 0.12f, 0.93f)));
         decisionTable.center();
 
-        Label decisionTitle = new Label("❅ BLIZZARD DECISION", game.skin);
+        Label decisionTitle = new Label("* BLIZZARD DECISION", game.skin);
         decisionTitle.setFontScale(1.3f);
         decisionTitle.setColor(0.45f, 0.90f, 1f, 1f);
         decisionTable.add(decisionTitle).padBottom(8f).row();
@@ -1833,14 +2426,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             return;
         }
 
-        // ---- Solara / default perk chain ----
-        if (sr >= 0 && !milestoneAchieved[0]) {
-            milestoneAchieved[0] = true;
-            applyElasticWalls();
-            showCeleb("PERK UNLOCKED", MILESTONE_NAMES[0] + "\n" + MILESTONE_DESCS[0]);
-            SoundManager.get().playMilestone();
-            triggerShake(4f, 0.12f);
-        }
+        // ---- Solara / default perk chain (checkpoint-gated ones only) ----
         if (sr >= 2 && !milestoneAchieved[2]) {
             milestoneAchieved[2] = true;
             ShipData.get().wallEnergyMult = 3f;
@@ -1876,39 +2462,35 @@ public class EngineeringLabScreen extends ScreenAdapter {
             tutorialStepAge = 0f;
             tutorialDone    = true;
         } else if (tutorialStep == 1) {
-            tutorialStepAge += delta;
-            // Advance only when the player actually hires an intern (started at 1, now 2+)
-            if (balls.size >= 2) {
-                tutorialStep    = 2;
-                tutorialStepAge = 0f;
+            // Advance only after intern is placed and 3s have passed
+            if (tutorialPostDropTimer >= 0f) {
+                tutorialPostDropTimer += delta;
+                if (tutorialPostDropTimer >= 3f) {
+                    tutorialPostDropTimer = -1f;
+                    tutorialStep          = 2;
+                    tutorialStepAge       = 0f;
+                }
             }
         } else if (tutorialStep == 2) {
             tutorialStepAge += delta;
-            // "Earning SP" step — advance on tap or 8 s auto
-            if (inputHit || tutorialStepAge > 8f) {
+            if (inputHit) {
                 tutorialStep    = 3;
                 tutorialStepAge = 0f;
             }
         } else if (tutorialStep == 3) {
             tutorialStepAge += delta;
-            // "Energy (E)" step — advance on tap or 8 s auto
-            if (inputHit || tutorialStepAge > 8f) {
+            if (inputHit) {
                 tutorialStep    = 4;
                 tutorialStepAge = 0f;
             }
         } else if (tutorialStep == 4) {
             tutorialStepAge += delta;
-            // "SP/s rate" step — advance on tap or 8 s auto
-            if (inputHit || tutorialStepAge > 8f) {
-                tutorialStep    = 5;
+            if (inputHit) {
+                tutorialStep    = 6;
                 tutorialStepAge = 0f;
             }
         } else if (tutorialStep == 5) {
-            tutorialStepAge += delta;
-            // "Ring speed" step — advance on tap or 8 s auto
-            if (inputHit || tutorialStepAge > 8f) {
-                tutorialStep = 6;
-            }
+            tutorialStep = 6; // skip — duplicate of step 4
         }
 
         uptime   += delta;
@@ -1937,16 +2519,47 @@ public class EngineeringLabScreen extends ScreenAdapter {
         if (shakeTimer > 0f) {
             shakeTimer = Math.max(0f, shakeTimer - delta);
             float mag = shakeMag * (shakeTimer / shakeDuration);
+            float cy = renderViewport.getWorldHeight() * 0.5f;
             renderCam.position.x = RENDER_W * 0.5f + (MathUtils.random() - 0.5f) * 2f * mag;
-            renderCam.position.y = RENDER_H * 0.5f + (MathUtils.random() - 0.5f) * 2f * mag;
+            renderCam.position.y = cy + (MathUtils.random() - 0.5f) * 2f * mag;
         } else {
-            renderCam.position.set(RENDER_W * 0.5f, RENDER_H * 0.5f, 0f);
+            renderCam.position.set(RENDER_W * 0.5f, renderViewport.getWorldHeight() * 0.5f, 0f);
         }
         renderCam.update();
         batch.setProjectionMatrix(renderCam.combined);
 
-        // Float numbers disabled — drain events without spawning visuals
-        ShipData.get().pendingContactEvents.clear();
+        // Drain contact events → spawn floats
+        final float SIDE_L_X = (CENTRIFUGE_CX - CENTRIFUGE_R) + 0.3f;
+        final float SIDE_R_X = (CENTRIFUGE_CX + CENTRIFUGE_R) - 0.3f;
+        com.badlogic.gdx.utils.Array<float[]> events = ShipData.get().pendingContactEvents;
+        for (int ei = 0; ei < events.size; ei++) {
+            float[] ev = events.get(ei);
+            FloatEntry fe = new FloatEntry();
+            int colorType = (int) ev[3];
+            if (colorType == 0) {
+                // Wall hit — show at actual contact point in world coords
+                fe.wx = ev[0];
+                fe.wy = ev[1];
+            } else {
+                // Intern-intern / bumper / attractor — alternate left/right sides
+                floatSideTog = !floatSideTog;
+                fe.wx = floatSideTog ? SIDE_L_X : SIDE_R_X;
+                fe.wy = CENTRIFUGE_CY + (MathUtils.random() - 0.5f) * CENTRIFUGE_R * 0.8f;
+            }
+            fe.value     = ev[2];
+            fe.colorType = colorType;
+            fe.age       = 0f;
+            fe.driftX    = 0f;
+            activeFloats.add(fe);
+        }
+        events.clear();
+
+        // Advance and cull floats
+        for (int ei = activeFloats.size - 1; ei >= 0; ei--) {
+            FloatEntry fe = activeFloats.get(ei);
+            fe.age += delta;
+            if (fe.age >= FloatEntry.LIFETIME) activeFloats.removeIndex(ei);
+        }
 
 
         batch.begin();
@@ -1964,6 +2577,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         drawTeslaCoils();
         drawCryoVents();
         drawInterns();
+        drawFloatNumbers();
         drawPlacementPreview();
         // drawHeartbeatPulse() removed — coin bump effect disabled
         batch.end();
@@ -1979,7 +2593,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         String sparkSym = fh ? "FS" : "SP";   // FS = Frost Shards, SP = Space Points
 
         // ---- Stats strip ----
-        joulesLabel.setText(formatNumber(energyDeltaSinceLaunch()) + " E");
+        joulesLabel.setText(""); // energy now shown in top panel
         crystalsLabel.setText((int) sd.crystals + " " + sparkSym);
         jpsLabel.setText("");
 
@@ -2006,10 +2620,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
         hudSpLabel.setText((int) sd.crystals + " " + sparkSym2);
 
         // Perk strip — highlight multipliers above base value
-        updatePerkLabel(perkCollLabel,  "Coll",  sd.collisionEnergyMult, 1.0f);
-        updatePerkLabel(perkWallLabel,  "Wall",  sd.wallEnergyMult,       1.0f);
-        updatePerkLabel(perkBoostLabel, "Boost", sd.internBoostStrength,  1.5f);
-        updatePerkLabel(perkBumpLabel,  "Bump",  sd.bumperEnergyMult,     5.0f);
+        // Left→right: Elas(5.3) → Wall×3(6.0) → Coll×2(7.5) → Bump×3(9.5)
+        updatePerkIcon(perkIconSpeed, lockSpeedImg, milestoneAchieved[1]);
+        updatePerkIcon(perkIconElas,  lockCollImg,  milestoneAchieved[0]);
+        updatePerkIcon(perkIconWall,  lockWallImg,  milestoneAchieved[2]);
+        updatePerkIcon(perkIconColl,  lockBoostImg, milestoneAchieved[3]);
+        updatePerkIcon(perkIconBump,  lockBumpImg,  milestoneAchieved[4]);
         int cap = internCap();
 
         float ringNow = centrifugeBody.getAngularVelocity();
@@ -2021,8 +2637,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
         }
 
         // ---- Economy-loop button styles ----
-        TextButton.TextButtonStyle CORAL = tileStyleBuy;
-        TextButton.TextButtonStyle BUY   = tileStyleBuy;
+        TextButton.TextButtonStyle CORAL = tileStyleBuyGreen;
+        TextButton.TextButtonStyle BUY   = tileStyleBuyGreen;
         TextButton.TextButtonStyle LOCK  = tileStyleLock;
         TextButton.TextButtonStyle ACT   = tileStyleAct;
         TextButton.TextButtonStyle GO    = tileStyleGo;
@@ -2035,12 +2651,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
         // ---- ADD ORB / Intern button text ----
         if (fh && !frostheimThirdInternUnlocked && sd.sectorReached < 0 && balls.size >= cap) {
             btnAdd.setText(sd.crystals >= 800f
-                ? "[+]\nUNLOCK 3RD\n800 FS"
-                : "[+]\n3RD INTERN\n800 FS");
+                ? "UNLOCK 3RD\n800 FS"
+                : "3RD INTERN\n800 FS");
         } else if (ember && !emberThirdInternUnlocked && sd.sectorReached < 0 && balls.size >= cap) {
             btnAdd.setText(sd.crystals >= 1200f
-                ? "[+]\nUNLOCK 3RD\n1200 SP"
-                : "[+]\n3RD INTERN\n1200 SP");
+                ? "UNLOCK 3RD\n1200 SP"
+                : "3RD INTERN\n1200 SP");
         } else if (balls.size >= cap) {
             String nxt;
             if (fh || ember) {
@@ -2051,11 +2667,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     : cap == 10 ? "Req: CP III" : "MAX";
             }
             btnAdd.setText(cap < MAX_INTERNS
-                ? String.format("[+]\n%d/%d CAP\n%s", balls.size, cap, nxt)
-                : String.format("[+]\n%d/%d\nFULL CAP", balls.size, cap));
+                ? String.format("%d/%d CAP\n%s", balls.size, cap, nxt)
+                : String.format("%d/%d\nFULL CAP", balls.size, cap));
         } else {
             btnAdd.setText(String.format(
-                "[+]\nHIRE ORB\n%.0f %s", internCost(), sparkSym));
+                "%d/%d HIRE\n%.0f %s", balls.size, cap, internCost(), sparkSym));
         }
 
         // ---- Bumper / Cryo-Vent / Blade button ----
@@ -2063,38 +2679,39 @@ public class EngineeringLabScreen extends ScreenAdapter {
             int maxCV = maxCryoVentsAllowed();
             if (!frostheimCryoUnlocked && sd.sectorReached < 0) {
                 btnBumper.setText(sd.crystals >= 400f
-                    ? "[ ]\nUNLOCK CRYO\n400 FS"
-                    : "[ ]\nCRYO-VENT\n400 FS");
+                    ? "UNLOCK CRYO\n400 FS"
+                    : "CRYO-VENT\n400 FS");
             } else if (maxCV == 0) {
-                btnBumper.setText("[ ]\nCRYO-VENT\nReq: CP I");
+                btnBumper.setText("CRYO-VENT\nReq: CP I");
             } else if (cryoVents.size >= maxCV) {
-                btnBumper.setText(String.format("[ ]\nCRYO-VENT\n%d/%d FULL", cryoVents.size, maxCV));
+                btnBumper.setText(String.format("CRYO-VENT\n%d/%d FULL", cryoVents.size, maxCV));
             } else if (placementMode == PLACE_BUMPER) {
-                btnBumper.setText("[ ]\nCRYO-VENT\nTap Ring");
+                btnBumper.setText("CRYO-VENT\nTap Ring");
             } else {
-                btnBumper.setText(String.format("[ ]\nCRYO-VENT\n%.0f FS", cryoVentCost()));
+                btnBumper.setText(String.format("CRYO %d/%d\n%.0f FS", cryoVents.size, maxCV, cryoVentCost()));
             }
         } else if (ember) {
             int maxBl = maxBladesAllowed();
             if (maxBl == 0) {
-                btnBumper.setText("[ ]\nBLADE\nReq: CP I");
+                btnBumper.setText("BLADE\nReq: CP I");
             } else if (kineticBlades.size >= maxBl) {
-                btnBumper.setText(String.format("[ ]\nBLADES\n%d/%d FULL", kineticBlades.size, maxBl));
+                btnBumper.setText(String.format("BLADES\n%d/%d FULL", kineticBlades.size, maxBl));
             } else if (placementMode == PLACE_BLADE) {
-                btnBumper.setText("[ ]\nBLADE\nTap Ring");
+                btnBumper.setText("BLADE\nTap Ring");
             } else {
-                btnBumper.setText(String.format("[ ]\nBLADE\n%.0f SP", bladeCost()));
+                btnBumper.setText(String.format("BLADE %d/%d\n%.0f SP",
+                    kineticBlades.size, maxBl, bladeCost()));
             }
         } else {
             int maxB = maxBumpersAllowed();
             if (maxB == 0) {
-                btnBumper.setText("[ ]\nBUMPER\nReq: CP I");
+                btnBumper.setText("BUMPER\nReq: CP I");
             } else if (bumpers.size >= maxB) {
-                btnBumper.setText(String.format("[ ]\nBUMPER\n%d/%d FULL", bumpers.size, maxB));
+                btnBumper.setText(String.format("BUMPER\n%d/%d FULL", bumpers.size, maxB));
             } else if (placementMode == PLACE_BUMPER) {
-                btnBumper.setText("[ ]\nBUMPER\nTap Ring");
+                btnBumper.setText("BUMPER\nTap Ring");
             } else {
-                btnBumper.setText(String.format("[ ]\nBUMPER\n%.0f SP", bumperCost()));
+                btnBumper.setText(String.format("BUMPER %d/%d\n%.0f SP", bumpers.size, maxB, bumperCost()));
             }
         }
 
@@ -2102,42 +2719,45 @@ public class EngineeringLabScreen extends ScreenAdapter {
         if (fh) {
             int maxTC = maxTeslaCoilsAllowed();
             if (maxTC == 0) {
-                btnGravityWell.setText("(o)\nTESLA COIL\nReq: CP II");
+                btnGravityWell.setText("TESLA COIL\nReq: CP II");
             } else if (teslaCoils.size >= maxTC) {
-                btnGravityWell.setText(String.format("(o)\nTESLA COIL\n%d/%d FULL", teslaCoils.size, maxTC));
+                btnGravityWell.setText(String.format("TESLA COIL\n%d/%d FULL", teslaCoils.size, maxTC));
             } else if (placementMode == PLACE_GRAVITY) {
-                btnGravityWell.setText("(o)\nTESLA COIL\nTap Ring");
+                btnGravityWell.setText("TESLA COIL\nTap Ring");
             } else {
-                btnGravityWell.setText(String.format("(o)\nTESLA COIL\n%.0f FS", teslaCost()));
+                btnGravityWell.setText(String.format("TESLA %d/%d\n%.0f FS",
+                    teslaCoils.size, maxTC, teslaCost()));
             }
         } else if (ember) {
             if (hubUpgradeTier >= HUB_UPGRADE_COSTS.length) {
                 if (springPads.size >= MAX_SPRING_PADS) {
-                    btnGravityWell.setText(String.format("(o)\nSPRING PAD\n%d/%d FULL", springPads.size, MAX_SPRING_PADS));
+                    btnGravityWell.setText(String.format("SPRING PAD\n%d/%d FULL", springPads.size, MAX_SPRING_PADS));
                 } else if (placementMode == PLACE_SPRING_PAD) {
-                    btnGravityWell.setText("(o)\nSPRING PAD\nTap Ring");
+                    btnGravityWell.setText("SPRING PAD\nTap Ring");
                 } else {
-                    btnGravityWell.setText(String.format("(o)\nSPRING PAD\n%.0f SP", springPadCost()));
+                    btnGravityWell.setText(String.format("SPRING %d/%d\n%.0f SP",
+                        springPads.size, MAX_SPRING_PADS, springPadCost()));
                 }
             } else {
                 String[] tierLabels = {"HUB +SUCTION", "HUB +BLAST", "HUB OVERDRIVE"};
                 if (sd.crystals >= HUB_UPGRADE_COSTS[hubUpgradeTier]) {
-                    btnGravityWell.setText(String.format("(o)\n%s\n%.0f SP",
+                    btnGravityWell.setText(String.format("%s\n%.0f SP",
                         tierLabels[hubUpgradeTier], HUB_UPGRADE_COSTS[hubUpgradeTier]));
                 } else {
-                    btnGravityWell.setText(String.format("(o)\n%s\nNEED %.0f SP",
+                    btnGravityWell.setText(String.format("%s\nNEED %.0f SP",
                         tierLabels[hubUpgradeTier], HUB_UPGRADE_COSTS[hubUpgradeTier]));
                 }
             }
         } else {
             if (!gravityUnlocked()) {
-                btnGravityWell.setText("(o)\nGRAVITY\nReq: CP II");
+                btnGravityWell.setText("GRAVITY\nReq: CP II");
             } else if (attractors.size >= maxGravityAllowed()) {
-                btnGravityWell.setText(String.format("(o)\nGRAVITY\n%d/%d FULL", attractors.size, maxGravityAllowed()));
+                btnGravityWell.setText(String.format("GRAVITY\n%d/%d FULL", attractors.size, maxGravityAllowed()));
             } else if (placementMode == PLACE_GRAVITY) {
-                btnGravityWell.setText("(o)\nGRAVITY\nTap Ring");
+                btnGravityWell.setText("GRAVITY\nTap Ring");
             } else {
-                btnGravityWell.setText(String.format("(o)\nGRAVITY\n%.0f SP", gravityCost()));
+                btnGravityWell.setText(String.format("GRAVITY %d/%d\n%.0f SP",
+                    attractors.size, maxGravityAllowed(), gravityCost()));
             }
         }
 
@@ -2148,31 +2768,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
         boolean workforceGated = !isFullyUpgraded();
         String cpName = nextCPName();
 
-        if (workforceGated) {
-            btnFlight.setText(">>\nNEED\n" + upgradeGateHint());
-        } else if (jumpReady && ember) {
-            btnFlight.setText(">>\nHYPER JUMP\nLAUNCH");
-        } else if (jumpReady) {
-            btnFlight.setText(">>\nLAUNCH\n" + cpName);
-        } else {
-            String prog;
-            if (eCost >= 1_000_000f)
-                prog = String.format("%.2fM/%.2fME", eDelta/1_000_000f, eCost/1_000_000f);
-            else if (eCost >= 1_000f)
-                prog = String.format("%.1f/%.1fKE", eDelta/1_000f, eCost/1_000f);
-            else
-                prog = String.format("%.0f/%.0fE", eDelta, eCost);
-            btnFlight.setText(">>\nLAUNCH\n" + prog + "\n-> " + cpName);
-        }
+        btnFlight.setText("LAUNCH");
 
-        // ---- JUMP READY centrifuge overlay button ----
-        // Hide overlay if workforce gate is blocking the launch
-        btnJumpReady.setVisible(jumpReady && !workforceGated);
-        if (jumpReady && !workforceGated) {
-            float pulse = 0.60f + MathUtils.sin(animTime * 5f) * 0.40f;
-            btnJumpReady.setColor(pulse, 1f, pulse * 0.7f + 0.3f, 1f);
-            btnJumpReady.setText("** JUMP READY **\nTAP TO LAUNCH");
-        }
+        btnJumpReady.setVisible(false); // replaced by launch button under energy bar
 
         // ---- Button tints ----
         boolean showFhInternUnlock    = fh    && !frostheimThirdInternUnlocked && sd.sectorReached < 0 && balls.size >= cap;
@@ -2220,12 +2818,25 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 : !gravityUnlocked() || attractors.size >= maxGravityAllowed() ? LOCK
                 : sd.crystals >= gravityCost()      ? BUY : NORM);
         }
-        btnFlight.setStyle(jumpReady ? GO : eDelta / Math.max(eCost, 1f) > 0.6f ? BUY : NORM);
-        btnFlight.setDisabled(false); // always clickable — popup explains if blocked
+        // Launch button appears below energy bar only when fully ready
+        boolean launchReady = jumpReady && !workforceGated;
+        if (launchReady != launchWasReady) {
+            launchWasReady = launchReady;
+            btnFlight.setTouchable(launchReady ? Touchable.enabled : Touchable.disabled);
+            launchBtnCell.height(launchReady ? 130f : 0f)
+                         .padTop(launchReady ? 4f : 0f)
+                         .padBottom(launchReady ? 4f : 0f);
+            rootTable.invalidateHierarchy();
+        }
+        // Keep button fully transparent — rocket drawn manually in render loop
+        btnFlight.setVisible(true);
+        btnFlight.setColor(0f, 0f, 0f, 0f);
+        btnFlight.setDisabled(false);
 
         // Re-apply font scale each frame (setText resets it)
-        for (TextButton btn : new TextButton[]{btnAdd, btnBumper, btnGravityWell, btnFlight}) {
-            btn.getLabel().setFontScale(0.68f);
+        btnFlight.getLabel().setFontScale(0.90f);
+        for (TextButton btn : new TextButton[]{btnAdd, btnBumper, btnGravityWell}) {
+            btn.getLabel().setFontScale(0.80f);
         }
 
         // ---- Top panel: live label updates each frame ----
@@ -2254,8 +2865,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
         }
 
         // Column 2 — Money Engine: SPACE POINTS RATE header + live SP/s value
-        topSpRateHeaderLabel.setText(fh ? "* FS RATE" : "* SP RATE");
-        topSpValueLabel.setText(formatNumber(sparkRate) + (fh ? " FS/s" : " SP/s"));
+        topSpRateHeaderLabel.setText("ENERGY");
+        float _eDelta = energyDeltaSinceLaunch();
+        float _eCost  = nextCheckpointEnergyCost();
+        String _eDeltaStr = _eDelta >= 1_000f ? String.format("%.1fK", _eDelta / 1000f) : String.format("%.0f", _eDelta);
+        String _eCostStr  = _eCost  >= 1_000f ? String.format("%.0fK", _eCost  / 1000f) : String.format("%.0f", _eCost);
+        topSpValueLabel.setText(_eDeltaStr + " / " + _eCostStr);
         // outputLabel hidden — E/s removed
 
         // Column 3 — Active Perks: rebuild only when unlock count changes
@@ -2274,10 +2889,58 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         ui.draw();
 
-        if (tutorialStep < 6) {
+        // Draw launch rocket when ready (replaces transparent button)
+        boolean launchReadyNow = launchWasReady; // already computed above in updateLabels
+        if (launchReadyNow) {
+            batch.begin();
+            drawLaunchRocket();
+            batch.end();
+        }
+
+        // Only one overlay at a time — priority: notif > celeb > launchHint > bumperHint > gravityHint > tutorial
+        boolean bigOverlayActive = notifActive || celebActive;
+
+        if (!bigOverlayActive && tutorialStep < 6) {
             batch.begin();
             drawTutorial();
             batch.end();
+        }
+
+        // Launch hint: fires once when all conditions met, dismisses on tap
+        boolean launchAllReady = isJumpReady() && isFullyUpgraded();
+        if (!bigOverlayActive && launchAllReady && !launchHintShown) {
+            batch.begin();
+            drawLaunchReadyHint();
+            batch.end();
+            if (inputHit) launchHintShown = true;
+        }
+
+        // Perk icon hint: fires once after first perk unlocks, teaches tap-for-info
+        boolean anyPerkUnlocked = milestoneAchieved[0] || milestoneAchieved[1] || milestoneAchieved[2]
+                                || milestoneAchieved[3] || milestoneAchieved[4];
+        if (!bigOverlayActive && anyPerkUnlocked && !perkIconHintShown && tutorialStep >= 6) {
+            batch.begin();
+            drawPerkIconHint();
+            batch.end();
+            if (inputHit) perkIconHintShown = true;
+        }
+
+        // Bumper tutorial: first time bumper slot unlocks (CP I reached)
+        boolean bumperAvail = !isFrostheim() && !isEmberIV() && maxBumpersAllowed() > 0;
+        if (!bigOverlayActive && bumperAvail && !bumperHintShown && tutorialStep >= 6) {
+            batch.begin();
+            drawBumperHint();
+            batch.end();
+            if (inputHit) bumperHintShown = true;
+        }
+
+        // Gravity tutorial: first time gravity unlocks (CP II reached)
+        boolean gravityAvail = !isFrostheim() && !isEmberIV() && gravityUnlocked();
+        if (!bigOverlayActive && gravityAvail && !gravityHintShown && bumperHintShown && tutorialStep >= 6) {
+            batch.begin();
+            drawGravityHint();
+            batch.end();
+            if (inputHit) gravityHintShown = true;
         }
 
         if (internAddedTimer > 0) {
@@ -2307,21 +2970,69 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 batch.end();
             }
         }
+
+        // Perk info popup — triggered by tapping an unlocked perk icon, dismissed by tap
+        if (activePerkPopup >= 0) {
+            perkPopupTimer += delta;
+            if (inputHit && perkPopupTimer > 0.25f) {
+                activePerkPopup = -1;
+            } else {
+                batch.begin();
+                drawPerkPopup(activePerkPopup);
+                batch.end();
+            }
+        }
+    }
+
+    private void drawPerkPopup(int idx) {
+        float alpha = Math.min(perkPopupTimer / 0.15f, 1f);
+
+        float cardW = 300f, cardH = 56f;
+        float cardX = RENDER_W * 0.5f - cardW * 0.5f;
+        // Draw just above the perk strip (~200px from bottom on 854-height layout)
+        float cardY = 195f;
+
+        // Shadow
+        batch.setColor(0f, 0f, 0f, 0.50f * alpha);
+        batch.draw(texPixel, cardX + 3f, cardY - 3f, cardW, cardH);
+        // Background
+        batch.setColor(0.05f, 0.06f, 0.18f, 0.95f * alpha);
+        batch.draw(texPixel, cardX, cardY, cardW, cardH);
+        // Top accent bar
+        batch.setColor(0.25f, 0.85f, 1.00f, 0.80f * alpha);
+        batch.draw(texPixel, cardX, cardY + cardH - 3f, cardW, 3f);
+        batch.setColor(1f, 1f, 1f, 1f);
+
+        // Title
+        floatFont.getData().setScale(1.05f);
+        floatFont.setColor(0.25f, 0.95f, 1.00f, alpha);
+        floatLayout.setText(floatFont, MILESTONE_NAMES[idx]);
+        floatFont.draw(batch, MILESTONE_NAMES[idx],
+            cardX + 14f, cardY + cardH - 10f);
+
+        // Description
+        floatFont.getData().setScale(0.82f);
+        floatFont.setColor(0.85f, 0.88f, 0.95f, alpha);
+        floatFont.draw(batch, MILESTONE_DESCS[idx],
+            cardX + 14f, cardY + cardH - 28f);
+
+        floatFont.getData().setScale(1f);
+        floatFont.setColor(Color.WHITE);
     }
 
     private void drawTutorial() {
         if (tutorialStep == 0) {
             drawTutorialIntroOverlay();
         } else if (tutorialStep == 1) {
-            // Waiting for player to hire first intern — no skip
-            // btnAdd approx center: X=68, Y=68 in render-space (Y-up, 0=bottom)
+            if (tutorialInternDragging || tutorialPostDropTimer >= 0f) return; // hide while dragging or waiting after drop
+            drawFingerDragHint(87f, 90f, 200f, 380f);
             drawTutorialCalloutCard(
                 "HIRE YOUR FIRST INTERN",
-                "Tap  ADD ORB  (bottom-left button).",
+                "Hold the ORB button, drag into the ring!",
                 "More orbs = faster ring = more Energy!",
-                68f, 68f,   // button center — arrow points here
-                true,       // isAction: button-sized highlight, no skip hint
-                false       // arrowFromTop: arrow leaves card bottom
+                87f, 90f,   // ADD ORB center: X=10+3+147/2, Y=10+4+3+147/2
+                true,
+                false
             );
         } else if (tutorialStep == 2) {
             // Observation: intern hired, now watch SP accumulate
@@ -2330,89 +3041,182 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 "IT'S WORKING!",
                 "Your intern earns Space Points (SP)",
                 "watch the SP counter — bottom left!",
-                60f, 139f,
-                false,   // observation: show "tap to continue" hint
-                false    // arrow leaves card bottom, points at stats row below
+                60f, 184f,
+                false, false
             );
         } else if (tutorialStep == 3) {
-            // Observation: Energy (E) — right side of stats strip, approx X=420, Y=139
+            // Observation: Energy current/needed — top center panel
             drawTutorialCalloutCard(
                 "ENERGY (E)",
                 "Ring spin generates Energy.",
                 "Energy fuels your LAUNCH to next sector!",
-                420f, 139f,
+                240f, renderViewport.getWorldHeight() - 50f,
                 false,
-                false
+                true    // arrowFromTop: points up at top panel
             );
         } else if (tutorialStep == 4) {
-            // Observation: SP/s rate in top HUD center
-            // topSpValueLabel: approx X=240, Y=RENDER_H - 50
+            // Observation: ring speed — right side of stats strip
             drawTutorialCalloutCard(
-                "SP/s RATE IS CLIMBING",
-                "More collisions = higher SP/s rate.",
-                "See the live rate in the TOP panel!",
-                240f, RENDER_H - 50f,
-                false,   // observation
-                true     // arrowFromTop: arrow leaves card TOP, points up at HUD
-            );
-        } else if (tutorialStep == 5) {
-            // Observation: ring speed label — center of stats strip, approx X=240, Y=139
-            drawTutorialCalloutCard(
-                "SPEED = ENERGY",
-                "Faster ring = more Energy generated.",
-                "Hire more interns to spin it up!",
-                240f, 139f,
-                false,
-                false
+                "RING SPEED",
+                "More interns = faster ring = more Energy.",
+                "Watch the r/s counter climb!",
+                390f, 184f,
+                false, false
             );
         }
     }
 
     private void drawTutorialIntroOverlay() {
         ShipData.PlanetProfile planet = ShipData.get().getCurrentPlanet();
-        batch.setColor(0f, 0f, 0f, 0.86f);
-        batch.draw(texPixel, 0, 0, RENDER_W, RENDER_H);
+        float extH  = renderViewport.getWorldHeight();
+        float cx    = RENDER_W * 0.5f;
+        float pulse = 0.55f + MathUtils.sin(animTime * 1.8f) * 0.35f;
+        float rp    = 0.30f + MathUtils.sin(animTime * 3.6f) * 0.28f;
+
+        // ── Full-screen dim ──────────────────────────────────────────────────
+        batch.setColor(0f, 0f, 0f, 0.82f);
+        batch.draw(texPixel, 0, 0, RENDER_W, extH);
         batch.setColor(1f, 1f, 1f, 1f);
 
-        float cx = RENDER_W * 0.5f;
-        float y  = RENDER_H * 0.84f;
-        float lh = 36f;
+        // ── Card geometry ────────────────────────────────────────────────────
+        float cW = 444f, cH = 490f;
+        float cX = cx - cW * 0.5f;
+        float cY = extH * 0.5f - cH * 0.5f - 10f;
 
-        floatFont.getData().setScale(2.10f);
-        floatFont.setColor(0.20f, 0.80f, 1.00f, 1f);
-        drawFontCentered("ENGINEERING BAY", cx, y);
-        y -= lh * 1.3f;
+        // Outer glow layers
+        for (int g = 6; g > 0; g--) {
+            float ex = g * 4f;
+            batch.setColor(0.08f, 0.45f, 1.00f, 0.018f * g * pulse);
+            batch.draw(texPixel, cX - ex, cY - ex, cW + ex * 2f, cH + ex * 2f);
+        }
 
+        // Card background
+        batch.setColor(0.025f, 0.042f, 0.140f, 0.97f);
+        batch.draw(texPixel, cX, cY, cW, cH);
+
+        // Inner highlight panel
+        batch.setColor(0.055f, 0.095f, 0.240f, 0.50f);
+        batch.draw(texPixel, cX + 6f, cY + 6f, cW - 12f, cH - 12f);
+
+        // Top accent stripe
+        batch.setColor(0.20f, 0.82f, 1.00f, 0.90f * pulse);
+        batch.draw(texPixel, cX, cY + cH - 4f, cW, 4f);
+
+        // Animated side edges (left + right thin glows)
+        batch.setColor(0.18f, 0.65f, 1.00f, 0.45f * pulse);
+        batch.draw(texPixel, cX,            cY, 2f, cH);
+        batch.draw(texPixel, cX + cW - 2f,  cY, 2f, cH);
+        batch.setColor(0.18f, 0.65f, 1.00f, 0.20f * pulse);
+        batch.draw(texPixel, cX,            cY, cW, 2f);
+
+        // ── Corner brackets ──────────────────────────────────────────────────
+        float bl = 26f, bt = 3.5f;
+        batch.setColor(0.28f, 0.95f, 1.00f, 0.95f);
+        // top-left
+        batch.draw(texPixel, cX,           cY + cH - bt, bl, bt);
+        batch.draw(texPixel, cX,           cY + cH - bl, bt, bl);
+        // top-right
+        batch.draw(texPixel, cX + cW - bl, cY + cH - bt, bl, bt);
+        batch.draw(texPixel, cX + cW - bt, cY + cH - bl, bt, bl);
+        // bottom-left
+        batch.draw(texPixel, cX,           cY, bl, bt);
+        batch.draw(texPixel, cX,           cY, bt, bl);
+        // bottom-right
+        batch.draw(texPixel, cX + cW - bl, cY, bl, bt);
+        batch.draw(texPixel, cX + cW - bt, cY, bt, bl);
+
+        // ── Planet badge ─────────────────────────────────────────────────────
+        float badgeW = 190f, badgeH = 26f;
+        float badgeX = cx - badgeW * 0.5f;
+        float badgeY = cY + cH - 54f;
+        batch.setColor(0.14f, 0.28f, 0.52f, 0.90f);
+        batch.draw(texPixel, badgeX, badgeY, badgeW, badgeH);
+        batch.setColor(0.25f, 0.70f, 1.00f, 0.70f);
+        batch.draw(texPixel, badgeX, badgeY, badgeW, 1.5f);
+        batch.draw(texPixel, badgeX, badgeY + badgeH - 1.5f, badgeW, 1.5f);
+
+        // ── Divider 1 (below title area) ─────────────────────────────────────
+        float div1Y = cY + cH - 112f;
+        batch.setColor(0.18f, 0.65f, 1.00f, 0.40f);
+        batch.draw(texPixel, cX + 28f, div1Y, cW - 56f, 1.5f);
+        // diamond
+        float dia = 5f;
+        batch.setColor(0.28f, 0.95f, 1.00f, 0.95f);
+        batch.draw(texPixel, cx - dia, div1Y - dia * 0.5f + 0.75f, dia * 2f, dia);
+
+        // ── Divider 2 (above CTA) ────────────────────────────────────────────
+        float div2Y = cY + 58f;
+        batch.setColor(0.18f, 0.65f, 1.00f, 0.35f);
+        batch.draw(texPixel, cX + 28f, div2Y, cW - 56f, 1.5f);
+        batch.setColor(0.28f, 0.95f, 1.00f, 0.95f);
+        batch.draw(texPixel, cx - dia, div2Y - dia * 0.5f + 0.75f, dia * 2f, dia);
+
+        // ── Floating particles ───────────────────────────────────────────────
+        for (int i = 0; i < 6; i++) {
+            float px = cX + 20f + (i * 73f + MathUtils.sin(animTime * 0.4f + i) * 12f) % (cW - 40f);
+            float py = cY + 70f + (MathUtils.sin(animTime * 0.55f + i * 1.1f) * 0.5f + 0.5f) * (cH - 140f);
+            float pa = 0.10f + 0.08f * MathUtils.sin(animTime * 1.3f + i * 0.9f);
+            batch.setColor(0.30f, 0.80f, 1.00f, pa);
+            batch.draw(texPixel, px, py, 2.5f, 2.5f);
+        }
+        batch.setColor(1f, 1f, 1f, 1f);
+
+        // ── TEXT ─────────────────────────────────────────────────────────────
+        // Title
+        floatFont.getData().setScale(2.30f);
+        floatFont.setColor(0.22f, 0.90f, 1.00f, 1f);
+        drawFontCentered("ENGINEERING BAY", cx, cY + cH - 16f);
+
+        // Planet badge text
+        floatFont.getData().setScale(1.18f);
+        floatFont.setColor(0.75f, 0.90f, 1.00f, 0.95f);
+        drawFontCentered(planet.name.toUpperCase() + " SYSTEM", cx, badgeY + badgeH - 6f);
+
+        // Bullet rows
+        float bx  = cX + 52f;
+        float by  = cY + cH - 128f;
+        float bLh = 58f;
+
+        float[][] dotCols = {
+            {0.28f, 0.88f, 1.00f},
+            {0.25f, 1.00f, 0.55f},
+            {1.00f, 0.82f, 0.20f},
+            {1.00f, 0.50f, 0.12f},
+        };
+        String[][] bullets = {
+            {"ORBS IN THE RING",       "Drag orbs in — they bounce and collide."},
+            {"EARN SPACE POINTS",      "Every collision earns SP currency."},
+            {"SPEND SP, GROW FASTER",  "Buy more orbs, bumpers, gravity wells."},
+            {"ENERGY -> LAUNCH",       "Ring spin builds Energy for your next jump."},
+        };
+
+        floatFont.getData().setScale(1.22f);
+        for (int i = 0; i < bullets.length; i++) {
+            float rowY = by - i * bLh;
+            float[] dc = dotCols[i];
+
+            // Colored dot
+            batch.setColor(dc[0], dc[1], dc[2], 0.92f);
+            batch.draw(texPixel, cX + 18f, rowY - 10f, 12f, 12f);
+
+            // Bullet title
+            floatFont.setColor(dc[0], dc[1], dc[2], 1f);
+            floatFont.draw(batch, bullets[i][0], bx, rowY);
+
+            // Bullet sub
+            floatFont.getData().setScale(1.00f);
+            floatFont.setColor(0.74f, 0.78f, 0.90f, 0.88f);
+            floatFont.draw(batch, bullets[i][1], bx, rowY - 24f);
+            floatFont.getData().setScale(1.22f);
+        }
+
+        // CTA
         floatFont.getData().setScale(1.35f);
-        floatFont.setColor(1f, 0.82f, 0.30f, 1f);
-        drawFontCentered(planet.name.toUpperCase() + " SYSTEM", cx, y);
-        y -= lh * 1.6f;
-
-        floatFont.getData().setScale(1.10f);
-        float a = 0.90f;
-
-        floatFont.setColor(0.85f, 0.88f, 1f, a);
-        drawFontCentered("Interns (orbs) bounce inside the ring.", cx, y); y -= lh;
-
-        floatFont.setColor(0.25f, 0.95f, 1f, a);
-        drawFontCentered("Each collision earns SPACE POINTS (SP)", cx, y); y -= lh;
-
-        floatFont.setColor(0.85f, 0.88f, 1f, a);
-        drawFontCentered("Spend SP to buy Interns, Bumpers,", cx, y); y -= lh * 0.82f;
-        drawFontCentered("and Gravity Wells.", cx, y); y -= lh * 1.15f;
-
-        floatFont.setColor(0.27f, 1f, 0.55f, a);
-        drawFontCentered("More Interns -> faster ring -> more Energy", cx, y); y -= lh;
-
-        floatFont.setColor(1f, 0.62f, 0.12f, a);
-        drawFontCentered("Energy fuels your LAUNCH to the next sector.", cx, y); y -= lh * 1.6f;
-
-        float pulse = 0.55f + MathUtils.sin(animTime * 3.5f) * 0.45f;
-        floatFont.getData().setScale(1.25f);
-        floatFont.setColor(0.55f, 0.60f, 0.70f, pulse);
-        drawFontCentered("TAP ANYWHERE TO BEGIN", cx, y);
+        floatFont.setColor(0.22f, 1.00f, 0.52f, 0.55f + MathUtils.sin(animTime * 3.2f) * 0.45f);
+        drawFontCentered(">> TAP ANYWHERE TO BEGIN <<", cx, cY + 32f);
 
         floatFont.getData().setScale(1f);
+        floatFont.setColor(Color.WHITE);
     }
 
     /**
@@ -2423,16 +3227,303 @@ public class EngineeringLabScreen extends ScreenAdapter {
      * @param arrowFromTop true = arrow leaves from the card's TOP edge (target is above the card)
      *                     false = arrow leaves from the card's BOTTOM edge (target is below the card)
      */
+
+    /** Draws the glowing rocket widget that replaces the transparent launch button. */
+    private void drawLaunchRocket() {
+        float extH  = renderViewport.getWorldHeight();
+        float cx    = RENDER_W * 0.5f;
+        float pulse = 0.5f + 0.5f * MathUtils.sin(animTime * 4f);
+        float pulse2 = 0.5f + 0.5f * MathUtils.sin(animTime * 2.5f + 1.2f);
+
+        // Rocket cell center: top of screen minus top sections; cell height 90f
+        float rocketCY = extH - 193f;
+        float rocketSz = 72f;
+
+        // Expanding energy rings behind rocket
+        for (int ri = 0; ri < 3; ri++) {
+            float phase  = (animTime * 0.9f + ri * 0.33f) % 1f;
+            float ringR  = 36f + phase * 60f;
+            float alpha  = (1f - phase) * 0.35f;
+            float sz     = ringR * 2f;
+            batch.setColor(0.10f, 0.95f, 0.30f, alpha);
+            batch.draw(texPixel, cx - ringR, rocketCY - ringR, sz, sz);
+        }
+
+        // Soft glow halo
+        float halo = 52f + 10f * pulse2;
+        batch.setColor(0.10f, 0.90f, 0.35f, 0.18f * pulse);
+        batch.draw(texPixel, cx - halo, rocketCY - halo, halo * 2f, halo * 2f);
+
+        // Engine flame trail below rocket (3 layered rects)
+        float flameW = rocketSz * 0.28f;
+        float flameH = 20f + 12f * pulse;
+        batch.setColor(1.0f, 0.55f + 0.35f * pulse, 0.10f, 0.80f);
+        batch.draw(texPixel, cx - flameW * 0.5f, rocketCY - rocketSz * 0.5f - flameH * 0.5f, flameW, flameH);
+        batch.setColor(1.0f, 0.85f, 0.30f, 0.55f);
+        batch.draw(texPixel, cx - flameW * 0.3f, rocketCY - rocketSz * 0.5f - flameH * 0.3f, flameW * 0.6f, flameH * 0.6f);
+        batch.setColor(1f, 1f, 0.9f, 0.70f);
+        batch.draw(texPixel, cx - flameW * 0.15f, rocketCY - rocketSz * 0.5f - flameH * 0.15f, flameW * 0.3f, flameH * 0.3f);
+
+        // Rocket sprite (flipped so nose points up)
+        TextureRegion rocketReg = new TextureRegion(texRocket);
+        rocketReg.flip(false, true);
+        float tint = 0.75f + 0.25f * pulse;
+        batch.setColor(tint, 1f, tint, 1f);
+        batch.draw(rocketReg, cx - rocketSz * 0.5f, rocketCY - rocketSz * 0.5f, rocketSz, rocketSz);
+        batch.setColor(1f, 1f, 1f, 1f);
+
+        // "TAP TO LAUNCH" label below rocket
+        float labelY = rocketCY - rocketSz * 0.5f - 18f;
+        floatFont.getData().setScale(0.90f);
+        floatFont.setColor(0.20f, 1f, 0.45f, 0.60f + 0.35f * pulse);
+        drawFontCentered("TAP TO LAUNCH", cx, labelY);
+        floatFont.getData().setScale(1f);
+        floatFont.setColor(1f, 1f, 1f, 1f);
+    }
+
+    // Launch hint overlay — fires once, dismisses on tap; card positioned in lower screen
+    private void drawLaunchReadyHint() {
+        float extH  = renderViewport.getWorldHeight();
+        float cx    = RENDER_W * 0.5f;
+        float pulse = 0.5f + 0.5f * MathUtils.sin(animTime * 3.5f);
+
+        // Full screen dim
+        batch.setColor(0f, 0f, 0f, 0.72f);
+        batch.draw(texPixel, 0, 0, RENDER_W, extH);
+        batch.setColor(1f, 1f, 1f, 1f);
+
+        // Rocket glow highlight (same position as drawLaunchRocket)
+        float rocketCY = extH - 193f;
+        float halo     = 58f;
+        batch.setColor(0.10f, 0.95f, 0.30f, 0.35f * pulse);
+        batch.draw(texPixel, cx - halo, rocketCY - halo, halo * 2f, halo * 2f);
+        TextureRegion rocketReg2 = new TextureRegion(texRocket);
+        rocketReg2.flip(false, true);
+        batch.setColor(0.70f + 0.30f * pulse, 1f, 0.70f + 0.30f * pulse, 1f);
+        batch.draw(rocketReg2, cx - 36f, rocketCY - 36f, 72f, 72f);
+        batch.setColor(1f, 1f, 1f, 1f);
+
+        // Card in lower third of screen
+        float cardW    = 420f;
+        float cardH    = 150f;
+        float cardX    = cx - cardW * 0.5f;
+        float cardBotY = 240f; // fixed lower position
+
+        // Arrow from card top up to rocket
+        drawTutorialArrowGreen(cx, cardBotY + cardH, cx, rocketCY - 36f);
+
+        // Card shadow + background
+        batch.setColor(0f, 0f, 0f, 0.55f);
+        batch.draw(texPixel, cardX + 3f, cardBotY - 3f, cardW, cardH);
+        batch.setColor(0.04f, 0.10f, 0.06f, 0.96f);
+        batch.draw(texPixel, cardX, cardBotY, cardW, cardH);
+        // Green border
+        float bdr = 1.8f;
+        batch.setColor(0.20f, 0.90f, 0.35f, 0.85f);
+        batch.draw(texPixel, cardX,               cardBotY + cardH - bdr, cardW, bdr);
+        batch.draw(texPixel, cardX,               cardBotY,               cardW, bdr);
+        batch.draw(texPixel, cardX,               cardBotY,               bdr,   cardH);
+        batch.draw(texPixel, cardX + cardW - bdr, cardBotY,               bdr,   cardH);
+        batch.setColor(1f, 1f, 1f, 1f);
+
+        float ty = cardBotY + cardH - 26f;
+        floatFont.getData().setScale(1.55f);
+        floatFont.setColor(0.20f, 1f, 0.45f, 0.80f + 0.20f * pulse);
+        drawFontCentered("READY TO LAUNCH!", cx, ty);
+
+        batch.setColor(0.20f, 0.90f, 0.35f, 0.28f);
+        batch.draw(texPixel, cardX + 14f, ty - 10f, cardW - 28f, 1.5f);
+        batch.setColor(1f, 1f, 1f, 1f);
+
+        ty -= 34f;
+        floatFont.getData().setScale(1.12f);
+        floatFont.setColor(1f, 0.92f, 0.55f, 0.95f);
+        drawFontCentered("All systems go — tap the rocket to launch!", cx, ty);
+        ty -= 26f;
+        floatFont.getData().setScale(0.85f);
+        floatFont.setColor(0.50f, 0.55f, 0.72f, 0.55f + 0.28f * pulse);
+        drawFontCentered("tap anywhere to dismiss", cx, ty);
+        floatFont.getData().setScale(1f);
+        floatFont.setColor(1f, 1f, 1f, 1f);
+    }
+
+    private void drawPerkIconHint() {
+        // Speed Keep icon: leftmost slot, X≈42px, icon center Y≈234px
+        drawTutorialCalloutCard(
+            "PERK UNLOCKED!",
+            "Tap any glowing icon to see what it does.",
+            "Perks unlock as your ring speed climbs.",
+            61f, 234f,
+            false, false, true
+        );
+    }
+
+    private void drawBumperHint() {
+        drawFingerDragHint(240f, 90f, 255f, 370f);
+        drawTutorialCalloutCard(
+            "DEPLOY A BUMPER",
+            "Bumpers bounce interns for big SP bursts!",
+            "Hold BUMPER, drag it into the ring!",
+            240f, 90f,
+            true, false
+        );
+    }
+
+    private void drawGravityHint() {
+        drawFingerDragHint(387f, 90f, 295f, 370f);
+        drawTutorialCalloutCard(
+            "GRAVITY WELL UNLOCKED",
+            "Gravity wells pull interns — more collisions!",
+            "Hold GRAVITY, drag it into the ring!",
+            393f, 90f,
+            true, false
+        );
+    }
+
+    /**
+     * Animated finger-drag hint — draws a looping finger moving from (startX,startY)
+     * to (endX,endY), with a dotted path trail and a green press-ripple at the start.
+     * Call inside a batch.begin()…end() block.
+     */
+    private void drawFingerDragHint(float startX, float startY, float endX, float endY) {
+        final float PERIOD = 2.4f;
+        float t = (animTime % PERIOD) / PERIOD;
+
+        // --- Compute finger position / alpha ---
+        float fingerAlpha, fingerX, fingerY;
+        if (t < 0.16f) {
+            fingerAlpha = t / 0.16f;
+            fingerX = startX;
+            fingerY = startY;
+        } else if (t < 0.80f) {
+            float p = (t - 0.16f) / 0.64f;
+            p = p * p * (3f - 2f * p);   // smoothstep ease
+            fingerAlpha = 1f;
+            fingerX = startX + (endX - startX) * p;
+            fingerY = startY + (endY - startY) * p;
+        } else {
+            float p = (t - 0.80f) / 0.20f;
+            fingerAlpha = 1f - p;
+            fingerX = endX;
+            fingerY = endY;
+        }
+
+        float progressT = t < 0.16f ? 0f : t < 0.80f ? (t - 0.16f) / 0.64f : 1f;
+        float dx = endX - startX, dy = endY - startY;
+
+        // --- Dotted path (show unvisited portion only) ---
+        float pathLen = (float) Math.sqrt(dx * dx + dy * dy);
+        int dotCount = Math.max(5, (int)(pathLen / 20f));
+        for (int i = 0; i <= dotCount; i++) {
+            float pt = (float)i / dotCount;
+            if (pt < progressT - 0.05f) continue;   // hide already-passed dots
+            float dotA = 0.32f + 0.16f * MathUtils.sin(animTime * 5f - pt * 11f);
+            dotA = Math.max(0f, dotA) * fingerAlpha * (0.5f + 0.5f * pt);
+            if (dotA < 0.02f) continue;
+            float dotSz = 3.5f + 1.5f * (float)Math.sin(Math.PI * pt);
+            batch.setColor(0.55f, 0.82f, 1f, dotA);
+            batch.draw(texPixel,
+                startX + dx * pt - dotSz * 0.5f,
+                startY + dy * pt - dotSz * 0.5f,
+                dotSz, dotSz);
+        }
+
+        // --- Press-ripple ring at start (first 22% of cycle) ---
+        if (t < 0.22f) {
+            float rt = t / 0.22f;
+            float ripR = 15f + rt * 30f;
+            float ripA = (1f - rt) * 0.88f;
+            final int SEGS = 30;
+            for (int i = 0; i < SEGS; i++) {
+                float angle = (float)(i * Math.PI * 2.0 / SEGS);
+                float rx = startX + (float)Math.cos(angle) * ripR;
+                float ry = startY + (float)Math.sin(angle) * ripR;
+                batch.setColor(0.25f, 1f, 0.50f, ripA);
+                batch.draw(texPixel, rx - 2.8f, ry - 2.8f, 5.6f, 5.6f);
+            }
+        }
+
+        // --- Finger shape: glow-circle tip + rect shaft ---
+        final float TIP_D  = 28f;   // diameter of fingertip
+        final float TIP_R  = TIP_D * 0.5f;
+        final float SHAFT_W = 9f;
+        final float SHAFT_H = 16f;
+
+        // Shadow
+        batch.setColor(0f, 0f, 0f, fingerAlpha * 0.38f);
+        batch.draw(texParticle,
+            fingerX - TIP_R + 3f, fingerY - TIP_R - 3f,
+            TIP_D, TIP_D);
+        batch.draw(texPixel,
+            fingerX - SHAFT_W * 0.5f + 3f, fingerY - TIP_R - SHAFT_H - 3f,
+            SHAFT_W, SHAFT_H);
+
+        // Shaft
+        batch.setColor(0.88f, 0.80f, 0.73f, fingerAlpha * 0.90f);
+        batch.draw(texPixel,
+            fingerX - SHAFT_W * 0.5f, fingerY - TIP_R - SHAFT_H,
+            SHAFT_W, SHAFT_H);
+
+        // Fingertip (glow orb tinted skin-tone)
+        batch.setColor(0.97f, 0.89f, 0.81f, fingerAlpha * 0.95f);
+        batch.draw(texParticle, fingerX - TIP_R, fingerY - TIP_R, TIP_D, TIP_D);
+
+        // Bright highlight
+        batch.setColor(1f, 1f, 1f, fingerAlpha * 0.50f);
+        batch.draw(texParticleCore,
+            fingerX - TIP_R * 0.35f, fingerY + TIP_R * 0.10f,
+            10f, 10f);
+
+        batch.setColor(1f, 1f, 1f, 1f);
+    }
+
+    /** Green-tinted arrow variant for the launch ready hint */
+    private void drawTutorialArrowGreen(float x1, float y1, float x2, float y2) {
+        float dx  = x2 - x1;
+        float dy  = y2 - y1;
+        float len = (float) Math.sqrt(dx * dx + dy * dy);
+        if (len < 2f) return;
+        float nx = dx / len;
+        float ny = dy / len;
+
+        int steps = Math.max(3, (int) (len / 11f));
+        for (int i = 0; i <= steps; i++) {
+            float t    = (float) i / steps;
+            float wave = 0.5f + 0.5f * MathUtils.sin(animTime * 7f - t * 9f);
+            float fade = (0.30f + 0.70f * t) * wave;
+            float sz   = 3.5f + t * 5.5f;
+            float px   = x1 + t * dx;
+            float py   = y1 + t * dy;
+            batch.setColor(0.15f, 1f, 0.40f, fade);
+            batch.draw(texPixel, px - sz * 0.5f, py - sz * 0.5f, sz, sz);
+        }
+        float headBack = 14f, headSpread = 9f;
+        float hbx = x2 - nx * headBack, hby = y2 - ny * headBack;
+        float px2 = -ny, py2 = nx;
+        batch.setColor(0.15f, 1f, 0.40f, 0.88f);
+        float ts = 5.5f;
+        batch.draw(texPixel, x2 - ts * 0.5f,                     y2 - ts * 0.5f,                     ts, ts);
+        batch.draw(texPixel, hbx + px2 * headSpread - ts * 0.5f, hby + py2 * headSpread - ts * 0.5f, ts, ts);
+        batch.draw(texPixel, hbx - px2 * headSpread - ts * 0.5f, hby - py2 * headSpread - ts * 0.5f, ts, ts);
+        batch.setColor(1f, 1f, 1f, 1f);
+    }
+
     private void drawTutorialCalloutCard(String title, String line1, String line2,
                                           float tipX, float tipY,
                                           boolean isAction, boolean arrowFromTop) {
+        drawTutorialCalloutCard(title, line1, line2, tipX, tipY, isAction, arrowFromTop, false);
+    }
+    private void drawTutorialCalloutCard(String title, String line1, String line2,
+                                          float tipX, float tipY,
+                                          boolean isAction, boolean arrowFromTop, boolean isIcon) {
         float cx       = RENDER_W * 0.5f;
         float cardW    = 420f;
         float cardH    = 160f;
         float cardX    = cx - cardW * 0.5f;
-        float cardBotY = 290f;
+        // Place card above the centrifuge (centrifuge top ≈ CCY_PX + CENTRIFUGE_R*PPM = 600)
+        float cardBotY = CCY_PX + CENTRIFUGE_R * PPM + 20f;
 
-        // Dark vignette over the lower portion of the screen (where the stats/buttons live)
+        // Dark vignette over the lower portion of the screen (centrifuge + stats/buttons)
         batch.setColor(0f, 0f, 0f, 0.50f);
         batch.draw(texPixel, 0, 0, RENDER_W, cardBotY);
         batch.setColor(1f, 1f, 1f, 1f);
@@ -2446,7 +3537,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         float pulse = 0.45f + 0.45f * MathUtils.sin(animTime * 5.2f);
         if (isAction) {
             // Full button-sized pulsing fill + border
-            float btnHalf = (RENDER_W - 44f) * 0.125f;
+            float btnHalf = (RENDER_W - 20f - 18f) / 6f; // 3-button layout: btnSz/2 ≈ 73.7px
             batch.setColor(0.18f, 0.92f, 1f, pulse * 0.50f);
             batch.draw(texPixel, tipX - btnHalf, tipY - btnHalf, btnHalf * 2f, btnHalf * 2f);
             float bw = 2.5f;
@@ -2455,6 +3546,17 @@ public class EngineeringLabScreen extends ScreenAdapter {
             batch.draw(texPixel, tipX - btnHalf,        tipY - btnHalf,      btnHalf * 2f, bw);
             batch.draw(texPixel, tipX - btnHalf,        tipY - btnHalf,      bw, btnHalf * 2f);
             batch.draw(texPixel, tipX + btnHalf - bw,   tipY - btnHalf,      bw, btnHalf * 2f);
+        } else if (isIcon) {
+            // Small square glow for icon-sized targets (26×26)
+            float hw = 14f, hh = 14f;
+            batch.setColor(0.20f, 1.00f, 0.55f, pulse * 0.45f);
+            batch.draw(texPixel, tipX - hw, tipY - hh, hw * 2f, hh * 2f);
+            float bw = 2f;
+            batch.setColor(0.20f, 1.00f, 0.55f, pulse * 0.90f);
+            batch.draw(texPixel, tipX - hw,        tipY + hh - bw, hw * 2f, bw);
+            batch.draw(texPixel, tipX - hw,        tipY - hh,      hw * 2f, bw);
+            batch.draw(texPixel, tipX - hw,        tipY - hh,      bw, hh * 2f);
+            batch.draw(texPixel, tipX + hw - bw,   tipY - hh,      bw, hh * 2f);
         } else {
             // Compact label-area underline glow
             float hw = 70f, hh = 14f;
@@ -2574,7 +3676,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     }
 
     private void drawHudBar() {
-        float barY  = RENDER_H - 38f;
+        float barY  = renderViewport.getWorldHeight() - 38f;
         float barX  = 80f;
         float barW  = RENDER_W - 160f;
         float barH  = 3f;
@@ -2610,12 +3712,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 default -> OdysseyTheme.FLOAT_BUMPER;
             };
 
-            // Scale by magnitude: base 14px at ≤20, max 22px at ≥200
-            float scale = 0.55f + Math.min(1f, fe.value / 200f) * 0.35f;
+            // Scale by magnitude: base at ≤20, max at ≥200
+            float scale = 0.72f + Math.min(1f, fe.value / 200f) * 0.38f;
 
             floatFont.getData().setScale(scale);
             floatFont.setColor(c.r, c.g, c.b, alpha);
-            String text = "+" + formatNumber(fe.value);
+            String text = "+" + (int) fe.value;
             floatLayout.setText(floatFont, text);
             floatFont.draw(batch, text, sx - floatLayout.width * 0.5f, sy);
         }
@@ -2623,7 +3725,15 @@ public class EngineeringLabScreen extends ScreenAdapter {
     }
 
     private void drawBackground() {
+        // Draw background at its natural size — ring glow is baked in at RENDER_H
         batch.draw(texBackground, 0, 0, RENDER_W, RENDER_H);
+        // Fill extended area above with space background color
+        float extH = renderViewport.getWorldHeight();
+        if (extH > RENDER_H) {
+            batch.setColor(OdysseyTheme.SPACE_BG.r, OdysseyTheme.SPACE_BG.g, OdysseyTheme.SPACE_BG.b, 1f);
+            batch.draw(texPixel, 0, RENDER_H, RENDER_W, extH - RENDER_H);
+            batch.setColor(1f, 1f, 1f, 1f);
+        }
     }
 
     private void drawCentrifuge() {
@@ -3064,9 +4174,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
         if (freeInternGiven) return;
         if (ShipData.get().sectorReached < 2) return;
         if (balls.size < internCap()) return;
+        if (balls.size >= MAX_INTERNS) return;
 
         freeInternGiven      = true;
-        centrifugeRpmMax     = 10.0f;
+        centrifugeRpmMax     = 10.5f;
         milestoneAchieved[4] = true;
 
         float angle = MathUtils.random(MathUtils.PI2);
@@ -3326,7 +4437,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         float pw = 330f, ph = 110f;
         float px = (RENDER_W - pw) * 0.5f;
-        float py = RENDER_H * 0.60f;
+        float py = renderViewport.getWorldHeight() * 0.60f;
 
         NinePatch popup = game.skin.get("rounded_popup", NinePatch.class);
         batch.setColor(1f, 1f, 1f, alpha);
@@ -3373,14 +4484,14 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         float slideProgress = Math.min(1f, celebTimer / CELEB_SLIDE);
         float ease = 1f - (float) Math.pow(1f - slideProgress, 3.0);
-        float targetY = RENDER_H * 0.28f;
+        float targetY = renderViewport.getWorldHeight() * 0.28f;
         celebSlideY = -200f + (targetY + 200f) * ease;
 
         float alpha = Math.min(1f, celebTimer / 0.12f);
 
         // Dark overlay
         batch.setColor(0f, 0f, 0f, 0.65f * alpha);
-        batch.draw(texPixel, 0, 0, RENDER_W, RENDER_H);
+        batch.draw(texPixel, 0, 0, RENDER_W, renderViewport.getWorldHeight());
 
         // Card
         float cw = 360f, ch = 140f;
@@ -3455,6 +4566,49 @@ public class EngineeringLabScreen extends ScreenAdapter {
     }
 
     private void drawPlacementPreview() {
+        // Drag ghost: show preview above finger so thumb doesn't hide it
+        if (dragMode != PLACE_NONE) {
+            float wx = dragStageX / PPM, wy = dragStageY / PPM;
+            float ddx = wx - CENTRIFUGE_CX, ddy = wy - CENTRIFUGE_CY;
+            boolean inside = (ddx * ddx + ddy * ddy < CENTRIFUGE_R * CENTRIFUGE_R);
+            float alpha = inside ? 0.90f : 0.40f;
+            // Lift ghost 80px above finger so thumb doesn't obscure it
+            float px = dragStageX, py = dragStageY + 80f;
+
+            if (dragMode == PLACE_INTERN) {
+                // Orb glow
+                float orbD = BALL_RADIUS * PPM * 5f; // ~75px display size
+                batch.setColor(0.35f, 0.80f, 1f, alpha);
+                batch.draw(texParticle, px - orbD * 0.5f, py - orbD * 0.5f, orbD, orbD);
+                batch.setColor(1f, 1f, 1f, alpha * 0.8f);
+                float coreD = orbD * 0.45f;
+                batch.draw(texParticleCore, px - coreD * 0.5f, py - coreD * 0.5f, coreD, coreD);
+            } else if (dragMode == PLACE_BUMPER) {
+                Texture icon = isFrostheim() ? texCryoVent : texBumper;
+                float sz = BUMPER_W * 1.2f;
+                batch.setColor(1f, 1f, 1f, alpha);
+                batch.draw(icon, px - sz * 0.5f, py - sz * 0.5f, sz, sz);
+            } else if (dragMode == PLACE_BLADE) {
+                batch.setColor(1f, 0.75f, 0.20f, alpha);
+                float sz = BUMPER_W * 1.2f;
+                batch.draw(texBlade1, px - sz * 0.5f, py - sz * 0.5f, sz, sz);
+            } else if (dragMode == PLACE_GRAVITY) {
+                float fd = gravityFieldR * 2f * PPM, fh = fd * 0.5f;
+                batch.setColor(0.60f, 0.30f, 1f, alpha * 0.55f);
+                batch.draw(texGravField, px - fh, py - fh, fd, fd);
+                Texture icon = isFrostheim() ? texTeslaCoil : texGravCenter;
+                float sz = BUMPER_W * 1.2f;
+                batch.setColor(1f, 1f, 1f, alpha);
+                batch.draw(icon, px - sz * 0.5f, py - sz * 0.5f, sz, sz);
+            } else if (dragMode == PLACE_SPRING_PAD) {
+                batch.setColor(1f, 0.42f, 0.05f, alpha);
+                float sz = BUMPER_W * 1.2f;
+                batch.draw(texBumper, px - sz * 0.5f, py - sz * 0.5f, sz, sz);
+            }
+            batch.setColor(1f, 1f, 1f, 1f);
+            return;
+        }
+        // Legacy placement mode fallback (keyboard/mouse)
         if (placementMode == PLACE_NONE) return;
         touchWorld.set(Gdx.input.getX(), Gdx.input.getY(), 0);
         physViewport.unproject(touchWorld);
@@ -3702,13 +4856,13 @@ public class EngineeringLabScreen extends ScreenAdapter {
             // Status label
             if (!emberCpI) {
                 milestoneStatusLabel.setColor(1f, 0.65f, 0.15f, 1f);
-                milestoneStatusLabel.setText(String.format("Next: ⚙ CP I at %.1f r/s", EMBER_MILESTONE_RPMS[0]));
+                milestoneStatusLabel.setText(String.format("Next: CP I at %.1f r/s", EMBER_MILESTONE_RPMS[0]));
             } else if (!emberCpII) {
                 milestoneStatusLabel.setColor(1f, 0.65f, 0.15f, 1f);
-                milestoneStatusLabel.setText(String.format("Next: ⚙ CP II at %.1f r/s", EMBER_MILESTONE_RPMS[1]));
+                milestoneStatusLabel.setText(String.format("Next: CP II at %.1f r/s", EMBER_MILESTONE_RPMS[1]));
             } else if (!emberCpIII) {
                 milestoneStatusLabel.setColor(1f, 0.65f, 0.15f, 1f);
-                milestoneStatusLabel.setText(String.format("Next: ⚙ CP III at %.1f r/s", EMBER_MILESTONE_RPMS[2]));
+                milestoneStatusLabel.setText(String.format("Next: CP III at %.1f r/s", EMBER_MILESTONE_RPMS[2]));
             } else {
                 milestoneStatusLabel.setColor(1f, 0.45f, 0.10f, 1f);
                 milestoneStatusLabel.setText("All Nova Terra perks active. Hub in overdrive.");
@@ -3760,13 +4914,13 @@ public class EngineeringLabScreen extends ScreenAdapter {
             // Status label
             if (!frostheimCpI) {
                 milestoneStatusLabel.setColor(1f, 0.85f, 0.2f, 1f);
-                milestoneStatusLabel.setText(String.format("Next: ❅ CP I at %.1f r/s", MILESTONE_RPMS[1]));
+                milestoneStatusLabel.setText(String.format("Next: CP I at %.1f r/s", MILESTONE_RPMS[1]));
             } else if (!frostheimCpII) {
                 milestoneStatusLabel.setColor(1f, 0.85f, 0.2f, 1f);
-                milestoneStatusLabel.setText(String.format("Next: ❅ CP II at %.1f r/s", MILESTONE_RPMS[2]));
+                milestoneStatusLabel.setText(String.format("Next: CP II at %.1f r/s", MILESTONE_RPMS[2]));
             } else if (!frostheimCpIII) {
                 milestoneStatusLabel.setColor(1f, 0.85f, 0.2f, 1f);
-                milestoneStatusLabel.setText(String.format("Next: ❅ CP III at %.1f r/s", MILESTONE_RPMS[3]));
+                milestoneStatusLabel.setText(String.format("Next: CP III at %.1f r/s", MILESTONE_RPMS[3]));
             } else {
                 milestoneStatusLabel.setColor(0.27f, 1f, 0.55f, 1f);
                 milestoneStatusLabel.setText("All Frostheim perks active. Blizzard in effect.");
@@ -3774,27 +4928,26 @@ public class EngineeringLabScreen extends ScreenAdapter {
             return;
         }
 
-        // ---- Solara: ring-speed milestone chain ----
+        // ---- Solara: ring-speed milestone chain — one at a time, wait for notif dismiss ----
         int nextIdx = -1;
         for (int i = 0; i < MILESTONE_RPMS.length; i++) {
-            if (i == 4) continue; // free intern: triggered by maxing interns, not ring speed
-            // Index 0 (Elastic Walls) is CP I reward — only applied via applySectorPerks, never here
-            if (i > 0 && !milestoneAchieved[i] && targetRPM >= MILESTONE_RPMS[i]) {
+            if (i == 5) continue; // slot 5 unused on Solara
+            if (!milestoneAchieved[i] && targetRPM >= MILESTONE_RPMS[i]) {
+                if (notifActive) break; // wait — player must dismiss current notif first
                 milestoneAchieved[i] = true;
                 switch (i) {
-                    case 1: applyResonance();                           break;
-                    case 2: ShipData.get().wallEnergyMult = 3f;         break;
-                    case 3: ShipData.get().collisionEnergyMult = 2f;    break;
-                    case 5: applyOverdrive();                           break;
+                    case 0: applyElasticWalls();                            break;
+                    case 1: applyResonance();                               break;
+                    case 2: ShipData.get().wallEnergyMult = 3f;             break;
+                    case 3: ShipData.get().collisionEnergyMult = 2f;        break;
+                    case 4: ShipData.get().bumperMult = 3f;                 break;
                 }
                 showNotif("PERK UNLOCKED", MILESTONE_NAMES[i] + "\n" + MILESTONE_DESCS[i]);
+                break; // one per check
             }
             if (!milestoneAchieved[i] && nextIdx < 0) nextIdx = i;
         }
-        if (nextIdx == 0) {
-            milestoneStatusLabel.setColor(0.62f, 0.62f, 0.70f, 1f);
-            milestoneStatusLabel.setText("Reach Checkpoint I to unlock Elastic Walls");
-        } else if (nextIdx > 0) {
+        if (nextIdx >= 0) {
             milestoneStatusLabel.setColor(1f, 0.85f, 0.2f, 1f);
             milestoneStatusLabel.setText(String.format(
                 "Next: %s at %.1f r/s", MILESTONE_NAMES[nextIdx], MILESTONE_RPMS[nextIdx]));
@@ -4232,10 +5385,19 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private void updatePerkLabel(Label label, String name, float value, float base) {
         label.setText(name + " x" + String.format("%.1f", value));
         if (value > base) {
-            label.setColor(0.28f, 0.92f, 1.00f, 1f);   // bright cyan glow — upgraded
+            label.setColor(0.20f, 1.00f, 0.55f, 1f);   // bright green — upgraded
+            label.setFontScale(1.15f);
         } else {
-            label.setColor(0.62f, 0.68f, 0.82f, 1f);   // readable mid-grey — base value
+            label.setColor(0.75f, 0.78f, 0.90f, 1f);   // light grey — base value
+            label.setFontScale(1.05f);
         }
+    }
+
+    private void updatePerkIcon(com.badlogic.gdx.scenes.scene2d.ui.Image iconImg,
+                                 com.badlogic.gdx.scenes.scene2d.ui.Image lockImg,
+                                 boolean unlocked) {
+        lockImg.setVisible(!unlocked);
+        iconImg.setVisible(unlocked);
     }
 
     /**
@@ -4373,7 +5535,16 @@ public class EngineeringLabScreen extends ScreenAdapter {
         texBlade1.dispose();
         texBlade2.dispose();
         texBlade3.dispose();
-        floatFont.dispose();
+        texRocket.dispose();
+        texLock.dispose();
+        texPerkSpeed.dispose();
+        texPerkElas.dispose();
+        texPerkWall.dispose();
+        texPerkColl.dispose();
+        texPerkBump.dispose();
+        texIconSP.dispose();
+        texIconEnergy.dispose();
+        // floatFont owned by skin — do not dispose here
         ui.dispose();
     }
 }

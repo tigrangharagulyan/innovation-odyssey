@@ -72,9 +72,9 @@ public class MainMenuScreen extends ScreenAdapter {
         this.sr       = new ShapeRenderer();
         this.batch    = new SpriteBatch();
 
-        titleFont = new BitmapFont(); titleFont.getData().setScale(3.2f);
-        bodyFont  = new BitmapFont(); bodyFont.getData().setScale(1.60f);
-        smallFont = new BitmapFont(); smallFont.getData().setScale(1.25f);
+        titleFont = game.skin.getFont("float"); titleFont.getData().setScale(3.2f);
+        bodyFont  = game.skin.getFont("float"); bodyFont.getData().setScale(1.60f);
+        smallFont = game.skin.getFont("float"); smallFont.getData().setScale(1.25f);
 
         int N = 120;
         starX = new float[N]; starY = new float[N]; starA = new float[N];
@@ -111,6 +111,7 @@ public class MainMenuScreen extends ScreenAdapter {
                 // NEW GAME button
                 if (tv.x >= NG_X && tv.x <= NG_X + NG_W && tv.y >= NG_Y && tv.y <= NG_Y + NG_H) {
                     ShipData.get().reset();
+                    game.resetLabScreen();
                     game.transitionTo(GameState.ENGINEERING_LAB);
                     return true;
                 }
@@ -176,16 +177,21 @@ public class MainMenuScreen extends ScreenAdapter {
 
         drawNewGameButton();
 
-        if (showRocketTutorial) drawRocketTutorialBg();
-
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
         drawTitle();
         drawLabels();
         drawBottomBar();
         drawNewGameLabel();
-        if (showRocketTutorial) drawRocketTutorialText();
         batch.end();
+
+        // Tutorial overlay drawn last — on top of all planet labels
+        if (showRocketTutorial) {
+            drawRocketTutorialBg();
+            batch.begin();
+            drawRocketTutorialText();
+            batch.end();
+        }
     }
 
     private void drawStars() {
@@ -198,15 +204,16 @@ public class MainMenuScreen extends ScreenAdapter {
     }
 
     private void drawGrid() {
+        float vh = viewport.getWorldHeight();
         sr.begin(ShapeRenderer.ShapeType.Line);
         sr.setColor(0f, 0.65f, 0.75f, 0.10f);
         float cw = 28f;
-        for (float y = 0; y < H; y += cw) {
+        for (float y = 0; y < vh; y += cw) {
             sr.line(0, y, 64f, y);
             sr.line(W - 64f, y, W, y);
         }
-        for (float x = 0; x <= 64f; x += cw)    sr.line(x, 0, x, H);
-        for (float x = W - 64f; x <= W; x += cw) sr.line(x, 0, x, H);
+        for (float x = 0; x <= 64f; x += cw)    sr.line(x, 0, x, vh);
+        for (float x = W - 64f; x <= W; x += cw) sr.line(x, 0, x, vh);
         sr.end();
     }
 
@@ -350,48 +357,103 @@ public class MainMenuScreen extends ScreenAdapter {
 
     private void drawRocket() {
         float rx = rocketX, ry = rocketY, a = rocketAngle;
-        float sz = 22f; // bigger rocket
+        float ca = (float)Math.cos(a), sa = (float)Math.sin(a);
+        float u = 1.30f;
+        // Local-to-world: point at (fwd, right) → (rx+fwd*ca+right*sa, ry+fwd*sa-right*ca)
 
         sr.begin(ShapeRenderer.ShapeType.Filled);
-        // Tap-hint glow
+
+        // Glow halos
         sr.setColor(CYAN.r, CYAN.g, CYAN.b, 0.07f);
         sr.circle(rx, ry, ROCKET_HIT + 10f, 24);
-        sr.setColor(CYAN.r, CYAN.g, CYAN.b, 0.12f);
+        sr.setColor(CYAN.r, CYAN.g, CYAN.b, 0.13f);
         sr.circle(rx, ry, ROCKET_HIT, 24);
 
-        // Rocket body
-        float tipX = rx + (float)Math.cos(a) * sz * 1.5f,
-              tipY = ry + (float)Math.sin(a) * sz * 1.5f;
-        float lx   = rx + (float)Math.cos(a + 2.2f) * sz,
-              ly   = ry + (float)Math.sin(a + 2.2f) * sz;
-        float ex   = rx + (float)Math.cos(a - 2.2f) * sz,
-              ey   = ry + (float)Math.sin(a - 2.2f) * sz;
-        sr.setColor(0.88f, 0.93f, 1f, 1f);
-        sr.triangle(tipX, tipY, lx, ly, ex, ey);
+        float t1 = 0.70f + 0.30f * (float)Math.sin(animTime * 18f);
+        float t2 = 0.75f + 0.25f * (float)Math.sin(animTime * 25f + 0.9f);
+        float baseF = -u * 18f; // engine bell exit
 
-        // Exhaust core
-        float bx = rx + (float)Math.cos(a + Math.PI) * sz * 0.9f,
-              by = ry + (float)Math.sin(a + Math.PI) * sz * 0.9f;
-        sr.setColor(1f, 0.58f, 0.10f, 0.95f);
-        sr.triangle(lx, ly, ex, ey, bx, by);
+        // Outer flame (yellow, wide)
+        { float hw = u*8.5f*t1, tip = baseF - u*22f*t1;
+          sr.setColor(1f, 0.85f, 0.15f, 0.45f*t1);
+          sr.triangle(rx+baseF*ca-hw*sa, ry+baseF*sa+hw*ca,
+                      rx+baseF*ca+hw*sa, ry+baseF*sa-hw*ca,
+                      rx+tip*ca,         ry+tip*sa); }
 
-        // Flame tongue
-        float fx = rx + (float)Math.cos(a + Math.PI) * sz * 2.1f,
-              fy = ry + (float)Math.sin(a + Math.PI) * sz * 2.1f;
-        sr.setColor(1f, 0.90f, 0.22f, 0.70f);
-        sr.triangle(
-            rx + (float)Math.cos(a + Math.PI + 0.38f) * sz * 0.5f,
-            ry + (float)Math.sin(a + Math.PI + 0.38f) * sz * 0.5f,
-            rx + (float)Math.cos(a + Math.PI - 0.38f) * sz * 0.5f,
-            ry + (float)Math.sin(a + Math.PI - 0.38f) * sz * 0.5f,
-            fx, fy
-        );
+        // Mid flame (orange)
+        { float hw = u*5f, tip = baseF - u*16f*t2;
+          sr.setColor(1f, 0.50f, 0.08f, 0.88f);
+          sr.triangle(rx+baseF*ca-hw*sa, ry+baseF*sa+hw*ca,
+                      rx+baseF*ca+hw*sa, ry+baseF*sa-hw*ca,
+                      rx+tip*ca,         ry+tip*sa); }
+
+        // Core flame (white-hot)
+        { float hw = u*2.2f, tip = baseF - u*8f*t1;
+          sr.setColor(1f, 0.97f, 0.88f, 1f);
+          sr.triangle(rx+baseF*ca-hw*sa, ry+baseF*sa+hw*ca,
+                      rx+baseF*ca+hw*sa, ry+baseF*sa-hw*ca,
+                      rx+tip*ca,         ry+tip*sa); }
+
+        // Left swept fin
+        sr.setColor(0.18f, 0.52f, 0.78f, 1f);
+        sr.triangle(rx + u*3f*ca  - u*9f*sa,  ry + u*3f*sa  + u*9f*ca,
+                    rx - u*16f*ca - u*9f*sa,  ry - u*16f*sa + u*9f*ca,
+                    rx - u*19f*ca - u*22f*sa, ry - u*19f*sa + u*22f*ca);
+
+        // Right swept fin
+        sr.setColor(0.18f, 0.52f, 0.78f, 1f);
+        sr.triangle(rx + u*3f*ca  + u*9f*sa,  ry + u*3f*sa  - u*9f*ca,
+                    rx - u*16f*ca + u*9f*sa,  ry - u*16f*sa - u*9f*ca,
+                    rx - u*19f*ca + u*22f*sa, ry - u*19f*sa - u*22f*ca);
+
+        // Engine bell (trapezoid = 2 triangles)
+        { float bx1=rx-u*13f*ca-u*8f*sa,  by1=ry-u*13f*sa+u*8f*ca,
+                bx2=rx-u*13f*ca+u*8f*sa,  by2=ry-u*13f*sa-u*8f*ca,
+                bx3=rx-u*18f*ca-u*11f*sa, by3=ry-u*18f*sa+u*11f*ca,
+                bx4=rx-u*18f*ca+u*11f*sa, by4=ry-u*18f*sa-u*11f*ca;
+          sr.setColor(0.36f, 0.38f, 0.50f, 1f);
+          sr.triangle(bx1,by1,bx2,by2,bx3,by3);
+          sr.triangle(bx2,by2,bx3,by3,bx4,by4); }
+
+        // Body (rectangle = 2 triangles)
+        { float bw=u*9f;
+          float px1=rx+u*13f*ca-bw*sa, py1=ry+u*13f*sa+bw*ca,
+                px2=rx+u*13f*ca+bw*sa, py2=ry+u*13f*sa-bw*ca,
+                px3=rx-u*13f*ca-bw*sa, py3=ry-u*13f*sa+bw*ca,
+                px4=rx-u*13f*ca+bw*sa, py4=ry-u*13f*sa-bw*ca;
+          sr.setColor(0.80f, 0.86f, 1.00f, 1f);
+          sr.triangle(px1,py1,px2,py2,px3,py3);
+          sr.triangle(px2,py2,px3,py3,px4,py4); }
+
+        // Nose cone
+        sr.setColor(0.50f, 0.74f, 1.00f, 1f);
+        sr.triangle(rx+u*28f*ca,              ry+u*28f*sa,
+                    rx+u*13f*ca-u*9f*sa,      ry+u*13f*sa+u*9f*ca,
+                    rx+u*13f*ca+u*9f*sa,      ry+u*13f*sa-u*9f*ca);
+
+        // Accent stripe (cyan band across body mid-section)
+        { float sw=u*9f;
+          float sx1=rx+u*6f*ca-sw*sa, sy1=ry+u*6f*sa+sw*ca,
+                sx2=rx+u*6f*ca+sw*sa, sy2=ry+u*6f*sa-sw*ca,
+                sx3=rx+u*2f*ca-sw*sa, sy3=ry+u*2f*sa+sw*ca,
+                sx4=rx+u*2f*ca+sw*sa, sy4=ry+u*2f*sa-sw*ca;
+          sr.setColor(0.22f, 0.72f, 1.00f, 0.55f);
+          sr.triangle(sx1,sy1,sx2,sy2,sx3,sy3);
+          sr.triangle(sx2,sy2,sx3,sy3,sx4,sy4); }
+
+        // Porthole window
+        float pcx=rx+u*18f*ca, pcy=ry+u*18f*sa;
+        sr.setColor(0.05f, 0.08f, 0.20f, 1f);
+        sr.circle(pcx, pcy, u*4.2f, 12);
+        sr.setColor(0.28f, 0.82f, 1.00f, 0.82f);
+        sr.circle(pcx, pcy, u*2.5f, 10);
+
         sr.end();
     }
 
     private void drawTitle() {
         titleFont.setColor(CYAN);
-        titleFont.draw(batch, "GALACTIC MAP", 0f, H - 22f, W, Align.center, false);
+        titleFont.draw(batch, "GALACTIC MAP", 0f, viewport.getWorldHeight() - 22f, W, Align.center, false);
     }
 
     private void drawLabels() {
@@ -412,19 +474,22 @@ public class MainMenuScreen extends ScreenAdapter {
         // Tap hint near rocket (offset so it doesn't overlap planet)
         smallFont.setColor(CYAN.r, CYAN.g, CYAN.b, 0.65f);
         float hintX = (currentIdx % 2 == 0) ? rocketX + NR[currentIdx] + 6f : rocketX - 108f;
-        smallFont.draw(batch, "TAP ▶ ENTER BAY", hintX, rocketY + 6f);
+        smallFont.draw(batch, ">> ENTER BAY", hintX, rocketY + 6f);
     }
 
     private void drawBottomBar() {
         ShipData sd = ShipData.get();
         float y = 46f;
-        smallFont.setColor(DIM);  smallFont.draw(batch, "Power:",    28f, y);
-        smallFont.setColor(CYAN); smallFont.draw(batch, String.format("%.0f J", sd.totalJoules), 80f, y);
-        smallFont.setColor(DIM);  smallFont.draw(batch, "Colonies:", 186f, y);
-        smallFont.setColor(CYAN); smallFont.draw(batch, String.valueOf(sd.arrivalsCompleted), 256f, y);
+        smallFont.setColor(DIM);  smallFont.draw(batch, "Energy:", 28f, y);
+        String eStr = sd.totalJoules >= 1_000f
+            ? String.format("%.1fK J", sd.totalJoules / 1000f)
+            : String.format("%.0f J",  sd.totalJoules);
+        smallFont.setColor(CYAN); smallFont.draw(batch, eStr, 96f, y);
+        smallFont.setColor(DIM);  smallFont.draw(batch, "Planets visited:", 196f, y);
+        smallFont.setColor(CYAN); smallFont.draw(batch, String.valueOf(sd.arrivalsCompleted), 360f, y);
         if (sd.arrivalReady) {
             smallFont.setColor(0.22f, 1f, 0.44f, 0.95f);
-            smallFont.draw(batch, "✓ ARRIVAL READY", 302f, y);
+            smallFont.draw(batch, ">> ARRIVAL READY", 302f, y);
         }
     }
 
@@ -448,14 +513,11 @@ public class MainMenuScreen extends ScreenAdapter {
     }
 
     // Tutorial card bounds — shared between bg and text passes
-    private float tutCardX, tutCardY, tutCardW = 300f, tutCardH = 110f;
+    private float tutCardX, tutCardY, tutCardW = 430f, tutCardH = 190f;
 
     private void calcTutCardPos() {
-        tutCardX = rocketX + 52f;
-        tutCardY = rocketY - tutCardH * 0.5f;
-        if (tutCardX + tutCardW > W - 8f) tutCardX = rocketX - tutCardW - 52f;
-        if (tutCardY < 8f) tutCardY = 8f;
-        if (tutCardY + tutCardH > H - 8f) tutCardY = H - tutCardH - 8f;
+        tutCardX = (W - tutCardW) * 0.5f;
+        tutCardY = viewport.getWorldHeight() * 0.5f - tutCardH * 0.5f;
     }
 
     private void drawRocketTutorialBg() {
@@ -463,39 +525,105 @@ public class MainMenuScreen extends ScreenAdapter {
         sr.setProjectionMatrix(viewport.getCamera().combined);
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        float bp   = 0.60f + 0.30f * com.badlogic.gdx.math.MathUtils.sin(animTime * 1.6f);
+        float rp   = 0.28f + 0.28f * com.badlogic.gdx.math.MathUtils.sin(animTime * 3.8f);
+        float cx   = tutCardX + tutCardW * 0.5f;
+
         sr.begin(ShapeRenderer.ShapeType.Filled);
-        // Card bg
-        sr.setColor(0f, 0.04f, 0.16f, 0.92f);
+
+        // Outer glow layers
+        for (int g = 5; g > 0; g--) {
+            float ex = g * 4.5f;
+            sr.setColor(0.10f, 0.50f, 1.00f, 0.022f * g * bp);
+            sr.rect(tutCardX - ex, tutCardY - ex, tutCardW + ex * 2f, tutCardH + ex * 2f);
+        }
+
+        // Dark background
+        sr.setColor(0.02f, 0.04f, 0.15f, 0.97f);
         sr.rect(tutCardX, tutCardY, tutCardW, tutCardH);
-        // Top accent
-        sr.setColor(0.20f, 0.90f, 1f, 0.75f);
-        sr.rect(tutCardX, tutCardY + tutCardH - 3f, tutCardW, 3f);
-        // Arrow line toward rocket
-        float arrowEndX = rocketX - 4f;
-        float arrowEndY = rocketY;
-        float arrowStartX = tutCardX < rocketX ? tutCardX + tutCardW : tutCardX;
-        float arrowStartY = tutCardY + tutCardH * 0.5f;
-        sr.setColor(0.20f, 0.90f, 1f, 0.50f);
-        sr.rectLine(arrowStartX, arrowStartY, arrowEndX, arrowEndY, 1.5f);
+
+        // Inner highlight panel (slightly lighter)
+        sr.setColor(0.06f, 0.11f, 0.26f, 0.55f);
+        sr.rect(tutCardX + 6f, tutCardY + 6f, tutCardW - 12f, tutCardH - 12f);
+
+        // Horizontal divider between title and body
+        float divY = tutCardY + tutCardH - 52f;
+        sr.setColor(0.18f, 0.70f, 1.00f, 0.40f);
+        sr.rect(tutCardX + 30f, divY, tutCardW - 60f, 1.5f);
+        // Diamond on divider
+        float dia = 5f;
+        sr.setColor(0.25f, 0.92f, 1.00f, 0.95f);
+        // draw rotated square as 4 triangles
+        sr.triangle(cx, divY + dia, cx + dia, divY, cx, divY - dia + 1.5f);
+        sr.triangle(cx, divY + dia, cx - dia, divY, cx, divY - dia + 1.5f);
+
+        // Pulsing rocket glow rings
+        sr.setColor(0.15f, 0.85f, 1.00f, rp * 0.25f);
+        sr.circle(rocketX, rocketY, ROCKET_HIT + 24f, 28);
+        sr.setColor(0.15f, 0.85f, 1.00f, rp * 0.55f);
+        sr.circle(rocketX, rocketY, ROCKET_HIT + 14f, 28);
+
+        sr.end();
+
+        sr.begin(ShapeRenderer.ShapeType.Line);
+
+        // Outer border (animated)
+        sr.setColor(0.20f, 0.78f, 1.00f, bp * 0.85f);
+        sr.rect(tutCardX, tutCardY, tutCardW, tutCardH);
+        // Inner border (dimmer)
+        sr.setColor(0.15f, 0.55f, 0.90f, bp * 0.30f);
+        sr.rect(tutCardX + 5f, tutCardY + 5f, tutCardW - 10f, tutCardH - 10f);
+
+        // Pulsing rocket ring outline
+        sr.setColor(0.20f, 0.92f, 1.00f, rp * 0.85f);
+        sr.circle(rocketX, rocketY, ROCKET_HIT + 14f, 28);
+
+        sr.end();
+
+        // HUD corner brackets
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        sr.setColor(0.25f, 0.92f, 1.00f, 0.95f);
+        float bl = 22f, bt = 3f;
+        // top-left
+        sr.rect(tutCardX,              tutCardY + tutCardH - bt, bl, bt);
+        sr.rect(tutCardX,              tutCardY + tutCardH - bl, bt, bl);
+        // top-right
+        sr.rect(tutCardX + tutCardW - bl, tutCardY + tutCardH - bt, bl, bt);
+        sr.rect(tutCardX + tutCardW - bt, tutCardY + tutCardH - bl, bt, bl);
+        // bottom-left
+        sr.rect(tutCardX,              tutCardY, bl, bt);
+        sr.rect(tutCardX,              tutCardY, bt, bl);
+        // bottom-right
+        sr.rect(tutCardX + tutCardW - bl, tutCardY, bl, bt);
+        sr.rect(tutCardX + tutCardW - bt, tutCardY, bt, bl);
         sr.end();
     }
 
     private void drawRocketTutorialText() {
-        float pulse = 0.50f + 0.50f * com.badlogic.gdx.math.MathUtils.sin(animTime * 3.2f);
+        float pulse = 0.50f + 0.50f * com.badlogic.gdx.math.MathUtils.sin(animTime * 2.6f);
 
-        bodyFont.setColor(0.20f, 0.90f, 1f, 1f);
+        // Title — large, cyan
+        bodyFont.setColor(0.25f, 0.95f, 1.00f, 1f);
         bodyFont.draw(batch, "WELCOME, CAPTAIN",
-            tutCardX + 8f, tutCardY + tutCardH - 10f, tutCardW - 16f, Align.left, false);
+            tutCardX + 8f, tutCardY + tutCardH - 12f, tutCardW - 16f, Align.center, false);
 
-        smallFont.setColor(0.82f, 0.86f, 1f, 0.90f);
-        smallFont.draw(batch, "Tap the rocket to enter",
-            tutCardX + 8f, tutCardY + tutCardH - 30f, tutCardW - 16f, Align.left, false);
-        smallFont.draw(batch, "the Engineering Bay.",
-            tutCardX + 8f, tutCardY + tutCardH - 44f, tutCardW - 16f, Align.left, false);
+        // Body lines — centered, just below divider
+        smallFont.setColor(0.80f, 0.88f, 1.00f, 0.92f);
+        smallFont.draw(batch, "Tap the rocket ship to enter the",
+            tutCardX + 8f, tutCardY + tutCardH - 70f, tutCardW - 16f, Align.center, false);
+        smallFont.draw(batch, "Engineering Bay and start your mission.",
+            tutCardX + 8f, tutCardY + tutCardH - 87f, tutCardW - 16f, Align.center, false);
 
-        smallFont.setColor(0.20f, 1f, 0.50f, pulse);
-        smallFont.draw(batch, ">> TAP ROCKET <<",
-            tutCardX, tutCardY + 13f, tutCardW, Align.center, false);
+        // Sub-hint
+        smallFont.setColor(0.55f, 0.65f, 0.80f, 0.75f);
+        smallFont.draw(batch, "Hire orbs · collect energy · travel the galaxy",
+            tutCardX + 8f, tutCardY + tutCardH - 108f, tutCardW - 16f, Align.center, false);
+
+        // Pulsing CTA
+        smallFont.setColor(0.22f, 1.00f, 0.52f, pulse);
+        smallFont.draw(batch, ">> TAP THE ROCKET TO BEGIN <<",
+            tutCardX, tutCardY + 18f, tutCardW, Align.center, false);
     }
 
     @Override public void resize(int w, int h) { viewport.update(w, h, true); }
@@ -504,8 +632,6 @@ public class MainMenuScreen extends ScreenAdapter {
     public void dispose() {
         sr.dispose();
         batch.dispose();
-        titleFont.dispose();
-        bodyFont.dispose();
-        smallFont.dispose();
+        // fonts owned by skin — do not dispose here
     }
 }

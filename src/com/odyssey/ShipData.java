@@ -74,6 +74,8 @@ public final class ShipData {
     public float lastArrivalJourneyDays = 0f;
     public float crystals               = 0f;
     public float bumperSparkValue       = 20f;
+    public float bumperMult            = 1.0f;
+    public float gravityMult           = 1.0f;
 
     // Offline farming
     public int[]  internsLeftOnPlanet  = new int[PLANETS.length];
@@ -115,6 +117,8 @@ public final class ShipData {
         lastArrivalJourneyDays  = 0f;
         crystals                = 0f;
         bumperSparkValue        = 20f;
+        bumperMult              = 1.0f;
+        gravityMult             = 1.0f;
         lastFarmingTimestamp    = 0L;
         for (int i = 0; i < internsLeftOnPlanet.length; i++) internsLeftOnPlanet[i] = 0;
         pendingContactEvents.clear();
