@@ -2,6 +2,10 @@ plugins {
     id 'com.android.application'
 }
 
+configurations {
+    natives
+}
+
 android {
     namespace 'com.odyssey'
     compileSdk 34
@@ -17,9 +21,11 @@ android {
     sourceSets {
         main {
             manifest.srcFile 'src/main/AndroidManifest.xml'
-            java.srcDirs = ['src/main/java', '../../src']
-            java.excludes = ['**/TeaVMLauncher.java', '**/DesktopLauncher.java', 'Main.java']
-            assets.srcDirs = ['../../assets']
+            java.srcDirs = [file('src/main/java'), rootProject.file('src')]
+            java.exclude '**/TeaVMLauncher.java'
+            java.exclude '**/DesktopLauncher.java'
+            java.exclude 'Main.java'
+            assets.srcDirs = [rootProject.file('assets')]
             res.srcDirs = ['src/main/res']
         }
     }
