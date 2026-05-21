@@ -11,6 +11,7 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.Align;
+import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.odyssey.GameState;
 import com.odyssey.OdysseyGame;
@@ -51,7 +52,7 @@ public class MainMenuScreen extends ScreenAdapter {
     private static final float NG_X = 312f, NG_Y = 16f, NG_W = 148f, NG_H = 36f;
 
     private final OdysseyGame   game;
-    private final FitViewport   viewport;
+    private final ExtendViewport viewport;
     private final ShapeRenderer sr;
     private final SpriteBatch   batch;
     private final BitmapFont    titleFont, bodyFont, smallFont;
@@ -67,13 +68,13 @@ public class MainMenuScreen extends ScreenAdapter {
 
     public MainMenuScreen(OdysseyGame game) {
         this.game     = game;
-        this.viewport = new FitViewport(W, H);
+        this.viewport = new ExtendViewport(W, H);
         this.sr       = new ShapeRenderer();
         this.batch    = new SpriteBatch();
 
-        titleFont = new BitmapFont(); titleFont.getData().setScale(2.2f);
-        bodyFont  = new BitmapFont(); bodyFont.getData().setScale(0.90f);
-        smallFont = new BitmapFont(); smallFont.getData().setScale(0.70f);
+        titleFont = new BitmapFont(); titleFont.getData().setScale(3.2f);
+        bodyFont  = new BitmapFont(); bodyFont.getData().setScale(1.60f);
+        smallFont = new BitmapFont(); smallFont.getData().setScale(1.25f);
 
         int N = 120;
         starX = new float[N]; starY = new float[N]; starA = new float[N];
@@ -447,7 +448,7 @@ public class MainMenuScreen extends ScreenAdapter {
     }
 
     // Tutorial card bounds — shared between bg and text passes
-    private float tutCardX, tutCardY, tutCardW = 224f, tutCardH = 78f;
+    private float tutCardX, tutCardY, tutCardW = 300f, tutCardH = 110f;
 
     private void calcTutCardPos() {
         tutCardX = rocketX + 52f;

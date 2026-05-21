@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #060810;
+    font-family: 'Rajdhani', sans-serif;
+    color: #C8D8F0;
+    display: flex;
+    gap: 24px;
+    padding: 20px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  h2 { color: #C8D8F0; font-size: 15px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 4px; }
+  .subtitle { color: #3A4A6A; font-size: 10px; font-family: 'Share Tech Mono', monospace; margin-bottom: 16px; letter-spacing: 1px; }
+  .label { color: #3A4A6A; font-size: 9px; letter-spacing: 3px; text-transform: uppercase; font-family: 'Share Tech Mono', monospace; margin-bottom: 8px; }
+
+  /* Phone frame */
+  .phone {
+    width: 240px;
+    height: 426px;
+    background: #080810;
+    border: 1px solid #1A2040;
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── TOP BAR ── */
+  .top-bar {
+    background: #0B0D1A;
+    border-bottom: 1px solid #12182A;
+    padding: 5px 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .planet-tag {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 7px;
+    color: #2255CC;
+    letter-spacing: 2px;
+  }
+  .energy-bar-wrap {
+    flex: 1;
+    height: 3px;
+    background: #12182A;
+    position: relative;
+  }
+  .energy-bar-fill {
+    height: 100%;
+    background: #2255CC;
+    position: relative;
+  }
+  .energy-bar-fill::after {
+    content: '';
+    position: absolute;
+    right: 0; top: -2px;
+    width: 2px; height: 7px;
+    background: #88AAFF;
+  }
+  .top-vals {
+    display: flex;
+    gap: 6px;
+  }
+  .tv { font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #8899BB; white-space: nowrap; }
+  .tv b { color: #C8D8F0; font-weight: normal; }
+  .tv-sp { color: #CC9900; }
+
+  /* ── CENTRIFUGE AREA ── */
+  .centrifuge-area {
+    flex: 1;
+    position: relative;
+    background: #080810;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .ring-outer {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    border: 2px solid #1A2A4A;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ring-inner {
+    width: 130px;
+    height: 130px;
+    border-radius: 50%;
+    border: 1px solid #12182A;
+    position: relative;
+  }
+  /* Hub core */
+  .hub {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #1A3A6A 0%, #0A1428 70%);
+    border: 1px solid #2255CC;
+  }
+  /* Orbs */
+  .orb {
+    position: absolute;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #88AAEE 0%, #2244AA 80%);
+    border: 1px solid #4466CC;
+    box-shadow: 0 0 5px rgba(34,85,204,0.5);
+  }
+  /* Speed ring label */
+  .ring-speed {
+    position: absolute;
+    top: 8px; right: 8px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 7px;
+    color: #2255CC;
+    letter-spacing: 1px;
+  }
+  /* Sector label */
+  .sector-info {
+    position: absolute;
+    bottom: 8px; left: 8px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 7px;
+    color: #3A4A6A;
+  }
+  /* Milestone strip left */
+  .milestone-strip {
+    position: absolute;
+    left: 8px; top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .ms-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: #12182A;
+    border: 1px solid #1E2A48;
+  }
+  .ms-dot.done { background: #2255CC; border-color: #4477EE; }
+
+  /* Floating number */
+  .float-demo {
+    position: absolute;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    color: #CC9900;
+    pointer-events: none;
+    animation: fd 2s ease-out infinite;
+    top: 40%; left: 55%;
+  }
+  @keyframes fd {
+    0%   { opacity:0; transform: translateY(0); }
+    20%  { opacity:1; transform: translateY(-8px); }
+    100% { opacity:0; transform: translateY(-28px); }
+  }
+
+  /* ── BOTTOM PANEL ── */
+  .bottom-panel {
+    background: #0B0D1A;
+    border-top: 1px solid #12182A;
+    padding: 6px;
+    flex-shrink: 0;
+  }
+  .btn-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 4px;
+    margin-bottom: 5px;
+  }
+  .btn {
+    padding: 7px 3px 6px;
+    text-align: center;
+    clip-path: polygon(4px 0%, 100% 0%, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0% 100%, 0% 4px);
+    cursor: pointer;
+  }
+  .btn-sym   { display:block; font-family:'Share Tech Mono',monospace; font-size:10px; line-height:1; margin-bottom:3px; }
+  .btn-label { display:block; font-size:6px; font-weight:700; letter-spacing:1px; text-transform:uppercase; }
+  .btn-sub   { display:block; font-family:'Share Tech Mono',monospace; font-size:6px; margin-top:2px; }
+
+  .bt-buy  { background:#0C0F1C; border-left:1px solid #2255CC; }
+  .bt-buy  .btn-sym { color:#88AAEE; } .bt-buy .btn-label { color:#C8D8F0; } .bt-buy .btn-sub { color:#CC9900; }
+  .bt-lock { background:#0A0C14; } .bt-lock .btn-sym,.bt-lock .btn-label,.bt-lock .btn-sub { color:#1A2030; }
+  .bt-go   { background:#0A1E0C; border-left:2px solid #00FF44; border-top:1px solid #00CC33; animation:gp 1.6s ease-in-out infinite; }
+  .bt-go   .btn-sym { color:#00FF44; } .bt-go .btn-label { color:#00FF44; } .bt-go .btn-sub { color:#00AA33; }
+  @keyframes gp { 0%,100%{border-left-color:#00AA33} 50%{border-left-color:#00FF44; box-shadow:inset 0 0 8px rgba(0,255,68,0.07)} }
+
+  /* Perks row */
+  .perks-row {
+    display: flex;
+    gap: 3px;
+  }
+  .perk {
+    flex: 1;
+    background: #0C0E1A;
+    border-top: 1px solid #12182A;
+    padding: 4px 3px;
+    text-align: center;
+  }
+  .perk-name { font-size: 6px; font-weight: 700; letter-spacing: 1px; color: #3A4A6A; text-transform: uppercase; display: block; }
+  .perk-val  { font-family: 'Share Tech Mono', monospace; font-size: 6px; color: #2255CC; display: block; margin-top: 1px; }
+  .perk.active .perk-name { color: #88AAEE; }
+
+  /* ── SIDE PANEL ── */
+  .desc-panel {
+    flex: 1;
+    min-width: 200px;
+    max-width: 320px;
+  }
+  .change-list { list-style: none; padding: 0; }
+  .change-list li {
+    border-left: 2px solid #12182A;
+    padding: 6px 10px;
+    margin-bottom: 6px;
+    font-size: 12px;
+    color: #8899BB;
+    font-family: 'Share Tech Mono', monospace;
+    line-height: 1.5;
+  }
+  .change-list li span { color: #2255CC; }
+  .change-list li.new { border-left-color: #2255CC; }
+  .change-list li.juice { border-left-color: #00AA33; }
+  .change-list li.ux { border-left-color: #CC9900; }
+</style>
+</head>
+<body>
+
+<div class="desc-panel">
+  <h2>Lab Screen Layout</h2>
+  <p class="subtitle">// 480x854 → shown at 240x427</p>
+  <br>
+  <div class="label">Phase 1 changes</div>
+  <ul class="change-list">
+    <li class="new"><span>[SKIN]</span> chamfered buttons, border-state system, Rajdhani+ShareTechMono fonts</li>
+    <li class="new"><span>[HUD]</span> top bar: planet tag · energy bar · E/s · SP always visible</li>
+    <li class="new"><span>[ORBS]</span> blue glow, consistent radius, border ring</li>
+    <li class="new"><span>[RING]</span> double-ring visual (outer wall + inner track)</li>
+    <li class="new"><span>[PERKS]</span> small readout strip below buttons showing active multipliers</li>
+  </ul>
+  <br>
+  <div class="label">Phase 2 — juice (next)</div>
+  <ul class="change-list">
+    <li class="juice"><span>[SHAKE]</span> camera offset on milestone / checkpoint unlock</li>
+    <li class="juice"><span>[FLOAT]</span> color-coded: SP=gold, E=blue, gravity=teal</li>
+    <li class="juice"><span>[TRANS]</span> 0.25s fade between screens</li>
+    <li class="juice"><span>[SOUND]</span> SoundManager — hire / collision / launch / milestone</li>
+  </ul>
+  <br>
+  <div class="label">Phase 3 — UX clarity (after)</div>
+  <ul class="change-list">
+    <li class="ux"><span>[CP]</span> milestone celebration full-screen pop</li>
+    <li class="ux"><span>[TIP]</span> dismissable first-run tooltips</li>
+    <li class="ux"><span>[MAP]</span> main menu planet pulse + progress ring</li>
+  </ul>
+</div>
+
+<!-- PHONE MOCKUP -->
+<div>
+  <div class="label" style="margin-bottom:8px">LIVE MOCKUP</div>
+  <div class="phone">
+
+    <!-- TOP BAR -->
+    <div class="top-bar">
+      <span class="planet-tag">SOLARA</span>
+      <div class="energy-bar-wrap">
+        <div class="energy-bar-fill" style="width:40%"></div>
+      </div>
+      <div class="top-vals">
+        <span class="tv"><b>3.2</b>/8K E</span>
+        <span class="tv"><b>54</b> E/s</span>
+        <span class="tv tv-sp">4,230 SP</span>
+      </div>
+    </div>
+
+    <!-- CENTRIFUGE -->
+    <div class="centrifuge-area">
+      <div class="ring-outer">
+        <div class="ring-inner">
+          <div class="hub"></div>
+          <!-- orbs -->
+          <div class="orb" style="top:18px;left:50%;transform:translateX(-50%)"></div>
+          <div class="orb" style="top:50%;right:12px;transform:translateY(-50%)"></div>
+          <div class="orb" style="bottom:22px;left:28px"></div>
+        </div>
+      </div>
+      <div class="ring-speed">4.5 r/s</div>
+      <div class="sector-info">→ CP I</div>
+      <div class="milestone-strip">
+        <div class="ms-dot done"></div>
+        <div class="ms-dot"></div>
+        <div class="ms-dot"></div>
+      </div>
+      <div class="float-demo">+20 SP</div>
+    </div>
+
+    <!-- BOTTOM PANEL -->
+    <div class="bottom-panel">
+      <div class="btn-grid">
+        <div class="btn bt-buy">
+          <span class="btn-sym">[+]</span>
+          <span class="btn-label">Hire Orb</span>
+          <span class="btn-sub">80 SP</span>
+        </div>
+        <div class="btn bt-buy">
+          <span class="btn-sym">&#9633;</span>
+          <span class="btn-label">Bumper</span>
+          <span class="btn-sub">200 SP</span>
+        </div>
+        <div class="btn bt-lock">
+          <span class="btn-sym">&#9678;</span>
+          <span class="btn-label">Gravity</span>
+          <span class="btn-sub">-- --</span>
+        </div>
+        <div class="btn bt-go">
+          <span class="btn-sym">&gt;&gt;</span>
+          <span class="btn-label">Launch</span>
+          <span class="btn-sub">CP I RDY</span>
+        </div>
+      </div>
+      <div class="perks-row">
+        <div class="perk active">
+          <span class="perk-name">Coll</span>
+          <span class="perk-val">x1.0</span>
+        </div>
+        <div class="perk active">
+          <span class="perk-name">Wall</span>
+          <span class="perk-val">x1.0</span>
+        </div>
+        <div class="perk">
+          <span class="perk-name">Boost</span>
+          <span class="perk-val">x1.5</span>
+        </div>
+        <div class="perk">
+          <span class="perk-name">Bump</span>
+          <span class="perk-val">x5.0</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

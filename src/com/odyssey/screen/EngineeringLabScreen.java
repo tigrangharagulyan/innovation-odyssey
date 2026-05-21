@@ -22,6 +22,7 @@ import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.odyssey.GameState;
@@ -153,12 +154,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private World              world;
     private Body               centrifugeBody;
     private OrthographicCamera physCam;
-    private FitViewport        physViewport;
+    private ExtendViewport     physViewport;
 
     // Rendering
     private SpriteBatch        batch;
     private OrthographicCamera renderCam;
-    private FitViewport        renderViewport;
+    private ExtendViewport     renderViewport;
     private Texture            texBackground;
     private Texture            texParticle;       // glowing energy orb
     private Texture            texParticleCore;   // bright inner core
@@ -1004,7 +1005,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private void buildRendering() {
         batch = new SpriteBatch();
         renderCam = new OrthographicCamera();
-        renderViewport = new FitViewport(RENDER_W, RENDER_H, renderCam);
+        renderViewport = new ExtendViewport(RENDER_W, RENDER_H, renderCam);
         renderCam.position.set(RENDER_W / 2f, RENDER_H / 2f, 0f);
         floatFont   = new com.badlogic.gdx.graphics.g2d.BitmapFont();
         floatLayout = new com.badlogic.gdx.graphics.g2d.GlyphLayout();
@@ -1017,7 +1018,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         world.setContactListener(new EnergyContactListener());
 
         physCam = new OrthographicCamera();
-        physViewport = new FitViewport(WORLD_W, WORLD_H, physCam);
+        physViewport = new ExtendViewport(WORLD_W, WORLD_H, physCam);
         physCam.position.set(WORLD_W * 0.5f, WORLD_H * 0.5f, 0f);
 
         spawnWalls();
@@ -1200,7 +1201,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     // ---- UI setup ---------------------------------------------------------------
 
     private void buildUI() {
-        ui = new Stage(new FitViewport(RENDER_W, RENDER_H));
+        ui = new Stage(new ExtendViewport(RENDER_W, RENDER_H));
 
         Color panelBg     = new Color(0.04f, 0.06f, 0.16f, 0.92f);
         Color panelBgSolid = new Color(0.04f, 0.06f, 0.18f, 0.97f);
@@ -2375,39 +2376,39 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         float cx = RENDER_W * 0.5f;
         float y  = RENDER_H * 0.84f;
-        float lh = 27f;
+        float lh = 36f;
 
-        floatFont.getData().setScale(1.55f);
+        floatFont.getData().setScale(2.10f);
         floatFont.setColor(0.20f, 0.80f, 1.00f, 1f);
         drawFontCentered("ENGINEERING BAY", cx, y);
         y -= lh * 1.3f;
 
-        floatFont.getData().setScale(0.95f);
+        floatFont.getData().setScale(1.35f);
         floatFont.setColor(1f, 0.82f, 0.30f, 1f);
         drawFontCentered(planet.name.toUpperCase() + " SYSTEM", cx, y);
         y -= lh * 1.6f;
 
-        floatFont.getData().setScale(0.78f);
+        floatFont.getData().setScale(1.10f);
         float a = 0.90f;
 
         floatFont.setColor(0.85f, 0.88f, 1f, a);
-        drawFontCentered("Interns (orbs) bounce inside the centrifuge ring.", cx, y); y -= lh;
+        drawFontCentered("Interns (orbs) bounce inside the ring.", cx, y); y -= lh;
 
         floatFont.setColor(0.25f, 0.95f, 1f, a);
         drawFontCentered("Each collision earns SPACE POINTS (SP)", cx, y); y -= lh;
 
         floatFont.setColor(0.85f, 0.88f, 1f, a);
-        drawFontCentered("Spend SP to buy more Interns, Bumpers", cx, y); y -= lh * 0.78f;
+        drawFontCentered("Spend SP to buy Interns, Bumpers,", cx, y); y -= lh * 0.82f;
         drawFontCentered("and Gravity Wells.", cx, y); y -= lh * 1.15f;
 
         floatFont.setColor(0.27f, 1f, 0.55f, a);
-        drawFontCentered("More Interns -> faster ring -> more Energy (E)", cx, y); y -= lh;
+        drawFontCentered("More Interns -> faster ring -> more Energy", cx, y); y -= lh;
 
         floatFont.setColor(1f, 0.62f, 0.12f, a);
-        drawFontCentered("Energy fuels your LAUNCH to the next checkpoint.", cx, y); y -= lh * 1.6f;
+        drawFontCentered("Energy fuels your LAUNCH to the next sector.", cx, y); y -= lh * 1.6f;
 
         float pulse = 0.55f + MathUtils.sin(animTime * 3.5f) * 0.45f;
-        floatFont.getData().setScale(0.88f);
+        floatFont.getData().setScale(1.25f);
         floatFont.setColor(0.55f, 0.60f, 0.70f, pulse);
         drawFontCentered("TAP ANYWHERE TO BEGIN", cx, y);
 
@@ -2426,10 +2427,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
                                           float tipX, float tipY,
                                           boolean isAction, boolean arrowFromTop) {
         float cx       = RENDER_W * 0.5f;
-        float cardW    = 340f;
-        float cardH    = 112f;
+        float cardW    = 420f;
+        float cardH    = 160f;
         float cardX    = cx - cardW * 0.5f;
-        float cardBotY = 310f;
+        float cardBotY = 290f;
 
         // Dark vignette over the lower portion of the screen (where the stats/buttons live)
         batch.setColor(0f, 0f, 0f, 0.50f);
@@ -2486,8 +2487,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
         batch.setColor(1f, 1f, 1f, 1f);
 
         // Title
-        float ty = cardBotY + cardH - 20f;
-        floatFont.getData().setScale(0.90f);
+        float ty = cardBotY + cardH - 26f;
+        floatFont.getData().setScale(1.55f);
         if (isAction) {
             floatFont.setColor(0.20f, 0.90f, 1f, 1f);
         } else {
@@ -2500,22 +2501,22 @@ public class EngineeringLabScreen extends ScreenAdapter {
                        isAction ? 0.68f : 0.75f,
                        isAction ? 1f    : 0.18f,
                        0.28f);
-        batch.draw(texPixel, cardX + 14f, ty - 7f, cardW - 28f, 1f);
+        batch.draw(texPixel, cardX + 14f, ty - 10f, cardW - 28f, 1.5f);
         batch.setColor(1f, 1f, 1f, 1f);
 
         // Body lines
-        ty -= 24f;
-        floatFont.getData().setScale(0.74f);
+        ty -= 34f;
+        floatFont.getData().setScale(1.18f);
         floatFont.setColor(1f, 0.88f, 0.45f, 0.95f);
         drawFontCentered(line1, cx, ty);
-        ty -= 20f;
+        ty -= 28f;
         floatFont.setColor(0.78f, 0.85f, 0.98f, 0.88f);
         drawFontCentered(line2, cx, ty);
 
         // Footer: waiting message (action) or tap-to-continue (observation)
-        ty -= 24f;
+        ty -= 30f;
         float fp = 0.38f + 0.28f * MathUtils.sin(animTime * 2.6f);
-        floatFont.getData().setScale(0.52f);
+        floatFont.getData().setScale(0.88f);
         if (isAction) {
             floatFont.setColor(0.48f, 0.90f, 0.48f, fp);
             drawFontCentered("waiting for you to tap ADD ORB ...", cx, ty);

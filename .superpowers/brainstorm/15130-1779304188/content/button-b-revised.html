@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0A0A12;
+    font-family: 'Courier New', monospace;
+    color: #F0E8FF;
+    padding: 20px;
+    min-height: 100vh;
+  }
+
+  h2 { color: #BF5FFF; font-size: 18px; margin-bottom: 6px; }
+  .subtitle { color: #8866AA; font-size: 12px; margin-bottom: 20px; }
+
+  /* ─── HUD STRIP ─── */
+  .hud {
+    background: #0F0F1E;
+    border: 1px solid #2A1A4A;
+    border-radius: 10px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 12px;
+  }
+  .hud-planet {
+    color: #BF5FFF;
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .hud-bar-wrap {
+    flex: 1;
+    background: #1A0E2E;
+    height: 7px;
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+  }
+  .hud-bar-fill {
+    height: 100%;
+    width: 40%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #7722CC, #BF5FFF);
+    box-shadow: 0 0 8px #BF5FFF88;
+    animation: barPulse 2s ease-in-out infinite;
+  }
+  @keyframes barPulse {
+    0%, 100% { box-shadow: 0 0 6px #BF5FFF66; }
+    50%       { box-shadow: 0 0 14px #BF5FFFcc; }
+  }
+  .hud-rate {
+    color: #7755AA;
+    font-size: 10px;
+    white-space: nowrap;
+  }
+  .hud-sp {
+    color: #FFD700;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .hud-e-val {
+    color: #BF5FFF;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  /* ─── BUTTON GRID ─── */
+  .btn-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 8px;
+  }
+
+  .btn {
+    border-radius: 10px;
+    padding: 12px 6px;
+    text-align: center;
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.1s;
+    user-select: none;
+  }
+  .btn:active { transform: scale(0.95); }
+
+  .btn-icon { font-size: 20px; display: block; margin-bottom: 5px; }
+  .btn-label { font-size: 9px; color: #F0E8FF; display: block; letter-spacing: 0.5px; text-transform: uppercase; }
+  .btn-sub   { font-size: 9px; display: block; margin-top: 2px; }
+
+  /* STATE: LOCKED */
+  .btn-locked {
+    background: #0D0D18;
+    opacity: 0.22;
+    cursor: not-allowed;
+    filter: grayscale(0.7);
+  }
+  .btn-locked .btn-sub { color: #444; }
+
+  /* STATE: BUYABLE (can afford with SP) */
+  .btn-buyable {
+    background: #1A0B2E;
+    box-shadow: 0 0 10px rgba(191,95,255,0.25);
+  }
+  .btn-buyable .btn-sub { color: #FFD700; }
+
+  /* STATE: AVAILABLE (unlocked, not affordable) */
+  .btn-available {
+    background: #120820;
+    box-shadow: 0 0 6px rgba(191,95,255,0.1);
+  }
+  .btn-available .btn-sub { color: #664488; }
+
+  /* STATE: ACTIVE/PLACING */
+  .btn-active {
+    background: #1A1A00;
+    border: 1px solid #BF5FFF;
+    box-shadow: 0 0 12px rgba(191,95,255,0.4);
+  }
+  .btn-active .btn-sub { color: #BF5FFF; }
+
+  /* STATE: LAUNCH READY */
+  .btn-launch {
+    background: linear-gradient(135deg, #1AFF70 0%, #00CC55 100%);
+    animation: launchPulse 1.4s ease-in-out infinite;
+    cursor: pointer;
+  }
+  .btn-launch .btn-label { color: #030F06; font-weight: bold; }
+  .btn-launch .btn-sub   { color: #030F06; }
+  @keyframes launchPulse {
+    0%, 100% { box-shadow: 0 0 12px rgba(57,255,20,0.5); }
+    50%       { box-shadow: 0 0 28px rgba(57,255,20,0.9), 0 0 48px rgba(57,255,20,0.3); }
+  }
+
+  /* STATE: LAUNCH NOT READY */
+  .btn-launch-locked {
+    background: #0F1A10;
+    cursor: not-allowed;
+  }
+  .btn-launch-locked .btn-label { color: #39FF14; }
+  .btn-launch-locked .btn-sub   { color: #2A6633; font-size: 8px; }
+
+  /* ─── DEMO SECTIONS ─── */
+  .demo-section {
+    margin-bottom: 24px;
+  }
+  .demo-label {
+    color: #664488;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #1A0E2E;
+    padding-bottom: 4px;
+  }
+
+  /* ─── FLOATING NUMBER PREVIEW ─── */
+  .float-preview {
+    background: #0F0F1E;
+    border: 1px solid #1A0E2E;
+    border-radius: 10px;
+    padding: 14px;
+    margin-top: 16px;
+    position: relative;
+    height: 80px;
+    overflow: hidden;
+  }
+  .float-num {
+    position: absolute;
+    font-size: 14px;
+    font-weight: bold;
+    animation: floatUp 2s ease-out infinite;
+    pointer-events: none;
+  }
+  .fn-sp   { color: #FFD700; text-shadow: 0 0 8px #FFD700; left: 20%;  animation-delay: 0s; }
+  .fn-e    { color: #BF5FFF; text-shadow: 0 0 8px #BF5FFF; left: 50%;  animation-delay: 0.7s; }
+  .fn-grav { color: #00FFCC; text-shadow: 0 0 8px #00FFCC; left: 75%;  animation-delay: 1.3s; }
+  @keyframes floatUp {
+    0%   { opacity: 0;   transform: translateY(50px) scale(0.7); }
+    15%  { opacity: 1;   transform: translateY(30px) scale(1.1); }
+    80%  { opacity: 0.8; transform: translateY(10px) scale(1.0); }
+    100% { opacity: 0;   transform: translateY(0px)  scale(0.9); }
+  }
+  .float-label {
+    color: #664488;
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    position: absolute;
+    top: 8px; left: 14px;
+  }
+</style>
+</head>
+<body>
+
+<h2>Button Design B — Revised</h2>
+<p class="subtitle">All button states + HUD strip + floating numbers. Neon Dark palette.</p>
+
+<!-- HUD STRIP -->
+<div class="demo-section">
+  <div class="demo-label">HUD Strip (always visible)</div>
+  <div class="hud">
+    <span class="hud-planet">SOLARA</span>
+    <div class="hud-bar-wrap">
+      <div class="hud-bar-fill"></div>
+    </div>
+    <span class="hud-e-val">3.2/8.0KE</span>
+    <span class="hud-rate">54 E/s</span>
+    <span class="hud-sp">◆ 4,230</span>
+  </div>
+</div>
+
+<!-- SCENARIO 1: early game -->
+<div class="demo-section">
+  <div class="demo-label">Scenario — Early (can buy orb, bumper locked, launch not ready)</div>
+  <div class="btn-grid">
+    <div class="btn btn-buyable">
+      <span class="btn-icon">🧑</span>
+      <span class="btn-label">Add Orb</span>
+      <span class="btn-sub">80 SP</span>
+    </div>
+    <div class="btn btn-locked">
+      <span class="btn-icon">⬡</span>
+      <span class="btn-label">Bumper</span>
+      <span class="btn-sub">Locked</span>
+    </div>
+    <div class="btn btn-locked">
+      <span class="btn-icon">🌀</span>
+      <span class="btn-label">Gravity</span>
+      <span class="btn-sub">Locked</span>
+    </div>
+    <div class="btn btn-launch-locked">
+      <span class="btn-icon">🚀</span>
+      <span class="btn-label">Launch</span>
+      <span class="btn-sub">3.2 / 8.0KE</span>
+    </div>
+  </div>
+</div>
+
+<!-- SCENARIO 2: mid game -->
+<div class="demo-section">
+  <div class="demo-label">Scenario — Mid (all unlocked, gravity affordable, launch almost ready)</div>
+  <div class="btn-grid">
+    <div class="btn btn-available">
+      <span class="btn-icon">🧑</span>
+      <span class="btn-label">Add Orb</span>
+      <span class="btn-sub" style="color:#444">0 SP left</span>
+    </div>
+    <div class="btn btn-buyable">
+      <span class="btn-icon">⬡</span>
+      <span class="btn-label">Bumper</span>
+      <span class="btn-sub">200 SP</span>
+    </div>
+    <div class="btn btn-active">
+      <span class="btn-icon">🌀</span>
+      <span class="btn-label">▶ Placing</span>
+      <span class="btn-sub">Tap ring</span>
+    </div>
+    <div class="btn btn-launch-locked">
+      <span class="btn-icon">🚀</span>
+      <span class="btn-label">Launch</span>
+      <span class="btn-sub">6.8 / 8.0KE</span>
+    </div>
+  </div>
+</div>
+
+<!-- SCENARIO 3: launch ready -->
+<div class="demo-section">
+  <div class="demo-label">Scenario — Launch Ready (pulsing green)</div>
+  <div class="btn-grid">
+    <div class="btn btn-buyable">
+      <span class="btn-icon">🧑</span>
+      <span class="btn-label">Add Orb</span>
+      <span class="btn-sub">80 SP</span>
+    </div>
+    <div class="btn btn-buyable">
+      <span class="btn-icon">⬡</span>
+      <span class="btn-label">Bumper</span>
+      <span class="btn-sub">200 SP</span>
+    </div>
+    <div class="btn btn-available">
+      <span class="btn-icon">🌀</span>
+      <span class="btn-label">Gravity</span>
+      <span class="btn-sub" style="color:#664488">500 SP</span>
+    </div>
+    <div class="btn btn-launch">
+      <span class="btn-icon">🚀</span>
+      <span class="btn-label">Launch!</span>
+      <span class="btn-sub">→ CP I</span>
+    </div>
+  </div>
+</div>
+
+<!-- FLOATING NUMBERS PREVIEW -->
+<div class="demo-label" style="margin-top:16px">Floating Number Colors (by source)</div>
+<div class="float-preview">
+  <span class="float-label">collision → SP | passive → E | gravity → teal</span>
+  <span class="float-num fn-sp">+20 SP</span>
+  <span class="float-num fn-e">+8.4 E</span>
+  <span class="float-num fn-grav">+50 ✦</span>
+</div>
+
+</body>
+</html>
