@@ -35,3 +35,7 @@ build/
 *.iml
 *.iws
 *.ipr
+
+### Android ###
+local.properties
+android/src/main/jniLibs/
