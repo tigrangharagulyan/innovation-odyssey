@@ -63,6 +63,7 @@ public class MainMenuScreen extends ScreenAdapter {
     private int   currentIdx;
     private float animTime = 0f;
     private final Vector3 tv = new Vector3();
+    private boolean showRocketTutorial = false;
 
     public MainMenuScreen(OdysseyGame game) {
         this.game     = game;
@@ -86,6 +87,9 @@ public class MainMenuScreen extends ScreenAdapter {
 
     @Override public void show() {
         refresh();
+        showRocketTutorial = (ShipData.get().arrivalsCompleted == 0
+                              && ShipData.get().totalJoules < 1f
+                              && ShipData.get().crystals < 101f);
         Gdx.input.setInputProcessor(new InputAdapter() {
             @Override public boolean touchDown(int sx, int sy, int ptr, int btn) {
                 tv.set(sx, sy, 0);
@@ -171,12 +175,15 @@ public class MainMenuScreen extends ScreenAdapter {
 
         drawNewGameButton();
 
+        if (showRocketTutorial) drawRocketTutorialBg();
+
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
         drawTitle();
         drawLabels();
         drawBottomBar();
         drawNewGameLabel();
+        if (showRocketTutorial) drawRocketTutorialText();
         batch.end();
     }
 
@@ -437,6 +444,57 @@ public class MainMenuScreen extends ScreenAdapter {
         smallFont.draw(batch, "NEW GAME", NG_X, NG_Y + NG_H - 10f, NG_W, Align.center, false);
         smallFont.setColor(0.72f, 0.72f, 0.72f, 0.75f);
         smallFont.draw(batch, "reset all progress", NG_X, NG_Y + NG_H - 23f, NG_W, Align.center, false);
+    }
+
+    // Tutorial card bounds — shared between bg and text passes
+    private float tutCardX, tutCardY, tutCardW = 224f, tutCardH = 78f;
+
+    private void calcTutCardPos() {
+        tutCardX = rocketX + 52f;
+        tutCardY = rocketY - tutCardH * 0.5f;
+        if (tutCardX + tutCardW > W - 8f) tutCardX = rocketX - tutCardW - 52f;
+        if (tutCardY < 8f) tutCardY = 8f;
+        if (tutCardY + tutCardH > H - 8f) tutCardY = H - tutCardH - 8f;
+    }
+
+    private void drawRocketTutorialBg() {
+        calcTutCardPos();
+        sr.setProjectionMatrix(viewport.getCamera().combined);
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        // Card bg
+        sr.setColor(0f, 0.04f, 0.16f, 0.92f);
+        sr.rect(tutCardX, tutCardY, tutCardW, tutCardH);
+        // Top accent
+        sr.setColor(0.20f, 0.90f, 1f, 0.75f);
+        sr.rect(tutCardX, tutCardY + tutCardH - 3f, tutCardW, 3f);
+        // Arrow line toward rocket
+        float arrowEndX = rocketX - 4f;
+        float arrowEndY = rocketY;
+        float arrowStartX = tutCardX < rocketX ? tutCardX + tutCardW : tutCardX;
+        float arrowStartY = tutCardY + tutCardH * 0.5f;
+        sr.setColor(0.20f, 0.90f, 1f, 0.50f);
+        sr.rectLine(arrowStartX, arrowStartY, arrowEndX, arrowEndY, 1.5f);
+        sr.end();
+    }
+
+    private void drawRocketTutorialText() {
+        float pulse = 0.50f + 0.50f * com.badlogic.gdx.math.MathUtils.sin(animTime * 3.2f);
+
+        bodyFont.setColor(0.20f, 0.90f, 1f, 1f);
+        bodyFont.draw(batch, "WELCOME, CAPTAIN",
+            tutCardX + 8f, tutCardY + tutCardH - 10f, tutCardW - 16f, Align.left, false);
+
+        smallFont.setColor(0.82f, 0.86f, 1f, 0.90f);
+        smallFont.draw(batch, "Tap the rocket to enter",
+            tutCardX + 8f, tutCardY + tutCardH - 30f, tutCardW - 16f, Align.left, false);
+        smallFont.draw(batch, "the Engineering Bay.",
+            tutCardX + 8f, tutCardY + tutCardH - 44f, tutCardW - 16f, Align.left, false);
+
+        smallFont.setColor(0.20f, 1f, 0.50f, pulse);
+        smallFont.draw(batch, ">> TAP ROCKET <<",
+            tutCardX, tutCardY + 13f, tutCardW, Align.center, false);
     }
 
     @Override public void resize(int w, int h) { viewport.update(w, h, true); }

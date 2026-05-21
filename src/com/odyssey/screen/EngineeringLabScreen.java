@@ -18,7 +18,9 @@ import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
+import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
+import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
@@ -93,7 +95,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     };
 
     // Solara (Level 1) checkpoint energy thresholds
-    private static final float[] SOLARA_CP_ENERGIES = {8_000f, 30_000f, 100_000f, 200_000f};
+    private static final float[] SOLARA_CP_ENERGIES = {2_000f, 10_000f, 50_000f, 100_000f};
 
     // Frostheim (Level 3) checkpoint energy thresholds
     private static final float[] FROSTHEIM_CP_ENERGIES = {4_000f, 24_000f, 120_000f, 150_000f};
@@ -217,6 +219,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private TextButton btnAdd;
     private TextButton btnBumper;
     private TextButton btnGravityWell;
+    private TextButton.TextButtonStyle tileStyleLock, tileStyleNorm, tileStyleBuy, tileStyleAct, tileStyleGo, tileStyleGoLock;
     private TextButton[] perkButtons;
     private Label[]      perkDescLabels;
     private Table        rightPerksTable;
@@ -268,22 +271,26 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private float tutorialStepAge = 0f;   // time spent on current callout step
     private int   lastPlanetIndex = -1;           // tracks planet changes for texture regen
 
-    // Intern-added overlay
-    private static final float INTERN_ADDED_HOLD = 2.5f;
+    // Speed tooltip (small popup above r/s label, auto-hides after 5s)
+    private static final float INTERN_ADDED_HOLD = 5.0f;
     private float internAddedTimer    = 0f;
     private float internAddedOldSpeed = 0f;
     private float internAddedNewSpeed = 0f;
+    private float lastDisplayedSpeed  = -1f; // throttle ringSpeedLabel setText
 
-    // Generic notification overlay (perk unlocks, free intern)
-    private static final float NOTIF_HOLD = 3.2f;
-    private float  notifTimer = 0f;
-    private String notifTitle = "";
-    private String notifBody  = "";
+    // Generic notification overlay — tap to dismiss
+    private static final float NOTIF_HOLD  = 3.2f; // kept for legacy; now controls fade-in only
+    private static final float NOTIF_FADEIN = 0.18f;
+    private float  notifTimer  = 0f;   // counts up from 0, stays active until tap
+    private boolean notifActive = false;
+    private String notifTitle  = "";
+    private String notifBody   = "";
 
-    // Milestone celebration overlay (slides up from bottom)
+    // Milestone celebration overlay — slides up, tap to dismiss
     private static final float CELEB_HOLD  = 3.5f;
     private static final float CELEB_SLIDE = 0.30f;
-    private float  celebTimer  = 0f;
+    private float  celebTimer  = 0f;   // counts up for slide-in animation
+    private boolean celebActive = false;
     private float  celebSlideY = 0f;
     private String celebTitle  = "";
     private String celebBody   = "";
@@ -1216,8 +1223,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
         topPlanetLabel.setColor(0.20f, 0.85f, 1f, 1f);
 
         topCheckpointLabel = new Label("Status: Pre-Checkpoint", game.skin);
-        topCheckpointLabel.setFontScale(0.58f);
-        topCheckpointLabel.setColor(0.65f, 0.65f, 0.80f, 0.88f);
+        topCheckpointLabel.setFontScale(0.65f);
+        topCheckpointLabel.setColor(0.80f, 0.82f, 0.96f, 1f);
 
         topGravLabel = new Label("Gravity: 1.0G Standard", game.skin);
         topGravLabel.setFontScale(0.54f);
@@ -1231,30 +1238,53 @@ public class EngineeringLabScreen extends ScreenAdapter {
         milestoneStatusLabel.setFontScale(0.50f);
         milestoneStatusLabel.setColor(1f, 0.78f, 0.25f, 0.88f);
 
-        topLeft.add(topPlanetLabel).left().row();
-        topLeft.add(topCheckpointLabel).left().padTop(1f).row();
-        topLeft.add(topGravLabel).left().padTop(1f).row();
-        topLeft.add(topYieldsLabel).left().padTop(1f).row();
-        topLeft.add(milestoneStatusLabel).left().padTop(1f).row();
+        // Info toggle button — shows/hides the dense secondary stats
+        TextButton.TextButtonStyle infoStyle = new TextButton.TextButtonStyle();
+        infoStyle.font      = game.skin.getFont("font");
+        infoStyle.up        = game.skin.newDrawable("white", new Color(0.08f, 0.12f, 0.28f, 0.80f));
+        infoStyle.down      = game.skin.newDrawable("white", new Color(0.15f, 0.22f, 0.45f, 1.00f));
+        infoStyle.over      = infoStyle.down;
+        infoStyle.fontColor = new Color(0.50f, 0.78f, 1f, 1f);
+        TextButton btnInfo = new TextButton("i", infoStyle);
+        btnInfo.getLabel().setFontScale(0.75f);
+
+        Table infoDetails = new Table();
+        infoDetails.left();
+        infoDetails.add(topGravLabel).left().row();
+        infoDetails.add(topYieldsLabel).left().padTop(1f).row();
+        infoDetails.add(milestoneStatusLabel).left().padTop(1f).row();
+        infoDetails.setVisible(false);
+
+        btnInfo.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent e, Actor a) {
+                infoDetails.setVisible(!infoDetails.isVisible());
+            }
+        });
+
+        Table planetRow = new Table();
+        planetRow.add(topPlanetLabel).left().expandX();
+        planetRow.add(btnInfo).right().size(22f, 20f);
+
+        topLeft.add(planetRow).growX().row();
+        topLeft.add(topCheckpointLabel).left().padTop(2f).row();
+        topLeft.add(infoDetails).left().padTop(1f).row();
 
         // ---- Center column: SP/s rate header + large live value ----
         Table topCenter = new Table();
         topCenter.top();
 
-        topSpRateHeaderLabel = new Label("SPACE POINTS RATE", game.skin);
-        topSpRateHeaderLabel.setFontScale(0.52f);
-        topSpRateHeaderLabel.setColor(0.42f, 0.58f, 0.85f, 0.68f);
+        topSpRateHeaderLabel = new Label("* SP RATE", game.skin);
+        topSpRateHeaderLabel.setFontScale(0.68f);
+        topSpRateHeaderLabel.setColor(0.55f, 0.68f, 1.00f, 0.90f);
 
         topSpValueLabel = new Label("0.0 SP/s", game.skin);
-        topSpValueLabel.setFontScale(1.25f);
-        topSpValueLabel.setColor(0.10f, 0.97f, 1f, 0.97f);
+        topSpValueLabel.setFontScale(1.55f);
+        topSpValueLabel.setColor(0.10f, 0.97f, 1f, 1f);
 
-        outputLabel = new Label("0.0 E/s", game.skin, "accent");
-        outputLabel.setFontScale(0.62f);
+        outputLabel = new Label("", game.skin); // hidden — kept to avoid null refs
 
         topCenter.add(topSpRateHeaderLabel).center().row();
         topCenter.add(topSpValueLabel).center().padTop(3f).row();
-        topCenter.add(outputLabel).center().padTop(2f).row();
 
         // ---- Right column: active perks list + menu button ----
         Table topRight = new Table();
@@ -1286,8 +1316,6 @@ public class EngineeringLabScreen extends ScreenAdapter {
             }
         });
 
-        topRight.add(topPerksHeaderLabel).right().row();
-        topRight.add(topPerksListLabel).right().padTop(2f).row();
         topRight.add(btnMenu).right().padTop(6f).width(32f).height(26f).row();
 
         // Assemble: left col fixed, center expands to fill, right col fixed
@@ -1295,36 +1323,27 @@ public class EngineeringLabScreen extends ScreenAdapter {
         topPanel.add(topCenter).expandX().top().center();
         topPanel.add(topRight).width(148f).top().right().padLeft(4f);
 
-        // ── HUD strip ──
-        Table hudStrip = new Table();
-        hudStrip.setBackground(game.skin.newDrawable("white", OdysseyTheme.PANEL_BG));
-        hudStrip.pad(5f, 10f, 5f, 10f);
-
-        hudPlanetLabel = new Label("SOLARA", game.skin);
-        hudPlanetLabel.setColor(OdysseyTheme.ACCENT_E);
-        hudPlanetLabel.setFontScale(0.62f);
-
-        hudEnergyLabel = new Label("0/8.0KE", game.skin);
-        hudEnergyLabel.setColor(OdysseyTheme.TEXT_PRI);
-        hudEnergyLabel.setFontScale(0.60f);
-
-        hudRateLabel = new Label("0 E/s", game.skin);
-        hudRateLabel.setColor(OdysseyTheme.TEXT_DIM);
-        hudRateLabel.setFontScale(0.60f);
-
-        hudSpLabel = new Label("0 SP", game.skin);
-        hudSpLabel.setColor(OdysseyTheme.ACCENT_SP);
-        hudSpLabel.setFontScale(0.60f);
-
-        hudStrip.add(hudPlanetLabel).padRight(10f);
-        hudStrip.add(new com.badlogic.gdx.scenes.scene2d.ui.Container<>()).expandX().fillX();
-        hudStrip.add(hudEnergyLabel).padRight(10f);
-        hudStrip.add(hudRateLabel).padRight(10f);
-        hudStrip.add(hudSpLabel);
-
-        root.add(hudStrip).growX().row();
+        // Stub labels — not shown but referenced in render
+        hudPlanetLabel = new Label("", game.skin);
+        hudEnergyLabel = new Label("", game.skin);
+        hudRateLabel   = new Label("", game.skin);
+        hudSpLabel     = new Label("", game.skin);
 
         root.add(topPanel).growX().row();
+
+        // ── Perk multiplier strip ──
+        Table perkStrip = new Table();
+        perkStrip.setBackground(new NinePatchDrawable(game.skin.get("rounded_dark", NinePatch.class)));
+        perkStrip.defaults().pad(4f, 6f, 4f, 6f);
+        perkCollLabel  = new Label("Coll x1.0", game.skin);
+        perkWallLabel  = new Label("Wall x1.0", game.skin);
+        perkBoostLabel = new Label("Boost x1.5", game.skin);
+        perkBumpLabel  = new Label("Bump x5.0", game.skin);
+        for (Label lbl : new Label[]{perkCollLabel, perkWallLabel, perkBoostLabel, perkBumpLabel}) {
+            lbl.setFontScale(0.82f);
+            perkStrip.add(lbl).expandX();
+        }
+        root.add(perkStrip).growX().row();
 
         // -- CENTRIFUGE ZONE: transparent overlay — expands to fill space, holds JUMP READY button --
         Table centrifugeOverlay = new Table();
@@ -1405,41 +1424,61 @@ public class EngineeringLabScreen extends ScreenAdapter {
         panel.background(game.skin.newDrawable("white", panelBgSolid));
         panel.pad(10, 10, 10, 10);
 
-        // Row 1: compact stats strip
-        joulesLabel    = new Label("0 J", game.skin, "accent");
-        crystalsLabel  = new Label("◆ 0", game.skin);
-        jpsLabel       = new Label("0.0/s", game.skin);
+        // Row 1: compact stats strip — SP left | speed center | E right
+        crystalsLabel  = new Label("0 SP", game.skin);
+        joulesLabel    = new Label("0 E", game.skin, "accent");
+        jpsLabel       = new Label("", game.skin); // blank — E/s removed
         ringSpeedLabel = new Label("1.5r/s", game.skin);
+
+        crystalsLabel.setFontScale(1.10f);
+        crystalsLabel.setColor(0.25f, 0.80f, 1.00f, 1f); // cyan-blue = SP
+
+        ringSpeedLabel.setFontScale(0.72f);
+        ringSpeedLabel.setColor(0.70f, 0.72f, 0.82f, 1f);
+
         joulesLabel.setFontScale(1.10f);
-        crystalsLabel.setFontScale(0.82f);
-        crystalsLabel.setColor(0.4f, 0.85f, 1f, 1f);
-        jpsLabel.setFontScale(0.78f);
-        ringSpeedLabel.setFontScale(0.68f);
+        joulesLabel.setColor(0.25f, 1.00f, 0.45f, 1f); // green = energy
+
+        // Each label lives in its own fixed-size Container — completely isolated from siblings,
+        // so text content changes never cause table reflow and labels never shift position.
+        crystalsLabel.setAlignment(com.badlogic.gdx.utils.Align.left);
+        ringSpeedLabel.setAlignment(com.badlogic.gdx.utils.Align.center);
+        joulesLabel.setAlignment(com.badlogic.gdx.utils.Align.right);
+
+        com.badlogic.gdx.scenes.scene2d.ui.Container<Label> spBox =
+            new com.badlogic.gdx.scenes.scene2d.ui.Container<>(crystalsLabel);
+        spBox.fill().left();
+        com.badlogic.gdx.scenes.scene2d.ui.Container<Label> speedBox =
+            new com.badlogic.gdx.scenes.scene2d.ui.Container<>(ringSpeedLabel);
+        speedBox.fill().center();
+        com.badlogic.gdx.scenes.scene2d.ui.Container<Label> eBox =
+            new com.badlogic.gdx.scenes.scene2d.ui.Container<>(joulesLabel);
+        eBox.fill().right();
 
         Table statsRow = new Table();
-        statsRow.add(joulesLabel).left().padLeft(2);
-        statsRow.add(crystalsLabel).padLeft(8);
-        statsRow.add(jpsLabel).expandX().center();
-        statsRow.add(ringSpeedLabel).right().padRight(2);
-        panel.add(statsRow).growX().padBottom(3).row();
+        statsRow.add(spBox).width(155f).height(28f);
+        statsRow.add(speedBox).width(110f).height(28f);
+        statsRow.add(eBox).width(155f).height(28f);
+        panel.add(statsRow).width(420f).padBottom(3).row();
 
         // Row 2: 4 equal boxes side by side — INTERNS | BUMPERS | GRAVITY | ENGAGE JUMP
         // Use a custom button style with card_large as background so no extra wrapper table inflates preferred width
 
-        TextButton.TextButtonStyle tileStyle = new TextButton.TextButtonStyle();
-        tileStyle.font     = game.skin.getFont("font");
-        tileStyle.up       = game.skin.getDrawable("card_large");
-        tileStyle.down     = game.skin.newDrawable("white", new Color(0.10f, 0.14f, 0.30f, 0.97f));
-        tileStyle.over     = tileStyle.down;
-        tileStyle.fontColor = Color.WHITE;
+        tileStyleLock   = makeTileStyle(game.skin, "tile_locked");
+        tileStyleNorm   = makeTileStyle(game.skin, "tile_available");
+        tileStyleBuy    = makeTileStyle(game.skin, "tile_buyable");
+        tileStyleAct    = makeTileStyle(game.skin, "tile_active");
+        tileStyleGo     = makeTileStyle(game.skin, "tile_go");
+        tileStyleGoLock = makeTileStyle(game.skin, "tile_golocked");
 
-        btnAdd         = new TextButton("[+]\nHIRE ORB\n0 SP",      tileStyle);
-        btnBumper      = new TextButton("[ ]\nBUMPER\nCP I",   tileStyle);
-        btnGravityWell = new TextButton("(o)\nGRAVITY\nCP II",  tileStyle);
-        btnFlight      = new TextButton(">>\nLAUNCH\n-- --",            tileStyle);
+        btnAdd         = new TextButton("[+]\nHIRE ORB\n0 SP",  tileStyleLock);
+        btnBumper      = new TextButton("[ ]\nBUMPER\nCP I",    tileStyleLock);
+        btnGravityWell = new TextButton("(o)\nGRAVITY\nCP II",  tileStyleLock);
+        btnFlight      = new TextButton(">>\nLAUNCH\n-- --",    tileStyleGoLock);
 
         for (TextButton btn : new TextButton[]{btnAdd, btnBumper, btnGravityWell, btnFlight}) {
             btn.getLabel().setFontScale(0.60f);
+            addPressEffect(btn);
         }
 
         // 4 equal squares in a single row
@@ -1451,22 +1490,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         tileRow.add(btnFlight).size(btnSz, btnSz).pad(3);
         panel.add(tileRow).center().padBottom(4).row();
 
-        // ── Perk readout strip ──
-        Table perkStrip = new Table();
-        perkStrip.setBackground(game.skin.newDrawable("white", OdysseyTheme.SPACE_BG));
-        perkStrip.defaults().expandX().fillX().pad(2f, 4f, 2f, 4f);
-
-        perkCollLabel  = new Label("Coll x1.0", game.skin);
-        perkWallLabel  = new Label("Wall x1.0", game.skin);
-        perkBoostLabel = new Label("Boost x1.5", game.skin);
-        perkBumpLabel  = new Label("Bump x5.0", game.skin);
-        for (Label l : new Label[]{perkCollLabel, perkWallLabel, perkBoostLabel, perkBumpLabel}) {
-            l.setAlignment(com.badlogic.gdx.utils.Align.center);
-            l.setFontScale(0.52f);
-            l.setColor(OdysseyTheme.TEXT_DIM);
-            perkStrip.add(l);
-        }
-        panel.add(perkStrip).growX().row();
+        panel.add(new com.badlogic.gdx.scenes.scene2d.ui.Container<>()).height(0).row();
 
         root.add(panel).growX().row();
 
@@ -1580,12 +1604,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
         });
         btnFlight.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
-                // Must have generated enough energy to reach the next checkpoint
+                if (!isFullyUpgraded()) {
+                    showNotif("LAUNCH BLOCKED", upgradeGateHint());
+                    return;
+                }
                 if (!isJumpReady()) return;
-                // Objective 4: 12/12 Workforce Travel Gate — Ember IV only
-                if (isEmberIV() && balls.size < 12) return;
                 ShipData sd2 = ShipData.get();
-                // Persistent snapshot for offline farming calculation on return
                 sd2.internsLeftOnPlanet[sd2.currentPlanetIndex] = balls.size;
                 sd2.lastFarmingTimestamp = System.currentTimeMillis();
                 sd2.savedFlightJPS = sd2.currentJPS;
@@ -1609,7 +1633,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         pauseTitle.setColor(0.20f, 0.80f, 1f, 1f);
         pauseTable.add(pauseTitle).padBottom(36f).row();
 
-        TextButton btnContinue = new TextButton("CONTINUE", tileStyle);
+        TextButton btnContinue = new TextButton("CONTINUE", tileStyleNorm);
         btnContinue.getLabel().setFontScale(0.82f);
         btnContinue.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
@@ -1618,7 +1642,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         });
         pauseTable.add(btnContinue).width(280f).height(62f).padBottom(18f).row();
 
-        TextButton btnMainMenu = new TextButton("MAIN MENU", tileStyle);
+        TextButton btnMainMenu = new TextButton("MAIN MENU", tileStyleNorm);
         btnMainMenu.getLabel().setFontScale(0.82f);
         btnMainMenu.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
@@ -1628,9 +1652,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
         });
         pauseTable.add(btnMainMenu).width(280f).height(62f).padBottom(18f).row();
 
-        TextButton btnCheckpoint = new TextButton("BACK TO CHECKPOINT", tileStyle);
+        TextButton btnCheckpoint = new TextButton("BACK TO CHECKPOINT", tileStyleBuy);
         btnCheckpoint.getLabel().setFontScale(0.82f);
-        btnCheckpoint.setColor(0.85f, 0.60f, 0.20f, 1f);
         btnCheckpoint.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
                 backToCheckpoint();
@@ -1690,25 +1713,22 @@ public class EngineeringLabScreen extends ScreenAdapter {
         decisionSub.setColor(0.65f, 0.75f, 0.85f, 1f);
         decisionTable.add(decisionSub).padBottom(28f).row();
 
-        TextButton btnAllTesla = new TextButton("ALL CRYO  →  TESLA COIL\nConvert every Cryo-Vent into a Tesla Coil", tileStyle);
+        TextButton btnAllTesla = new TextButton("ALL CRYO  →  TESLA COIL\nConvert every Cryo-Vent into a Tesla Coil", tileStyleBuy);
         btnAllTesla.getLabel().setFontScale(0.70f);
-        btnAllTesla.setColor(0.80f, 0.55f, 1f, 1f);
         btnAllTesla.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) { applyFrostheimDecision(1); }
         });
         decisionTable.add(btnAllTesla).width(310f).height(68f).padBottom(14f).row();
 
-        TextButton btnAllCryo = new TextButton("ALL TESLA  →  CRYO VENT\nConvert every Tesla Coil into a Cryo-Vent", tileStyle);
+        TextButton btnAllCryo = new TextButton("ALL TESLA  →  CRYO VENT\nConvert every Tesla Coil into a Cryo-Vent", tileStyleAct);
         btnAllCryo.getLabel().setFontScale(0.70f);
-        btnAllCryo.setColor(0.35f, 0.82f, 1f, 1f);
         btnAllCryo.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) { applyFrostheimDecision(2); }
         });
         decisionTable.add(btnAllCryo).width(310f).height(68f).padBottom(14f).row();
 
-        TextButton btnMoreInterns = new TextButton("+2 INTERNS  (cap → 12)\nSacrifice conversion for raw intern power", tileStyle);
+        TextButton btnMoreInterns = new TextButton("+2 INTERNS  (cap → 12)\nSacrifice conversion for raw intern power", tileStyleGo);
         btnMoreInterns.getLabel().setFontScale(0.70f);
-        btnMoreInterns.setColor(0.30f, 1f, 0.55f, 1f);
         btnMoreInterns.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) { applyFrostheimDecision(3); }
         });
@@ -1870,16 +1890,23 @@ public class EngineeringLabScreen extends ScreenAdapter {
             }
         } else if (tutorialStep == 3) {
             tutorialStepAge += delta;
-            // "SP/s rate" step — advance on tap or 8 s auto
+            // "Energy (E)" step — advance on tap or 8 s auto
             if (inputHit || tutorialStepAge > 8f) {
                 tutorialStep    = 4;
                 tutorialStepAge = 0f;
             }
         } else if (tutorialStep == 4) {
             tutorialStepAge += delta;
+            // "SP/s rate" step — advance on tap or 8 s auto
+            if (inputHit || tutorialStepAge > 8f) {
+                tutorialStep    = 5;
+                tutorialStepAge = 0f;
+            }
+        } else if (tutorialStep == 5) {
+            tutorialStepAge += delta;
             // "Ring speed" step — advance on tap or 8 s auto
             if (inputHit || tutorialStepAge > 8f) {
-                tutorialStep = 5;
+                tutorialStep = 6;
             }
         }
 
@@ -1893,7 +1920,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
         if (tutorialDone && !pauseTable.isVisible() && !decisionTable.isVisible()) stepPhysics(delta);
         updateJPS(delta);
         if (internAddedTimer > 0) internAddedTimer = Math.max(0, internAddedTimer - delta);
-        if (notifTimer > 0)       notifTimer       = Math.max(0, notifTimer - delta);
+        if (notifActive)  notifTimer  = Math.min(notifTimer + delta, NOTIF_FADEIN * 2f);
+        if (celebActive)  celebTimer  = Math.min(celebTimer + delta, CELEB_SLIDE + 0.1f);
         if (tutorialDone) checkFreeInternCondition();
         checkMilestones();
 
@@ -1916,27 +1944,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
         renderCam.update();
         batch.setProjectionMatrix(renderCam.combined);
 
-        // Drain contact events → spawn float entries
-        com.badlogic.gdx.utils.Array<float[]> events = ShipData.get().pendingContactEvents;
-        for (int ei = 0; ei < events.size; ei++) {
-            float[] ev = events.get(ei);
-            FloatEntry fe = new FloatEntry();
-            fe.wx        = ev[0];
-            fe.wy        = ev[1];
-            fe.value     = ev[2];
-            fe.colorType = (int) ev[3];
-            fe.age       = 0f;
-            fe.driftX    = (MathUtils.random() - 0.5f) * 0.6f;  // slight arc
-            activeFloats.add(fe);
-        }
-        events.clear();
-
-        // Advance and cull floats
-        for (int ei = activeFloats.size - 1; ei >= 0; ei--) {
-            FloatEntry fe = activeFloats.get(ei);
-            fe.age += delta;
-            if (fe.age >= FloatEntry.LIFETIME) activeFloats.removeIndex(ei);
-        }
+        // Float numbers disabled — drain events without spawning visuals
+        ShipData.get().pendingContactEvents.clear();
 
 
         batch.begin();
@@ -1954,9 +1963,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
         drawTeslaCoils();
         drawCryoVents();
         drawInterns();
-        drawFloatNumbers();
         drawPlacementPreview();
-        drawHeartbeatPulse();
+        // drawHeartbeatPulse() removed — coin bump effect disabled
         batch.end();
 
         // ---- UI overlay ----
@@ -1971,9 +1979,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // ---- Stats strip ----
         joulesLabel.setText(formatNumber(energyDeltaSinceLaunch()) + " E");
-        crystalsLabel.setText(sparkSym + " " + (int) sd.crystals);
-        jpsLabel.setText("OUTPUT: " + formatNumber(sd.currentJPS) + " E/s");
-        outputLabel.setText(formatNumber(sd.currentJPS) + " E/s");
+        crystalsLabel.setText((int) sd.crystals + " " + sparkSym);
+        jpsLabel.setText("");
 
         SoundManager.get().update(delta);
 
@@ -1993,7 +2000,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             hudEnergyLabel.setText(String.format("%.1f/%.0fKE", eDelta/1000f, eCost/1000f));
         else
             hudEnergyLabel.setText(String.format("%.0f/%.0fE", eDelta, eCost));
-        hudRateLabel.setText(formatNumber(sd.currentJPS) + " E/s");
+        hudRateLabel.setText("");
         String sparkSym2 = isFrostheim() ? "FS" : "SP";
         hudSpLabel.setText((int) sd.crystals + " " + sparkSym2);
 
@@ -2005,31 +2012,34 @@ public class EngineeringLabScreen extends ScreenAdapter {
         int cap = internCap();
 
         float ringNow = centrifugeBody.getAngularVelocity();
-        // Show current speed vs target so the player sees the effect of each orb purchase
-        ringSpeedLabel.setText(String.format("SPEED: %.1f / %.1f r/s", ringNow, targetRPM));
+        // Only update text when value changes by ≥0.1 — prevents per-frame label resize jitter
+        float roundedSpeed = Math.round(ringNow * 10f) / 10f;
+        if (Math.abs(roundedSpeed - lastDisplayedSpeed) >= 0.1f) {
+            ringSpeedLabel.setText(String.format("%.1f r/s", roundedSpeed));
+            lastDisplayedSpeed = roundedSpeed;
+        }
 
-        // ---- Economy-loop accent colors ----
-        // CORAL tint links ADD ORB button to ring speed readout — player's eye follows the match.
-        Color CORAL = OdysseyTheme.ACCENT_WARN;
-        Color BUY   = OdysseyTheme.BTN_BUYABLE;
-        Color LOCK  = OdysseyTheme.BTN_LOCKED;
-        Color ACT   = OdysseyTheme.BTN_ACTIVE;
-        Color GO    = OdysseyTheme.BTN_GO;
-        Color NORM  = OdysseyTheme.BTN_AVAILABLE;
+        // ---- Economy-loop button styles ----
+        TextButton.TextButtonStyle CORAL = tileStyleBuy;
+        TextButton.TextButtonStyle BUY   = tileStyleBuy;
+        TextButton.TextButtonStyle LOCK  = tileStyleLock;
+        TextButton.TextButtonStyle ACT   = tileStyleAct;
+        TextButton.TextButtonStyle GO    = tileStyleGo;
+        TextButton.TextButtonStyle NORM  = tileStyleNorm;
 
         boolean orbCanBuy = (balls.size < cap) && sd.crystals >= internCost();
         // Ring speed label turns coral whenever more orbs can still be purchased — visual causal link
-        ringSpeedLabel.setColor(orbCanBuy ? CORAL : new Color(0.70f, 0.72f, 0.82f, 1f));
+        ringSpeedLabel.setColor(orbCanBuy ? OdysseyTheme.ACCENT_WARN : new Color(0.70f, 0.72f, 0.82f, 1f));
 
         // ---- ADD ORB / Intern button text ----
         if (fh && !frostheimThirdInternUnlocked && sd.sectorReached < 0 && balls.size >= cap) {
             btnAdd.setText(sd.crystals >= 800f
-                ? "UNLOCK 3RD\n800 FS\nINTERN"
-                : "3RD INTERN\n800 FS\nNEED MORE");
+                ? "[+]\nUNLOCK 3RD\n800 FS"
+                : "[+]\n3RD INTERN\n800 FS");
         } else if (ember && !emberThirdInternUnlocked && sd.sectorReached < 0 && balls.size >= cap) {
             btnAdd.setText(sd.crystals >= 1200f
-                ? "UNLOCK 3RD\n1200 SP\nINTERN"
-                : "3RD INTERN\n1200 SP\nNEED MORE");
+                ? "[+]\nUNLOCK 3RD\n1200 SP"
+                : "[+]\n3RD INTERN\n1200 SP");
         } else if (balls.size >= cap) {
             String nxt;
             if (fh || ember) {
@@ -2040,13 +2050,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     : cap == 10 ? "Req: CP III" : "MAX";
             }
             btnAdd.setText(cap < MAX_INTERNS
-                ? String.format("ADD ORB\n%d/%d CAP\n%s", balls.size, cap, nxt)
-                : String.format("ADD ORB\n%d/%d\nFULL CAP", balls.size, cap));
+                ? String.format("[+]\n%d/%d CAP\n%s", balls.size, cap, nxt)
+                : String.format("[+]\n%d/%d\nFULL CAP", balls.size, cap));
         } else {
-            // KEY UX MOMENT: mechanical hint teaches orb->speed->energy causal chain
             btnAdd.setText(String.format(
-                "+ ADD ORB\n%.0f %s [%d/%d]\n+0.75 r/s Speed",
-                internCost(), sparkSym, balls.size, cap));
+                "[+]\nHIRE ORB\n%.0f %s", internCost(), sparkSym));
         }
 
         // ---- Bumper / Cryo-Vent / Blade button ----
@@ -2054,39 +2062,38 @@ public class EngineeringLabScreen extends ScreenAdapter {
             int maxCV = maxCryoVentsAllowed();
             if (!frostheimCryoUnlocked && sd.sectorReached < 0) {
                 btnBumper.setText(sd.crystals >= 400f
-                    ? "UNLOCK CRYO\n400 FS\nVENT"
-                    : "CRYO-VENT\n400 FS\nNEED MORE");
+                    ? "[ ]\nUNLOCK CRYO\n400 FS"
+                    : "[ ]\nCRYO-VENT\n400 FS");
             } else if (maxCV == 0) {
-                btnBumper.setText("CRYO-VENT\nReq: CP I\nLOCKED");
+                btnBumper.setText("[ ]\nCRYO-VENT\nReq: CP I");
             } else if (cryoVents.size >= maxCV) {
-                btnBumper.setText(String.format("CRYO-VENT\n%d/%d\nFULL", cryoVents.size, maxCV));
+                btnBumper.setText(String.format("[ ]\nCRYO-VENT\n%d/%d FULL", cryoVents.size, maxCV));
             } else if (placementMode == PLACE_BUMPER) {
-                btnBumper.setText("CRYO-VENT\n>> Tap Ring\nTo Place");
+                btnBumper.setText("[ ]\nCRYO-VENT\nTap Ring");
             } else {
-                btnBumper.setText(String.format("CRYO-VENT\n%.0f FS\n[%d/%d]", cryoVentCost(), cryoVents.size, maxCV));
+                btnBumper.setText(String.format("[ ]\nCRYO-VENT\n%.0f FS", cryoVentCost()));
             }
         } else if (ember) {
             int maxBl = maxBladesAllowed();
             if (maxBl == 0) {
-                btnBumper.setText("BLADE\nReq: CP I\nLOCKED");
+                btnBumper.setText("[ ]\nBLADE\nReq: CP I");
             } else if (kineticBlades.size >= maxBl) {
-                btnBumper.setText(String.format("BLADES FULL\n%d/%d\nSLOTS", kineticBlades.size, maxBl));
+                btnBumper.setText(String.format("[ ]\nBLADES\n%d/%d FULL", kineticBlades.size, maxBl));
             } else if (placementMode == PLACE_BLADE) {
-                btnBumper.setText("BLADE\n>> Tap Ring\nTo Place");
+                btnBumper.setText("[ ]\nBLADE\nTap Ring");
             } else {
-                btnBumper.setText(String.format(
-                    "+ BLADE\n%.0f SP [%d/%d]", bladeCost(), kineticBlades.size, maxBl));
+                btnBumper.setText(String.format("[ ]\nBLADE\n%.0f SP", bladeCost()));
             }
         } else {
             int maxB = maxBumpersAllowed();
             if (maxB == 0) {
-                btnBumper.setText("BUMPER\nReq: CP I\nLOCKED");
+                btnBumper.setText("[ ]\nBUMPER\nReq: CP I");
             } else if (bumpers.size >= maxB) {
-                btnBumper.setText(String.format("BUMPER\n%d/%d\nFULL", bumpers.size, maxB));
+                btnBumper.setText(String.format("[ ]\nBUMPER\n%d/%d FULL", bumpers.size, maxB));
             } else if (placementMode == PLACE_BUMPER) {
-                btnBumper.setText("BUMPER\n>> Tap Ring\nTo Place");
+                btnBumper.setText("[ ]\nBUMPER\nTap Ring");
             } else {
-                btnBumper.setText(String.format("BUMPER\n%.0f SP\n[%d/%d]", bumperCost(), bumpers.size, maxB));
+                btnBumper.setText(String.format("[ ]\nBUMPER\n%.0f SP", bumperCost()));
             }
         }
 
@@ -2094,46 +2101,42 @@ public class EngineeringLabScreen extends ScreenAdapter {
         if (fh) {
             int maxTC = maxTeslaCoilsAllowed();
             if (maxTC == 0) {
-                btnGravityWell.setText("TESLA COIL\nReq: CP II\nLOCKED");
+                btnGravityWell.setText("(o)\nTESLA COIL\nReq: CP II");
             } else if (teslaCoils.size >= maxTC) {
-                btnGravityWell.setText(String.format("TESLA COIL\n%d/%d\nFULL", teslaCoils.size, maxTC));
+                btnGravityWell.setText(String.format("(o)\nTESLA COIL\n%d/%d FULL", teslaCoils.size, maxTC));
             } else if (placementMode == PLACE_GRAVITY) {
-                btnGravityWell.setText("TESLA COIL\n>> Tap Ring\nTo Place");
+                btnGravityWell.setText("(o)\nTESLA COIL\nTap Ring");
             } else {
-                btnGravityWell.setText(String.format("TESLA COIL\n%.0f FS\n[%d/%d]", teslaCost(), teslaCoils.size, maxTC));
+                btnGravityWell.setText(String.format("(o)\nTESLA COIL\n%.0f FS", teslaCost()));
             }
         } else if (ember) {
-            // Objective 2: Hub upgrade replaces gravity-well placement on Ember IV
             if (hubUpgradeTier >= HUB_UPGRADE_COSTS.length) {
-                // Hub fully upgraded — button becomes Spring-Pad placement
                 if (springPads.size >= MAX_SPRING_PADS) {
-                    btnGravityWell.setText(String.format("SPRING PAD\n%d/%d\nFULL", springPads.size, MAX_SPRING_PADS));
+                    btnGravityWell.setText(String.format("(o)\nSPRING PAD\n%d/%d FULL", springPads.size, MAX_SPRING_PADS));
                 } else if (placementMode == PLACE_SPRING_PAD) {
-                    btnGravityWell.setText("SPRING PAD\n>> Tap Ring\nTo Place");
+                    btnGravityWell.setText("(o)\nSPRING PAD\nTap Ring");
                 } else {
-                    btnGravityWell.setText(String.format("SPRING PAD\n%.0f SP\n[%d/%d]",
-                        springPadCost(), springPads.size, MAX_SPRING_PADS));
+                    btnGravityWell.setText(String.format("(o)\nSPRING PAD\n%.0f SP", springPadCost()));
                 }
             } else {
                 String[] tierLabels = {"HUB +SUCTION", "HUB +BLAST", "HUB OVERDRIVE"};
                 if (sd.crystals >= HUB_UPGRADE_COSTS[hubUpgradeTier]) {
-                    btnGravityWell.setText(String.format("%s\nT%d->T%d\n%.0f SP",
-                        tierLabels[hubUpgradeTier], hubUpgradeTier, hubUpgradeTier + 1,
-                        HUB_UPGRADE_COSTS[hubUpgradeTier]));
+                    btnGravityWell.setText(String.format("(o)\n%s\n%.0f SP",
+                        tierLabels[hubUpgradeTier], HUB_UPGRADE_COSTS[hubUpgradeTier]));
                 } else {
-                    btnGravityWell.setText(String.format("%s\nNEED %.0f\nSP", tierLabels[hubUpgradeTier],
-                        HUB_UPGRADE_COSTS[hubUpgradeTier]));
+                    btnGravityWell.setText(String.format("(o)\n%s\nNEED %.0f SP",
+                        tierLabels[hubUpgradeTier], HUB_UPGRADE_COSTS[hubUpgradeTier]));
                 }
             }
         } else {
             if (!gravityUnlocked()) {
-                btnGravityWell.setText("STRUCTURE\nLOCKED\n(Req: CP II)");
+                btnGravityWell.setText("(o)\nGRAVITY\nReq: CP II");
             } else if (attractors.size >= maxGravityAllowed()) {
-                btnGravityWell.setText(String.format("GRAVITY\n%d/%d\nFULL", attractors.size, maxGravityAllowed()));
+                btnGravityWell.setText(String.format("(o)\nGRAVITY\n%d/%d FULL", attractors.size, maxGravityAllowed()));
             } else if (placementMode == PLACE_GRAVITY) {
-                btnGravityWell.setText("GRAVITY\n>> Tap Ring\nTo Place");
+                btnGravityWell.setText("(o)\nGRAVITY\nTap Ring");
             } else {
-                btnGravityWell.setText(String.format("GRAVITY\n%.0f SP\n[%d/%d]", gravityCost(), attractors.size, maxGravityAllowed()));
+                btnGravityWell.setText(String.format("(o)\nGRAVITY\n%.0f SP", gravityCost()));
             }
         }
 
@@ -2141,11 +2144,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
         eDelta  = energyDeltaSinceLaunch();
         eCost   = nextCheckpointEnergyCost();
         boolean jumpReady      = eDelta >= eCost;
-        boolean workforceGated = ember && balls.size < 12;   // Objective 4: 12/12 gate
+        boolean workforceGated = !isFullyUpgraded();
         String cpName = nextCPName();
 
         if (workforceGated) {
-            btnFlight.setText(String.format(">>\nCAP %d/12\nUNLOCK", balls.size));
+            btnFlight.setText(">>\nNEED\n" + upgradeGateHint());
         } else if (jumpReady && ember) {
             btnFlight.setText(">>\nHYPER JUMP\nLAUNCH");
         } else if (jumpReady) {
@@ -2173,8 +2176,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
         // ---- Button tints ----
         boolean showFhInternUnlock    = fh    && !frostheimThirdInternUnlocked && sd.sectorReached < 0 && balls.size >= cap;
         boolean showEmberInternUnlock = ember && !emberThirdInternUnlocked     && sd.sectorReached < 0 && balls.size >= cap;
-        // ADD ORB: coral when purchasable (links to ring speed readout), green when affordable, gray when locked
-        btnAdd.setColor(
+        // ADD ORB: buyable when purchasable, locked when capped
+        btnAdd.setStyle(
             showFhInternUnlock    ? (sd.crystals >= 800f   ? BUY : NORM) :
             showEmberInternUnlock ? (sd.crystals >= 1200f  ? BUY : NORM) :
             balls.size >= cap     ? LOCK :
@@ -2183,41 +2186,41 @@ public class EngineeringLabScreen extends ScreenAdapter {
         if (fh) {
             boolean showCryoUnlock = !frostheimCryoUnlocked && sd.sectorReached < 0;
             int maxCV = maxCryoVentsAllowed();
-            btnBumper.setColor(showCryoUnlock
+            btnBumper.setStyle(showCryoUnlock
                 ? (sd.crystals >= 400f ? BUY : NORM)
                 : placementMode == PLACE_BUMPER  ? ACT
                 : cryoVents.size >= maxCV        ? LOCK
                 : sd.crystals >= cryoVentCost()  ? BUY : NORM);
             int maxTC = maxTeslaCoilsAllowed();
-            btnGravityWell.setColor(placementMode == PLACE_GRAVITY  ? ACT
+            btnGravityWell.setStyle(placementMode == PLACE_GRAVITY  ? ACT
                 : teslaCoils.size >= maxTC        ? LOCK
                 : sd.crystals >= teslaCost()      ? BUY : NORM);
         } else if (ember) {
             int maxBl = maxBladesAllowed();
-            btnBumper.setColor(placementMode == PLACE_BLADE              ? ACT
+            btnBumper.setStyle(placementMode == PLACE_BLADE              ? ACT
                 : maxBl == 0 || kineticBlades.size >= maxBl ? LOCK
                 : sd.crystals >= bladeCost()                ? BUY : NORM);
-            // Hub upgrade / spring pad tint
+            // Hub upgrade / spring pad style
             if (hubUpgradeTier >= HUB_UPGRADE_COSTS.length) {
-                btnGravityWell.setColor(
+                btnGravityWell.setStyle(
                     placementMode == PLACE_SPRING_PAD        ? ACT
                     : springPads.size >= MAX_SPRING_PADS     ? LOCK
                     : sd.crystals >= springPadCost()         ? BUY : NORM);
             } else {
-                btnGravityWell.setColor(
+                btnGravityWell.setStyle(
                     sd.crystals >= HUB_UPGRADE_COSTS[hubUpgradeTier] ? BUY : LOCK);
             }
         } else {
             int maxB = maxBumpersAllowed();
-            btnBumper.setColor(placementMode == PLACE_BUMPER             ? ACT
+            btnBumper.setStyle(placementMode == PLACE_BUMPER             ? ACT
                 : maxB == 0 || bumpers.size >= maxB ? LOCK
                 : sd.crystals >= bumperCost()       ? BUY : NORM);
-            btnGravityWell.setColor(placementMode == PLACE_GRAVITY ? ACT
+            btnGravityWell.setStyle(placementMode == PLACE_GRAVITY ? ACT
                 : !gravityUnlocked() || attractors.size >= maxGravityAllowed() ? LOCK
                 : sd.crystals >= gravityCost()      ? BUY : NORM);
         }
-        btnFlight.setColor(jumpReady ? GO : eDelta / Math.max(eCost, 1f) > 0.6f ? new Color(1f, 0.85f, 0.3f, 1f) : NORM);
-        btnFlight.setDisabled(!jumpReady || workforceGated);
+        btnFlight.setStyle(jumpReady ? GO : eDelta / Math.max(eCost, 1f) > 0.6f ? BUY : NORM);
+        btnFlight.setDisabled(false); // always clickable — popup explains if blocked
 
         // Re-apply font scale each frame (setText resets it)
         for (TextButton btn : new TextButton[]{btnAdd, btnBumper, btnGravityWell, btnFlight}) {
@@ -2226,7 +2229,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // ---- Top panel: live label updates each frame ----
         // Column 1 — Region Log
-        topPlanetLabel.setText(ember ? "EMBER IV" : fh ? "FROSTHEIM" : "SOLARA");
+        topPlanetLabel.setText(ember ? "NOVA TERRA" : fh ? "FROSTHEIM" : "SOLARA");
 
         int lsr = sd.sectorReached;
         String statusText = lsr < 0  ? "Status: Pre-Checkpoint"      :
@@ -2250,9 +2253,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
         }
 
         // Column 2 — Money Engine: SPACE POINTS RATE header + live SP/s value
-        topSpRateHeaderLabel.setText(fh ? "FROST SHARDS RATE" : "SPACE POINTS RATE");
+        topSpRateHeaderLabel.setText(fh ? "* FS RATE" : "* SP RATE");
         topSpValueLabel.setText(formatNumber(sparkRate) + (fh ? " FS/s" : " SP/s"));
-        outputLabel.setText(formatNumber(sd.currentJPS) + " E/s");
+        // outputLabel hidden — E/s removed
 
         // Column 3 — Active Perks: rebuild only when unlock count changes
         int unlockedCount = 0;
@@ -2270,7 +2273,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         ui.draw();
 
-        if (tutorialStep < 5) {
+        if (tutorialStep < 6) {
             batch.begin();
             drawTutorial();
             batch.end();
@@ -2282,15 +2285,21 @@ public class EngineeringLabScreen extends ScreenAdapter {
             batch.end();
         }
 
-        if (notifTimer > 0) {
-            batch.begin();
-            drawNotifOverlay();
-            batch.end();
+        if (notifActive) {
+            if (inputHit) {
+                notifActive = false;
+                inputHit = false;
+            } else {
+                batch.begin();
+                drawNotifOverlay();
+                batch.end();
+            }
         }
 
-        if (celebTimer > 0f) {
-            if (inputHit) {
-                celebTimer = 0f;
+        if (celebActive) {
+            if (inputHit && celebTimer >= CELEB_SLIDE) {
+                celebActive = false;
+                inputHit = false;
             } else {
                 batch.begin();
                 drawCelebOverlay();
@@ -2315,17 +2324,27 @@ public class EngineeringLabScreen extends ScreenAdapter {
             );
         } else if (tutorialStep == 2) {
             // Observation: intern hired, now watch SP accumulate
-            // joulesLabel / crystalsLabel row: approx X=150, Y=139
+            // crystalsLabel: left side of stats strip, approx X=60, Y=139
             drawTutorialCalloutCard(
                 "IT'S WORKING!",
                 "Your intern earns Space Points (SP)",
-                "with every bounce — watch below!",
-                150f, 139f,
+                "watch the SP counter — bottom left!",
+                60f, 139f,
                 false,   // observation: show "tap to continue" hint
                 false    // arrow leaves card bottom, points at stats row below
             );
         } else if (tutorialStep == 3) {
-            // Observation: SP/s rate in top HUD
+            // Observation: Energy (E) — right side of stats strip, approx X=420, Y=139
+            drawTutorialCalloutCard(
+                "ENERGY (E)",
+                "Ring spin generates Energy.",
+                "Energy fuels your LAUNCH to next sector!",
+                420f, 139f,
+                false,
+                false
+            );
+        } else if (tutorialStep == 4) {
+            // Observation: SP/s rate in top HUD center
             // topSpValueLabel: approx X=240, Y=RENDER_H - 50
             drawTutorialCalloutCard(
                 "SP/s RATE IS CLIMBING",
@@ -2335,16 +2354,15 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 false,   // observation
                 true     // arrowFromTop: arrow leaves card TOP, points up at HUD
             );
-        } else if (tutorialStep == 4) {
-            // Observation: ring speed label
-            // ringSpeedLabel: approx X=432, Y=139 (right of stats row)
+        } else if (tutorialStep == 5) {
+            // Observation: ring speed label — center of stats strip, approx X=240, Y=139
             drawTutorialCalloutCard(
                 "SPEED = ENERGY",
                 "Faster ring = more Energy generated.",
                 "Hire more interns to spin it up!",
-                432f, 139f,
-                false,   // observation
-                false    // arrow points down at ring speed label
+                240f, 139f,
+                false,
+                false
             );
         }
     }
@@ -3229,6 +3247,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
         pauseTable.setVisible(false);
         decisionTable.setVisible(false);
         notifTimer       = 0f;
+        notifActive      = false;
+        celebTimer       = 0f;
+        celebActive      = false;
         internAddedTimer = 0f;
         uptime           = 0f;
         lastJoules       = 0f;
@@ -3244,7 +3265,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             // Starter gift: covers first intern cost (80 SP) so tutorial step 1 is not blocked
             sd.crystals     = 100f;
         } else {
-            tutorialStep = 5;
+            tutorialStep = 6;
             tutorialDone = true;
             showNotif("SYSTEMS ONLINE",
                 "Welcome to " + rsd.getCurrentPlanet().name
@@ -3293,27 +3314,24 @@ public class EngineeringLabScreen extends ScreenAdapter {
     }
 
     private void showNotif(String title, String body) {
-        notifTitle = title;
-        notifBody  = body;
-        notifTimer = NOTIF_HOLD;
+        notifTitle  = title;
+        notifBody   = body;
+        notifTimer  = 0f;
+        notifActive = true;
     }
 
     private void drawNotifOverlay() {
-        float t = notifTimer / NOTIF_HOLD;
-        float alpha = t > 0.88f ? (1f - t) / 0.12f
-                    : t < 0.18f ? t / 0.18f
-                    : 1f;
-        alpha = Math.min(1f, alpha);
+        float alpha = Math.min(1f, notifTimer / NOTIF_FADEIN);
 
-        float pw = 330f, ph = 90f;
+        float pw = 330f, ph = 110f;
         float px = (RENDER_W - pw) * 0.5f;
         float py = RENDER_H * 0.60f;
 
-        batch.setColor(0f, 0.04f, 0.14f, 0.88f * alpha);
-        batch.draw(texPixel, px, py, pw, ph);
-        batch.setColor(1f, 1f, 1f, 0.15f * alpha);
-        batch.draw(texPixel, px, py + ph - 2f, pw, 2f);
-        batch.draw(texPixel, px, py, pw, 2f);
+        NinePatch popup = game.skin.get("rounded_popup", NinePatch.class);
+        batch.setColor(1f, 1f, 1f, alpha);
+        popup.draw(batch, px, py, pw, ph);
+        batch.setColor(1f, 1f, 1f, 0.25f * alpha);
+        batch.draw(texPixel, px + 18f, py + ph - 2f, pw - 36f, 2f);
 
         float cx = RENDER_W * 0.5f;
         float y  = py + ph - 18f;
@@ -3323,7 +3341,6 @@ public class EngineeringLabScreen extends ScreenAdapter {
         drawFontCentered(notifTitle, cx, y);
         y -= 28f;
 
-        // Body may contain a '\n' — split and draw two lines
         String[] lines = notifBody.split("\n", 2);
         floatFont.getData().setScale(0.72f);
         floatFont.setColor(0.78f, 0.82f, 0.92f, alpha * 0.90f);
@@ -3332,6 +3349,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
             y -= 20f;
         }
 
+        // "TAP TO CONTINUE" — pulsing glow
+        float pulse = 0.55f + 0.45f * MathUtils.sin(animTime * 4f);
+        floatFont.getData().setScale(0.58f);
+        floatFont.setColor(0.30f, 0.88f, 1f, alpha * pulse);
+        drawFontCentered("TAP TO CONTINUE", cx, py + 10f);
+
         floatFont.getData().setScale(1f);
         batch.setColor(1f, 1f, 1f, 1f);
     }
@@ -3339,33 +3362,34 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private void showCeleb(String title, String body) {
         celebTitle  = title;
         celebBody   = body;
-        celebTimer  = CELEB_HOLD;
+        celebTimer  = 0f;
+        celebActive = true;
         celebSlideY = -200f;
     }
 
     private void drawCelebOverlay() {
-        if (celebTimer <= 0f) return;
-        celebTimer = Math.max(0f, celebTimer - Gdx.graphics.getDeltaTime());
+        if (!celebActive) return;
 
-        float slideProgress = Math.min(1f, (CELEB_HOLD - celebTimer) / CELEB_SLIDE);
+        float slideProgress = Math.min(1f, celebTimer / CELEB_SLIDE);
         float ease = 1f - (float) Math.pow(1f - slideProgress, 3.0);
         float targetY = RENDER_H * 0.28f;
         celebSlideY = -200f + (targetY + 200f) * ease;
 
-        float alpha = celebTimer < 0.5f ? celebTimer / 0.5f : 1f;
+        float alpha = Math.min(1f, celebTimer / 0.12f);
 
         // Dark overlay
         batch.setColor(0f, 0f, 0f, 0.65f * alpha);
         batch.draw(texPixel, 0, 0, RENDER_W, RENDER_H);
 
         // Card
-        float cw = 360f, ch = 120f;
+        float cw = 360f, ch = 140f;
         float cx = (RENDER_W - cw) * 0.5f;
         float cy = celebSlideY;
-        batch.setColor(OdysseyTheme.PANEL_BG.r, OdysseyTheme.PANEL_BG.g, OdysseyTheme.PANEL_BG.b, alpha);
-        batch.draw(texPixel, cx, cy, cw, ch);
+        NinePatch card = game.skin.get("rounded_dark", NinePatch.class);
+        batch.setColor(1f, 1f, 1f, alpha);
+        card.draw(batch, cx, cy, cw, ch);
         batch.setColor(OdysseyTheme.ACCENT_E.r, OdysseyTheme.ACCENT_E.g, OdysseyTheme.ACCENT_E.b, alpha);
-        batch.draw(texPixel, cx, cy + ch - 2f, cw, 2f);
+        batch.draw(texPixel, cx + 18f, cy + ch - 2f, cw - 36f, 2f);
 
         // Title
         floatFont.getData().setScale(1.10f);
@@ -3382,39 +3406,48 @@ public class EngineeringLabScreen extends ScreenAdapter {
             lineY -= 22f;
         }
 
+        // "TAP TO CONTINUE" — pulsing, only after slide completes
+        if (celebTimer >= CELEB_SLIDE) {
+            float pulse = 0.55f + 0.45f * MathUtils.sin(animTime * 4f);
+            floatFont.getData().setScale(0.58f);
+            floatFont.setColor(0.30f, 0.88f, 1f, alpha * pulse);
+            drawFontCentered("TAP TO CONTINUE", RENDER_W * 0.5f, cy + 10f);
+        }
+
         floatFont.getData().setScale(1f);
         batch.setColor(1f, 1f, 1f, 1f);
     }
 
     private void drawInternAddedOverlay() {
         float t = internAddedTimer / INTERN_ADDED_HOLD;
-        float alpha = t > 0.85f ? (1f - t) / 0.15f   // fade in (first 15% of hold time reversed)
-                    : t < 0.20f ? t / 0.20f            // fade out
+        // Fade in over first 0.3s, hold, fade out over last 0.4s
+        float alpha = t > 0.94f ? (1f - t) / 0.06f
+                    : t < 0.06f ? t / 0.06f
                     : 1f;
         alpha = Math.min(1f, alpha);
 
-        // Panel background
-        float pw = 320f, ph = 110f;
-        float px = (RENDER_W - pw) * 0.5f, py = RENDER_H * 0.38f;
-        batch.setColor(0f, 0.04f, 0.14f, 0.88f * alpha);
-        batch.draw(texPixel, px, py, pw, ph);
-
+        // Small tooltip centred above the r/s label (stats row ~Y=139, tooltip sits just above)
+        float pw = 190f, ph = 44f;
         float cx = RENDER_W * 0.5f;
-        float y  = py + ph - 18f;
+        float px = cx - pw * 0.5f;
+        float py = 156f; // just above stats row
 
-        floatFont.getData().setScale(1.1f);
+        batch.setColor(0f, 0.05f, 0.18f, 0.90f * alpha);
+        batch.draw(texPixel, px, py, pw, ph);
+        // top accent line
+        batch.setColor(0.27f, 1f, 0.55f, 0.70f * alpha);
+        batch.draw(texPixel, px, py + ph - 2f, pw, 2f);
+        batch.setColor(1f, 1f, 1f, 1f);
+
+        float y = py + ph - 10f;
+        floatFont.getData().setScale(0.62f);
         floatFont.setColor(0.27f, 1f, 0.55f, alpha);
         drawFontCentered("INTERN DEPLOYED", cx, y);
-        y -= 30f;
+        y -= 18f;
 
-        floatFont.getData().setScale(0.80f);
-        floatFont.setColor(0.75f, 0.80f, 1f, alpha * 0.85f);
-        drawFontCentered("TARGET RING SPEED", cx, y);
-        y -= 26f;
-
-        floatFont.getData().setScale(1.2f);
-        floatFont.setColor(1f, 0.70f, 0.18f, alpha);
-        drawFontCentered(String.format("%.1f r/s  →  %.1f r/s", internAddedOldSpeed, internAddedNewSpeed), cx, y);
+        floatFont.getData().setScale(0.72f);
+        floatFont.setColor(1f, 0.75f, 0.20f, alpha);
+        drawFontCentered(String.format("%.1f  ->  %.1f r/s", internAddedOldSpeed, internAddedNewSpeed), cx, y);
 
         floatFont.getData().setScale(1f);
         batch.setColor(1f, 1f, 1f, 1f);
@@ -3535,10 +3568,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         TextButton.TextButtonStyle tileStyle = new TextButton.TextButtonStyle();
         tileStyle.font      = game.skin.getFont("font");
-        tileStyle.up        = game.skin.getDrawable("card_large");
-        tileStyle.down      = game.skin.newDrawable("white", new Color(0.10f, 0.14f, 0.30f, 0.97f));
+        tileStyle.up        = game.skin.newDrawable("white", OdysseyTheme.PANEL_BG);
+        tileStyle.down      = game.skin.newDrawable("white", OdysseyTheme.BTN_ACTIVE);
         tileStyle.over      = tileStyle.down;
-        tileStyle.fontColor = Color.WHITE;
+        tileStyle.fontColor = OdysseyTheme.TEXT_PRI;
 
         final Table modal = new Table();
         modal.setFillParent(true);
@@ -3677,7 +3710,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 milestoneStatusLabel.setText(String.format("Next: ⚙ CP III at %.1f r/s", EMBER_MILESTONE_RPMS[2]));
             } else {
                 milestoneStatusLabel.setColor(1f, 0.45f, 0.10f, 1f);
-                milestoneStatusLabel.setText("All Ember IV perks active. Hub in overdrive.");
+                milestoneStatusLabel.setText("All Nova Terra perks active. Hub in overdrive.");
             }
             return;
         }
@@ -4091,7 +4124,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
             return 0;
         }
         if (sr >= 2) return 4;
-        return 3;
+        if (sr >= 1) return 2;
+        return 0;
     }
 
     private int maxCryoVentsAllowed() {
@@ -4196,7 +4230,108 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
     private void updatePerkLabel(Label label, String name, float value, float base) {
         label.setText(name + " x" + String.format("%.1f", value));
-        label.setColor(value > base ? OdysseyTheme.ACCENT_E : OdysseyTheme.TEXT_DIM);
+        if (value > base) {
+            label.setColor(0.28f, 0.92f, 1.00f, 1f);   // bright cyan glow — upgraded
+        } else {
+            label.setColor(0.62f, 0.68f, 0.82f, 1f);   // readable mid-grey — base value
+        }
+    }
+
+    /**
+     * Returns true when all purchasable upgrades for the current checkpoint tier are maxed out.
+     * Used to gate the launch button — player must fully invest before advancing.
+     */
+    private boolean isFullyUpgraded() {
+        int sr = ShipData.get().sectorReached;
+
+        // Must fill intern cap
+        if (balls.size < internCap()) return false;
+
+        if (isFrostheim()) {
+            // Pre-CP-I: must buy the 3rd intern unlock first
+            if (sr < 0 && !frostheimThirdInternUnlocked) return false;
+            // CP-I+: cryo must be unlocked (400❅ purchase) and all slots filled; tesla maxed
+            if (sr >= 0) {
+                if (!frostheimCryoUnlocked) return false;
+                if (cryoVents.size < maxCryoVentsAllowed()) return false;
+                if (teslaCoils.size < maxTeslaCoilsAllowed()) return false;
+            }
+        } else if (isEmberIV()) {
+            // Pre-CP-I: must buy the 3rd intern unlock first
+            if (sr < 0 && !emberThirdInternUnlocked) return false;
+            // CP-I+: blades and gravity maxed
+            if (kineticBlades.size < maxBladesAllowed()) return false;
+            if (gravityUnlocked() && attractors.size < maxGravityAllowed()) return false;
+        } else {
+            // Solara: bumpers and gravity maxed
+            if (bumpers.size < maxBumpersAllowed()) return false;
+            if (gravityUnlocked() && attractors.size < maxGravityAllowed()) return false;
+        }
+
+        return true;
+    }
+
+    /** Short description of what's blocking the upgrade gate, for the launch button label. */
+    private String upgradeGateHint() {
+        int sr = ShipData.get().sectorReached;
+        int cap = internCap();
+        if (balls.size < cap) return "HIRE " + balls.size + "/" + cap + " ORBS";
+        if (isFrostheim()) {
+            if (sr < 0 && !frostheimThirdInternUnlocked) return "BUY 3RD INTERN";
+            if (sr >= 0) {
+                if (!frostheimCryoUnlocked) return "UNLOCK CRYO";
+                if (cryoVents.size < maxCryoVentsAllowed()) return "MAX CRYO " + cryoVents.size + "/" + maxCryoVentsAllowed();
+                if (teslaCoils.size < maxTeslaCoilsAllowed()) return "MAX TESLA " + teslaCoils.size + "/" + maxTeslaCoilsAllowed();
+            }
+        } else if (isEmberIV()) {
+            if (sr < 0 && !emberThirdInternUnlocked) return "BUY 3RD INTERN";
+            int mb = maxBladesAllowed();
+            if (kineticBlades.size < mb) return "MAX BLADES " + kineticBlades.size + "/" + mb;
+            if (gravityUnlocked()) {
+                int mg = maxGravityAllowed();
+                if (attractors.size < mg) return "MAX GRAVITY " + attractors.size + "/" + mg;
+            }
+        } else {
+            int mb = maxBumpersAllowed();
+            if (mb > 0 && bumpers.size < mb) return "MAX BUMPERS " + bumpers.size + "/" + mb;
+            if (gravityUnlocked()) {
+                int mg = maxGravityAllowed();
+                if (attractors.size < mg) return "MAX GRAVITY " + attractors.size + "/" + mg;
+            }
+        }
+        return "UPGRADE";
+    }
+
+    private static void addPressEffect(TextButton btn) {
+        btn.setTransform(true);
+        btn.addListener(new com.badlogic.gdx.scenes.scene2d.InputListener() {
+            @Override
+            public boolean touchDown(com.badlogic.gdx.scenes.scene2d.InputEvent e,
+                                     float x, float y, int ptr, int b) {
+                btn.setOrigin(btn.getWidth() * 0.5f, btn.getHeight() * 0.5f);
+                btn.addAction(com.badlogic.gdx.scenes.scene2d.actions.Actions.scaleTo(0.91f, 0.91f, 0.06f));
+                return false;
+            }
+            @Override
+            public void touchUp(com.badlogic.gdx.scenes.scene2d.InputEvent e,
+                                float x, float y, int ptr, int b) {
+                btn.addAction(com.badlogic.gdx.scenes.scene2d.actions.Actions.scaleTo(1f, 1f, 0.12f));
+            }
+        });
+    }
+
+    private TextButton.TextButtonStyle makeTileStyle(com.badlogic.gdx.scenes.scene2d.ui.Skin skin, String key) {
+        NinePatchDrawable up   = skin.get(key, NinePatchDrawable.class);
+        // Pressed: same texture tinted brighter white
+        NinePatchDrawable down = new NinePatchDrawable(up);
+        down.getPatch().setColor(new Color(1.6f, 1.6f, 1.6f, 1f));
+        TextButton.TextButtonStyle s = new TextButton.TextButtonStyle();
+        s.font      = skin.getFont("font");
+        s.up        = up;
+        s.down      = down;
+        s.over      = up;
+        s.fontColor = OdysseyTheme.TEXT_PRI;
+        return s;
     }
 
     private static String formatNumber(float v) {

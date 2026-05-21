@@ -24,12 +24,12 @@ public final class OdysseyTheme {
     // ── Button state colors (apply via TextButton.setColor()) ──
     // These are TINTS applied to the white base drawable.
     // Use setColor() on the button — the drawable stays white, tint produces the final color.
-    public static final Color BTN_LOCKED    = new Color(0.031f, 0.031f, 0.063f, 1f);  // nearly invisible
-    public static final Color BTN_AVAILABLE = new Color(0.12f, 0.14f, 0.22f, 1f);    // dim blue-grey
-    public static final Color BTN_BUYABLE   = new Color(0.16f, 0.24f, 0.48f, 1f);    // blue tint
-    public static final Color BTN_ACTIVE    = new Color(0.20f, 0.35f, 0.70f, 1f);    // brighter blue
-    public static final Color BTN_GO        = new Color(0.00f, 0.35f, 0.14f, 1f);    // dark green
-    public static final Color BTN_GO_LOCKED = new Color(0.03f, 0.10f, 0.04f, 1f);    // near-black green
+    public static final Color BTN_LOCKED    = new Color(0.06f, 0.06f, 0.12f, 1f);    // near-black
+    public static final Color BTN_AVAILABLE = new Color(0.20f, 0.22f, 0.38f, 1f);    // visible dark grey-blue
+    public static final Color BTN_BUYABLE   = new Color(0.13f, 0.30f, 0.72f, 1f);    // clear blue
+    public static final Color BTN_ACTIVE    = new Color(0.22f, 0.42f, 0.88f, 1f);    // bright blue
+    public static final Color BTN_GO        = new Color(0.04f, 0.52f, 0.20f, 1f);    // vivid green
+    public static final Color BTN_GO_LOCKED = new Color(0.06f, 0.18f, 0.09f, 1f);    // dark green
 
     // ── Float number colors (by source) ──
     public static final Color FLOAT_SP      = new Color(0.800f, 0.600f, 0.000f, 1f);  // gold — SP

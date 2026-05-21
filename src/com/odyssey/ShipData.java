@@ -39,7 +39,7 @@ public final class ShipData {
     public static final PlanetProfile[] PLANETS = {
         new PlanetProfile("Solara", 1000f, 1.0f, "Stable", "Baseline Diagnostics",
             "Habitat Hub", "Solar Relay",     5_000f),
-        new PlanetProfile("Ember IV", 2500f, 1.6f, "Volcanic", "Industrial Mastery",
+        new PlanetProfile("Nova Terra", 2500f, 1.6f, "Volcanic", "Industrial Mastery",
             "Forge Hub", "Plasma Relay",      25_000f),
         new PlanetProfile("Frostheim", 5000f, 0.4f, "Frozen", "Cryo Tech",
             "Ice Lab", "Frost Relay",         100_000f),
