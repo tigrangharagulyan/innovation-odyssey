@@ -11,12 +11,12 @@ public final class SoundManager {
     private static final float COLLISION_THROTTLE = 0.20f;  // max 1 collision sound / 200ms
 
     private SoundManager() {
-        sndHire       = tryLoad("sounds/hire.ogg");
-        sndCollision  = tryLoad("sounds/collision.ogg");
-        sndBumper     = tryLoad("sounds/bumper.ogg");
-        sndMilestone  = tryLoad("sounds/milestone.ogg");
-        sndCheckpoint = tryLoad("sounds/checkpoint.ogg");
-        sndLaunch     = tryLoad("sounds/launch.ogg");
+        sndHire       = tryLoad("sounds/hire.wav");
+        sndCollision  = tryLoad("sounds/collision.wav");
+        sndBumper     = tryLoad("sounds/bumper.wav");
+        sndMilestone  = tryLoad("sounds/milestone.wav");
+        sndCheckpoint = tryLoad("sounds/checkpoint.wav");
+        sndLaunch     = tryLoad("sounds/launch.wav");
     }
 
     public static SoundManager get() {

@@ -72,17 +72,32 @@ public final class ShipData {
     public String lastArrivalPlanetName = "";
     public float lastArrivalEnergyUsed  = 0f;
     public float lastArrivalJourneyDays = 0f;
-    public float crystals               = 0f;
+    public float crystals               = 5f;
     public float bumperSparkValue       = 20f;
     public float bumperMult            = 1.0f;
     public float gravityMult           = 1.0f;
 
+    // EmberIV perk persistence — survives screen rebuild across checkpoints
+    public boolean[] emberPerksEarned  = new boolean[5];
+
+    // Pause earnings during structure placement
+    public boolean   placingStructure  = false;
+
+    // EmberIV portal/relay positions — survive screen rebuilds across checkpoints
+    // portals: flat [ax, ay, bx, by] per pair; relays: flat [x, y] per node
+    public float[] savedPortalPairs = new float[0];
+    public float[] savedRelayNodes  = new float[0];
+
     // Offline farming
     public int[]  internsLeftOnPlanet  = new int[PLANETS.length];
     public long   lastFarmingTimestamp = 0L;
+    public int    pendingNewRecruits   = 0;
+
+    public static final float FARM_RATE_PER_INTERN = 2f; // SP/s per deployed intern
 
     public final com.badlogic.gdx.utils.Array<float[]> pendingContactEvents = new com.badlogic.gdx.utils.Array<>();
-    public int pendingBumperSounds = 0;   // drained each frame by SoundManager call
+    public int pendingBumperSounds    = 0;
+    public int pendingCollisionSounds = 0;
 
     public static final float SOLARA_GRAVITY  = 1.0f;
     public static final float SOLARA_DISTANCE = 1000f;
@@ -115,14 +130,19 @@ public final class ShipData {
         lastArrivalPlanetName   = "";
         lastArrivalEnergyUsed   = 0f;
         lastArrivalJourneyDays  = 0f;
-        crystals                = 0f;
+        crystals                = 5f;
         bumperSparkValue        = 20f;
         bumperMult              = 1.0f;
         gravityMult             = 1.0f;
         lastFarmingTimestamp    = 0L;
+        pendingNewRecruits      = 0;
         for (int i = 0; i < internsLeftOnPlanet.length; i++) internsLeftOnPlanet[i] = 0;
+        for (int i = 0; i < emberPerksEarned.length; i++) emberPerksEarned[i] = false;
+        savedPortalPairs = new float[0];
+        savedRelayNodes  = new float[0];
         pendingContactEvents.clear();
-        pendingBumperSounds = 0;
+        pendingBumperSounds    = 0;
+        pendingCollisionSounds = 0;
     }
 
     public void addJoules(float joules) {
@@ -139,6 +159,22 @@ public final class ShipData {
     public boolean spend(float cost) {
         if (totalJoules >= cost) { totalJoules -= cost; return true; }
         return false;
+    }
+
+    /** Returns SP earned offline since last claim, then resets the timestamp. */
+    public float claimOfflineFarming() {
+        if (lastFarmingTimestamp == 0L) return 0f;
+        long now = System.currentTimeMillis();
+        float elapsed = (now - lastFarmingTimestamp) / 1000f;
+        lastFarmingTimestamp = now;
+        float total = 0f;
+        for (int i = 0; i < PLANETS.length; i++) {
+            if (internsLeftOnPlanet[i] <= 0) continue;
+            float rate = internsLeftOnPlanet[i] * FARM_RATE_PER_INTERN;
+            float cap  = PLANETS[i].maxFarmingStorage;
+            total = Math.min(total + rate * elapsed, total + cap);
+        }
+        return total;
     }
 
     public PlanetProfile getCurrentPlanet()  { return PLANETS[currentPlanetIndex]; }

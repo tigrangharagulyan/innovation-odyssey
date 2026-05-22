@@ -33,6 +33,9 @@ public class EnergyContactListener implements ContactListener {
         boolean bIsCryo = "CRYO_VENT".equals(bodyB.getUserData());
         if (aIsCryo || bIsCryo) return;
 
+        // Pause all earnings while player is placing a structure
+        if (ShipData.get().placingStructure) return;
+
         // Ember IV: Kinetic Blade slam — award +35 J per impact
         boolean aIsBlade = "KINETIC_BLADE".equals(bodyA.getUserData());
         boolean bIsBlade = "KINETIC_BLADE".equals(bodyB.getUserData());
@@ -76,6 +79,7 @@ public class EnergyContactListener implements ContactListener {
             // ---- Intern-intern collision: primary Spark / Frost-Shard source ----
             float sparks = SPARK_INTERN_INTERN * sd.collisionEnergyMult;
             sd.addCrystals(sparks);
+            sd.pendingCollisionSounds++;
             queueFloatNum(contact, bodyA, bodyB, sparks, 1, sd);
 
             // Mutual separation impulse keeps the chaos alive
@@ -110,10 +114,16 @@ public class EnergyContactListener implements ContactListener {
             }
 
         } else if (aIsIntern || bIsIntern) {
-            // ---- Wall / ring contact: tiny passive trickle ----
+            // ---- Wall / ring contact ----
             float wallGain = SPARK_WALL * sd.wallEnergyMult;
-            sd.addCrystals(wallGain);
-            queueFloatNum(contact, bodyA, bodyB, wallGain, 0, sd); // color 0 = energy (green)
+            if (wallGain > 0f) {
+                sd.addCrystals(wallGain);
+                queueFloatNum(contact, bodyA, bodyB, wallGain, 0, sd);
+            }
+            // Perk 2 (Wall Energy, wallEnergyMult >= 2): also generate energy
+            if (sd.wallEnergyMult >= 2f) {
+                sd.addJoules(8f);
+            }
         }
     }
 

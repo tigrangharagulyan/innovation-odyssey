@@ -22,10 +22,11 @@ public class OdysseyGame extends Game {
 
     public Skin skin;
 
-    private MainMenuScreen        mainMenuScreen;
-    private EngineeringLabScreen  labScreen;
-    private BridgeFlightScreen    flightScreen;
-    private GalacticMapScreen     galacticScreen;
+    private MainMenuScreen         mainMenuScreen;
+    private EngineeringLabScreen   labScreen;
+    private BridgeFlightScreen     flightScreen;
+    private InternDeployScreen     deployScreen;
+    private GalacticMapScreen      galacticScreen;
     private NovaTerraArrivalScreen arrivalScreen;
 
     private GameState currentState;
@@ -307,6 +308,14 @@ public class OdysseyGame extends Game {
         if (labScreen != null) { labScreen.dispose(); labScreen = null; }
     }
 
+    /** Dispose and rebuild EngineeringLabScreen immediately, bypassing fade/state guards. */
+    public void forceRebuildLab() {
+        if (labScreen != null) { labScreen.dispose(); labScreen = null; }
+        labScreen = new EngineeringLabScreen(this);
+        currentState = GameState.ENGINEERING_LAB;
+        setScreen(labScreen);
+    }
+
     public void transitionTo(GameState next) {
         if (fadingOut || fadingIn) return;   // already mid-transition
         if (next == currentState) return;
@@ -333,6 +342,11 @@ public class OdysseyGame extends Game {
                 flightScreen.resetFlight();
                 setScreen(flightScreen);
                 break;
+            case INTERN_DEPLOY:
+                if (deployScreen == null) deployScreen = new InternDeployScreen(this);
+                deployScreen.show();
+                setScreen(deployScreen);
+                break;
             case GALACTIC_MAP:
                 if (galacticScreen == null) galacticScreen = new GalacticMapScreen(this);
                 setScreen(galacticScreen);
@@ -351,6 +365,7 @@ public class OdysseyGame extends Game {
         if (mainMenuScreen != null) mainMenuScreen.dispose();
         if (labScreen      != null) labScreen.dispose();
         if (flightScreen   != null) flightScreen.dispose();
+        if (deployScreen   != null) deployScreen.dispose();
         if (galacticScreen != null) galacticScreen.dispose();
         if (arrivalScreen  != null) arrivalScreen.dispose();
         if (fadeBatch      != null) fadeBatch.dispose();

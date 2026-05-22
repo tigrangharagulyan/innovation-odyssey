@@ -10,6 +10,7 @@ import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
@@ -83,9 +84,16 @@ public class EngineeringLabScreen extends ScreenAdapter {
         30_000, 40_000, 50_000,         // CP II         (interns 8–10)
         150_000, 200_000                // CP III        (interns 11–12)
     };
+    // Final prices (not multiplied by price() — EmberIV uses these directly)
+    private static final float[] EMBER_INTERN_COSTS = {
+        1_500, 2_400,                   // pre-CP        (interns 3–4)
+        5_000, 8_000, 15_000,           // CP I          (interns 5–7)
+        30_000, 55_000, 180_000,        // CP II         (interns 8–10)
+        375_000, 525_000                // CP III        (interns 11–12)
+    };
     // Crystal costs — linear, separate currency from joules
-    private static final float[] BUMPER_COSTS  = {500, 1000, 5000, 10000, 100_000};
-    private static final float[] GRAVITY_COSTS = {3000, 6000, 20000, 200_000};
+    private static final float[] BUMPER_COSTS  = {500, 1000, 5000, 30_000, 100_000};
+    private static final float[] GRAVITY_COSTS = {3000, 15_000, 150_000};
     // Ring-speed milestones: auto-unlock in order as ring climbs
     // Index 0 (Elastic Walls) is checkpoint-gated — only unlocked at CP I, never by ring speed
     private static final float[]  MILESTONE_RPMS  = {5.25f, 3.5f, 6.75f, 7.5f, 9.5f, 99f};
@@ -98,6 +106,16 @@ public class EngineeringLabScreen extends ScreenAdapter {
         "Bumpers deal 3× more Space Points per hit",
         "-"
     };
+    private static final String[] EMBER_PERK_NAMES = {
+        "Speed Keep", "Wall Energy", "Gravity Shift", "Portal Sync", "Reverse Field"
+    };
+    private static final String[] EMBER_PERK_DESCS = {
+        "Interns keep 97% speed after every hit",
+        "Wall bounces generate Space Points",
+        "Manual gravity redirect · 5000 SP/shift",
+        "Portals teleport in both directions",
+        "Centrifuge spin direction reversed"
+    };
 
     // Solara (Level 1) checkpoint energy thresholds
     private static final float[] SOLARA_CP_ENERGIES = {2_000f, 10_000f, 50_000f, 100_000f};
@@ -106,10 +124,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private static final float[] FROSTHEIM_CP_ENERGIES = {4_000f, 24_000f, 120_000f, 150_000f};
 
     // Ember IV (Level 2) checkpoint energy thresholds — 1.6G high-yield
-    private static final float[] EMBER_CP_ENERGIES = {8_000f, 30_000f, 100_000f, 180_000f};
+    private static final float[] EMBER_CP_ENERGIES = {5_000f, 60_000f, 300_000f, 250_000f};
 
     // Ember IV: Kinetic Blade costs (◆) — one blade unlocks per CP
-    private static final float[] BLADE_COSTS = {1_500f, 4_000f, 10_000f};
+    private static final float[] BLADE_COSTS = {1_500f, 12_000f, 30_000f};
 
     // Ember IV: Gravity well costs (◆) — scaled 1.5× vs Solara
     private static final float[] EMBER_GRAVITY_COSTS = {5_000f, 12_000f, 30_000f};
@@ -139,6 +157,23 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private static final int PLACE_GRAVITY = 2;
     private static final int PLACE_BLADE   = 3;
 
+    // Ember IV: Resonance Relay — CP I unlock
+    private static final int   PLACE_RELAY          = 6;
+    private static final int   MAX_RELAY_NODES      = 2;
+    private static final float RELAY_NODE_RADIUS    = 0.10f;
+    private static final float RELAY_COST           = 15_000f; // base; relayCost() returns dynamic price
+    private static final float RELAY_CROSS_REWARD   = 50f;
+    private static final float RELAY_CROSS_COOLDOWN = 0.6f;
+
+    // Ember IV: Phase Portal — CP I unlock
+    private static final int   PLACE_PORTAL         = 7;
+    private static final int   MAX_PORTAL_PAIRS      = 2;
+    private static final float PORTAL_RADIUS         = 0.22f;  // trigger radius (world units)
+    private static final float PORTAL_COST           = 3_000f; // base; portalCost() returns dynamic price
+    private static final float PORTAL_EXIT_MULT      = 1.2f;   // speed multiplier on exit
+    private static final float PORTAL_COOLDOWN       = 0.2f;   // per-orb re-trigger cooldown (s)
+    private static final float PORTAL_ENTER_REWARD   = 100f;   // SP reward per teleport
+
     // Sprite draw sizes in pixels
     private static final float INTERN_W       = 80f;   // particle glow draw size on screen
     private static final float INTERN_H       = 80f;
@@ -162,6 +197,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
     // Rendering
     private SpriteBatch        batch;
+    private ShapeRenderer      shapeR;
     private OrthographicCamera renderCam;
     private ExtendViewport     renderViewport;
     private Texture            texBackground;
@@ -171,6 +207,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private Texture            texRing;
     private Texture            texGravField;
     private Texture            texGravCenter;     // singularity core icon for gravity wells
+    private Texture            texPortalIcon;     // EmberIV portal button icon
+    private Texture            texRailIcon;       // EmberIV rail button icon
+    private Texture            texEmberIntern;    // EmberIV hire button icon
     private Texture            texPixel;          // 1×1 white pixel
     private Texture            texCryoVent;       // Level 2: snowflake crystal icon
     private Texture            texTeslaCoil;      // Level 2: electromagnetic coil-rings icon
@@ -203,6 +242,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     // ── Perk readout strip — icon Images (one per milestone slot) ──
     private com.badlogic.gdx.scenes.scene2d.ui.Image perkIconSpeed, perkIconElas, perkIconWall, perkIconColl, perkIconBump;
     private Texture texPerkSpeed, texPerkElas, texPerkWall, texPerkColl, texPerkBump;
+    private Texture texEmberPerk1, texEmberPerk2, texEmberPerk3, texEmberPerk4, texEmberPerk5;
     private Texture texIconSP, texIconEnergy;
     private com.badlogic.gdx.scenes.scene2d.ui.Image uiIconSP, uiIconEnergy;
 
@@ -273,6 +313,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private TextButton btnUpgBumper;
     private TextButton btnUpgGravity;
     private TextButton btnFlight;
+    private TextButton btnGravShift;
+    private com.badlogic.gdx.scenes.scene2d.ui.Cell<?> gravShiftCell;
     private Label      ringSpeedLabel;
     private Label      configLabel;
     private Label      milestoneStatusLabel;
@@ -303,6 +345,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private float internAddedOldSpeed = 0f;
     private float internAddedNewSpeed = 0f;
     private float lastDisplayedSpeed  = -1f; // throttle ringSpeedLabel setText
+    private float hireIdleTimer       = 0f;  // counts up when ≤2 interns & no recent hire
 
     // Generic notification overlay — tap to dismiss
     private static final float NOTIF_HOLD  = 3.2f; // kept for legacy; now controls fade-in only
@@ -346,7 +389,23 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private boolean emberCpI   = false;
     private boolean emberCpII  = false;
     private boolean emberCpIII = false;
+    private boolean emberPerk1 = false;
+    private boolean emberPerk2 = false;
+    private boolean emberPerk3 = false;
+    private boolean emberPerk4 = false;
+    private boolean emberPerk5 = false;
+    private boolean portalBidirectional = false;
+    private boolean emberSpinReversed   = false;
+    private int     gravShiftStep       = 0;
     private boolean emberThirdInternUnlocked = false;  // 1200◆ — unlock + spawn 3rd intern
+
+
+    // Gravity toggle: pull interns toward center or push them away
+    private boolean emberGravityEnabled = false;
+    private boolean emberGravityPush    = false; // false=pull, true=push
+    private static final float EMBER_GRAVITY_UNLOCK_COST = 2_000f;
+    private static final float EMBER_GRAVITY_TOGGLE_COST = 800f;
+    private static final float EMBER_GRAVITY_FORCE       = 55f;
 
     // Cybernetic Axle Hub dual-state clock
     private float   hubStateTimer  = 0f;
@@ -358,6 +417,20 @@ public class EngineeringLabScreen extends ScreenAdapter {
     // Ember IV: Volcanic Spring-Pads — static rim fixtures that catapult orbs on contact
     private final Array<Body> springPads = new Array<>();
     private boolean emberHeavyChassis  = false; // CP I: density 3.5
+
+    // Resonance Relay
+    private final com.badlogic.gdx.utils.Array<com.badlogic.gdx.math.Vector2> relayNodes = new com.badlogic.gdx.utils.Array<>();
+    private float[] relayCooldowns  = new float[0];
+    private float[] relaySegGlow    = new float[MAX_RELAY_NODES];
+
+    // Phase Portal — list of pairs; each pair = Vector2[2] {localA, localB} in rect local frame
+    private final com.badlogic.gdx.utils.Array<com.badlogic.gdx.math.Vector2[]> portalPairs =
+        new com.badlogic.gdx.utils.Array<>();
+    // portalOrbCooldowns flat: [ballIdx * MAX_PORTAL_PAIRS + pairIdx]
+    private float[] portalOrbCooldowns = new float[0];
+    // portalGlow: [pairIdx*2+0]=A glow, [pairIdx*2+1]=B glow
+    private float[] portalGlow         = new float[MAX_PORTAL_PAIRS * 2];
+
     private boolean emberMagneticRim   = false; // CP II: rolling wall contact
     // ---- Ember IV textures -------------------------------------------------------
     private Texture texBlade1;   // Variation A — Heavy Carbon-Steel
@@ -415,6 +488,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
         texRing         = genRingTexture((int) RING_TEX_SIZE);
         texGravField    = genGravFieldTexture(128);
         texGravCenter   = genGravCenterTexture(48);
+        texPortalIcon   = genPortalIconTexture(48);
+        texRailIcon     = genRailIconTexture(48);
+        texEmberIntern  = genEmberInternTexture(64);
         texCryoVent     = genCryoVentTexture(64);
         texTeslaCoil    = genTeslaCoilTexture(64);
         texBlade1       = genBladeTextureA(96);
@@ -427,6 +503,13 @@ public class EngineeringLabScreen extends ScreenAdapter {
         texPerkWall     = genPerkIconWall(40);
         texPerkColl     = genPerkIconColl(40);
         texPerkBump     = genPerkIconBump(40);
+        if (isEmberIV()) {
+            texEmberPerk1 = genEmberPerkIconSpeedKeep(40);
+            texEmberPerk2 = genEmberPerkIconWallEnergy(40);
+            texEmberPerk3 = genEmberPerkIconGravShift(40);
+            texEmberPerk4 = genEmberPerkIconPortalSync(40);
+            texEmberPerk5 = genEmberPerkIconReverse(40);
+        }
         texIconSP       = genIconCrystal(20);
         texIconEnergy   = genIconBolt(24);
 
@@ -472,7 +555,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         };
         // Chamber glow color [glowR, glowG, glowB]
         float[] gc = switch (pidx) {
-            case 1  -> new float[]{0.90f, 0.22f, 0.04f}; // Ember IV  lava-orange
+            case 1  -> new float[]{0.65f, 0.10f, 0.95f}; // Ember IV  nova-purple
             case 2  -> new float[]{0.48f, 0.72f, 1.00f}; // Frostheim ice-blue
             case 3  -> new float[]{0.05f, 0.85f, 0.78f}; // Cryon Reach teal
             case 4  -> new float[]{0.95f, 0.82f, 0.35f}; // Helios Forge solar
@@ -506,15 +589,20 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // Chamber — in Pixmap coords: chamberCY_pm = H - CCY_PX (LibGDX renders y-up, Pixmap is y-down)
         float cCX = CCX_PX, cCY = H - CCY_PX;
-        float cR = CENTRIFUGE_R * PPM;
+        float cR   = CENTRIFUGE_R * PPM;
+        float sqHS = RECT_HW * PPM; // square half-size in pixels (same for both axes)
+        boolean isSquare = (pidx == 1);
 
-        // Dark inner area (darker shade of the planet gradient)
-        for (int y = (int)(cCY - cR - 2); y <= (int)(cCY + cR + 2); y++) {
-            for (int x = (int)(cCX - cR - 2); x <= (int)(cCX + cR + 2); x++) {
+        // Dark inner area
+        float scanR = isSquare ? sqHS + 2 : cR + 2;
+        for (int y = (int)(cCY - scanR); y <= (int)(cCY + scanR); y++) {
+            for (int x = (int)(cCX - scanR); x <= (int)(cCX + scanR); x++) {
                 if (x < 0 || x >= W || y < 0 || y >= H) continue;
                 float dx = x - cCX, dy = y - cCY;
-                float dist = (float) Math.sqrt(dx * dx + dy * dy);
-                if (dist <= cR - 4) {
+                float dist = isSquare ? Math.max(Math.abs(dx), Math.abs(dy))
+                                      : (float) Math.sqrt(dx * dx + dy * dy);
+                float inner = isSquare ? sqHS - 4 : cR - 4;
+                if (dist <= inner) {
                     float t = (float) y / H;
                     pm.setColor((gp[0] + t * gp[1]) * 0.55f,
                                 (gp[2] + t * gp[3]) * 0.55f,
@@ -524,21 +612,23 @@ public class EngineeringLabScreen extends ScreenAdapter {
             }
         }
 
-        // Planet-themed glow ring around chamber
-        for (int y = (int)(cCY - cR - 20); y <= (int)(cCY + cR + 20); y++) {
-            for (int x = (int)(cCX - cR - 20); x <= (int)(cCX + cR + 20); x++) {
-                if (x < 0 || x >= W || y < 0 || y >= H) continue;
-                float dx = x - cCX, dy = y - cCY;
-                float dist = (float) Math.sqrt(dx * dx + dy * dy);
-                float ring = Math.abs(dist - cR);
-                if (ring < 14) {
-                    float glow = (1f - ring / 14f) * 0.55f;
-                    float t = (float) y / H;
-                    float br = gp[0] + t * gp[1], bg = gp[2] + t * gp[3], bb = gp[4] + t * gp[5];
-                    pm.setColor(Math.min(br + glow * gc[0], 1f),
-                                Math.min(bg + glow * gc[1], 1f),
-                                Math.min(bb + glow * gc[2], 1f), 1f);
-                    pm.drawPixel(x, y);
+        // Planet-themed glow ring — skip for square (rotating drawRectRing handles it)
+        if (!isSquare) {
+            for (int y = (int)(cCY - cR - 20); y <= (int)(cCY + cR + 20); y++) {
+                for (int x = (int)(cCX - cR - 20); x <= (int)(cCX + cR + 20); x++) {
+                    if (x < 0 || x >= W || y < 0 || y >= H) continue;
+                    float dx = x - cCX, dy = y - cCY;
+                    float dist = (float) Math.sqrt(dx * dx + dy * dy);
+                    float ring = Math.abs(dist - cR);
+                    if (ring < 14) {
+                        float glow = (1f - ring / 14f) * 0.55f;
+                        float t = (float) y / H;
+                        float br = gp[0] + t * gp[1], bg2 = gp[2] + t * gp[3], bb = gp[4] + t * gp[5];
+                        pm.setColor(Math.min(br + glow * gc[0], 1f),
+                                    Math.min(bg2 + glow * gc[1], 1f),
+                                    Math.min(bb + glow * gc[2], 1f), 1f);
+                        pm.drawPixel(x, y);
+                    }
                 }
             }
         }
@@ -558,7 +648,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         int pidx = ShipData.get().currentPlanetIndex;
         // Ring fill color: [r_base, r_peak, g_base, g_peak, b_base, b_peak]
         float[] rc = switch (pidx) {
-            case 1  -> new float[]{0.70f,0.28f, 0.18f,0.22f, 0.04f,0.04f}; // Ember IV  orange-red
+            case 1  -> new float[]{0.35f,0.20f, 0.05f,0.10f, 0.70f,0.90f}; // Ember IV  nova-purple
             case 2  -> new float[]{0.50f,0.40f, 0.72f,0.22f, 0.90f,0.10f}; // Frostheim ice-white
             case 3  -> new float[]{0.04f,0.08f, 0.50f,0.38f, 0.46f,0.40f}; // Cryon Reach teal
             case 4  -> new float[]{0.80f,0.18f, 0.68f,0.24f, 0.20f,0.16f}; // Helios Forge yellow
@@ -566,7 +656,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         };
         // Segment mark color [r, g, b]
         float[] mc = switch (pidx) {
-            case 1  -> new float[]{1.00f, 0.65f, 0.25f}; // Ember IV  orange
+            case 1  -> new float[]{0.85f, 0.50f, 1.00f}; // Ember IV  nova-purple
             case 2  -> new float[]{0.85f, 0.95f, 1.00f}; // Frostheim ice-white
             case 3  -> new float[]{0.25f, 1.00f, 0.88f}; // Cryon Reach teal
             case 4  -> new float[]{1.00f, 0.90f, 0.40f}; // Helios Forge yellow
@@ -936,6 +1026,117 @@ public class EngineeringLabScreen extends ScreenAdapter {
         return tex;
     }
 
+    // EmberIV hire button icon — amber/orange glowing orb with hot core and radial heat haze
+    // Intern button icon — amber orb with green "+" hire indicator
+    private Texture genEmberInternTexture(int s) {
+        Pixmap pm = new Pixmap(s, s, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        pm.setColor(0f, 0f, 0f, 0f); pm.fill();
+        float cx = s * 0.5f, cy = s * 0.5f, r = s * 0.5f - 2f;
+
+        // amber filled orb
+        for (int y = 0; y < s; y++) {
+            for (int x = 0; x < s; x++) {
+                float dx = x - cx, dy = y - cy;
+                float d = (float)Math.sqrt(dx*dx + dy*dy) / r;
+                if (d > 1f) continue;
+                float rim   = Math.max(0f, 1f - Math.abs(d - 0.80f) * 10f);
+                float fill2 = Math.max(0f, 1f - d * 1.1f) * 0.75f;
+                float a     = Math.min(rim * 0.95f + fill2, 0.95f);
+                float bright = rim * 0.85f + fill2 * 0.60f;
+                pm.setColor(Math.min(bright + 0.30f, 1f), Math.min(bright * 0.55f + 0.05f, 1f), bright * 0.02f, a);
+                pm.drawPixel(x, y);
+            }
+        }
+
+        // white highlight arc (top-left)
+        pm.setColor(1f, 1f, 1f, 0.50f);
+        for (int deg = 210; deg <= 310; deg += 15) {
+            double a = Math.toRadians(deg);
+            int hx = (int)(cx + Math.cos(a) * (r - 3));
+            int hy = (int)(cy + Math.sin(a) * (r - 3));
+            pm.fillRectangle(hx, hy, 2, 2);
+        }
+
+        // green "+" at center
+        int pcx = (int)cx, pcy = (int)cy;
+        pm.setColor(0.10f, 0.95f, 0.55f, 1f);
+        pm.fillRectangle(pcx - 6, pcy - 2, 13, 4);
+        pm.fillRectangle(pcx - 2, pcy - 6, 4, 13);
+
+        Texture t = new Texture(pm); pm.dispose(); return t;
+    }
+
+    // Portal button icon — cyan ring portal with dark interior and spinning vortex arcs
+    private Texture genPortalIconTexture(int s) {
+        Pixmap pm = new Pixmap(s, s, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        pm.setColor(0f, 0f, 0f, 0f); pm.fill();
+        float cx = s * 0.5f, cy = s * 0.5f, r = s * 0.5f - 2f;
+        for (int y = 0; y < s; y++) {
+            for (int x = 0; x < s; x++) {
+                float dx = x - cx, dy = y - cy;
+                float d = (float)Math.sqrt(dx*dx + dy*dy) / r;
+                if (d > 1f) continue;
+                float ring  = Math.max(0f, 1f - Math.abs(d - 0.82f) * 14f);
+                float inner = Math.max(0f, 1f - Math.abs(d - 0.55f) * 12f) * 0.5f;
+                float core  = Math.max(0f, 1f - d * 4.5f) * 0.35f;
+                float fill  = (1f - d) * 0.12f;
+                float a     = Math.min(ring * 0.95f + inner + core + fill, 0.95f);
+                float bright = ring * 0.9f + inner * 0.4f + core;
+                pm.setColor(bright * 0.05f, Math.min(bright * 0.85f + 0.05f, 1f),
+                            Math.min(bright + 0.1f, 1f), a);
+                pm.drawPixel(x, y);
+            }
+        }
+        // 5 vortex spokes from center outward
+        for (int k = 0; k < 5; k++) {
+            float ang = (float)(k * Math.PI * 2.0 / 5);
+            float ca = MathUtils.cos(ang), sa = MathUtils.sin(ang);
+            for (float t2 = 0.15f; t2 <= 0.70f; t2 += 0.06f) {
+                float fade = 1f - t2 / 0.70f;
+                int px = (int)(cx + ca * r * t2), py = (int)(cy + sa * r * t2);
+                pm.setColor(0.05f, 0.92f, 1f, fade * 0.75f);
+                pm.fillRectangle(px - 1, py - 1, 3, 3);
+            }
+        }
+        Texture t = new Texture(pm); pm.dispose(); return t;
+    }
+
+    // Rail button icon — wall bar with two glowing nodes and a ball arc
+    private Texture genRailIconTexture(int s) {
+        Pixmap pm = new Pixmap(s, s, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        pm.setColor(0f, 0f, 0f, 0f); pm.fill();
+        // wall bar
+        pm.setColor(0.55f, 0.70f, 1.00f, 1f);
+        pm.fillRectangle(4, s * 3/4 - 2, s - 8, 5);
+        // two node circles on wall
+        pm.setColor(0.25f, 1.00f, 0.75f, 1f);
+        pm.fillCircle(s / 4,     s * 3/4, 5);
+        pm.fillCircle(s * 3 / 4, s * 3/4, 5);
+        // node highlight rings
+        pm.setColor(1f, 1f, 1f, 0.6f);
+        for (int deg = 0; deg < 360; deg += 45) {
+            double a = Math.toRadians(deg);
+            pm.fillRectangle((int)(s/4   + Math.cos(a)*5)-1, (int)(s*3/4 + Math.sin(a)*5)-1, 2, 2);
+            pm.fillRectangle((int)(s*3/4 + Math.cos(a)*5)-1, (int)(s*3/4 + Math.sin(a)*5)-1, 2, 2);
+        }
+        // ball
+        pm.setColor(1.00f, 0.88f, 0.20f, 1f);
+        pm.fillCircle(8, s / 4, 5);
+        // dashed arc path toward right node
+        for (int i = 0; i <= 12; i++) {
+            if (i % 3 == 2) continue;
+            float t2 = i / 12f;
+            int tx = (int)(8 + (s * 3/4 - 8) * t2);
+            int ty = (int)(s/4 + (s * 3/4 - s/4) * t2 - (float)Math.sin(t2 * Math.PI) * 10f);
+            pm.setColor(1.00f, 0.88f, 0.20f, 0.7f);
+            pm.fillRectangle(tx - 1, ty - 1, 3, 3);
+        }
+        Texture tex = new Texture(pm); pm.dispose(); return tex;
+    }
+
     // ---- Perk icon generators -------------------------------------------------
 
     // Speed Keep — cyan circular arrow
@@ -1097,6 +1298,115 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 pm.fillRectangle(px - 2, py - 2, 4, 4);
             }
         }
+        Texture t = new Texture(pm); pm.dispose(); return t;
+    }
+
+    // EmberIV perk 1 — Speed Keep: cyan circle arc with speed arrow
+    private Texture genEmberPerkIconSpeedKeep(int s) {
+        Pixmap pm = new Pixmap(s, s, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        pm.setColor(0f, 0f, 0f, 0f); pm.fill();
+        int cx = s / 2, cy = s / 2, r = s / 2 - 4;
+        pm.setColor(0.20f, 0.95f, 1.00f, 1f);
+        for (int deg = 30; deg <= 360; deg++) {
+            double a = Math.toRadians(deg);
+            int px = cx + (int)(Math.cos(a) * r), py = cy + (int)(Math.sin(a) * r);
+            pm.fillRectangle(px - 2, py - 2, 4, 4);
+        }
+        double ae = Math.toRadians(30);
+        int ax = cx + (int)(Math.cos(ae) * r), ay = cy + (int)(Math.sin(ae) * r);
+        pm.fillTriangle(ax, ay - 5, ax + 5, ay + 4, ax - 5, ay + 4);
+        Texture t = new Texture(pm); pm.dispose(); return t;
+    }
+
+    // EmberIV perk 2 — Wall Energy: green wall bar + yellow lightning bolt
+    private Texture genEmberPerkIconWallEnergy(int s) {
+        Pixmap pm = new Pixmap(s, s, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        pm.setColor(0f, 0f, 0f, 0f); pm.fill();
+        pm.setColor(0.20f, 0.90f, 0.45f, 1f);
+        pm.fillRectangle(3, 4, 6, s - 8);
+        // lightning bolt
+        pm.setColor(1.00f, 0.92f, 0.15f, 1f);
+        int bx = 14, by = 6;
+        pm.fillTriangle(bx, by, bx + 12, by, bx + 4, by + 14);
+        pm.fillTriangle(bx + 4, by + 12, bx + 16, by + 12, bx + 4, by + s - 8);
+        Texture t = new Texture(pm); pm.dispose(); return t;
+    }
+
+    // EmberIV perk 3 — Gravity Shift: two rotation arrows forming a circle
+    private Texture genEmberPerkIconGravShift(int s) {
+        Pixmap pm = new Pixmap(s, s, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        pm.setColor(0f, 0f, 0f, 0f); pm.fill();
+        int cx = s / 2, cy = s / 2, r = s / 2 - 5;
+        pm.setColor(1.00f, 0.55f, 0.10f, 1f);
+        // top arc (0–150 deg)
+        for (int deg = 0; deg <= 150; deg++) {
+            double a = Math.toRadians(deg);
+            int px = cx + (int)(Math.cos(a) * r), py = cy + (int)(Math.sin(a) * r);
+            pm.fillRectangle(px - 2, py - 2, 4, 4);
+        }
+        // arrowhead at 150 deg
+        double a0 = Math.toRadians(150);
+        int ax0 = cx + (int)(Math.cos(a0) * r), ay0 = cy + (int)(Math.sin(a0) * r);
+        pm.fillTriangle(ax0 - 5, ay0, ax0 + 3, ay0 - 6, ax0 + 3, ay0 + 6);
+        // bottom arc (180–330 deg)
+        pm.setColor(0.50f, 0.80f, 1.00f, 1f);
+        for (int deg = 180; deg <= 330; deg++) {
+            double a = Math.toRadians(deg);
+            int px = cx + (int)(Math.cos(a) * r), py = cy + (int)(Math.sin(a) * r);
+            pm.fillRectangle(px - 2, py - 2, 4, 4);
+        }
+        double a1 = Math.toRadians(330);
+        int ax1 = cx + (int)(Math.cos(a1) * r), ay1 = cy + (int)(Math.sin(a1) * r);
+        pm.fillTriangle(ax1 + 5, ay1, ax1 - 3, ay1 - 6, ax1 - 3, ay1 + 6);
+        Texture t = new Texture(pm); pm.dispose(); return t;
+    }
+
+    // EmberIV perk 4 — Portal Sync: cyan dot ←→ orange dot
+    private Texture genEmberPerkIconPortalSync(int s) {
+        Pixmap pm = new Pixmap(s, s, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        pm.setColor(0f, 0f, 0f, 0f); pm.fill();
+        int cy = s / 2;
+        // cyan portal
+        pm.setColor(0.10f, 0.85f, 1.00f, 1f);
+        pm.fillCircle(8, cy, 6);
+        // orange portal
+        pm.setColor(1.00f, 0.50f, 0.05f, 1f);
+        pm.fillCircle(s - 8, cy, 6);
+        // double-headed arrow between them
+        pm.setColor(1f, 1f, 1f, 0.90f);
+        for (int x = 16; x <= s - 16; x++) pm.fillRectangle(x, cy - 1, 1, 3);
+        // left arrowhead
+        pm.fillTriangle(14, cy, 20, cy - 5, 20, cy + 5);
+        // right arrowhead
+        pm.fillTriangle(s - 14, cy, s - 20, cy - 5, s - 20, cy + 5);
+        Texture t = new Texture(pm); pm.dispose(); return t;
+    }
+
+    // EmberIV perk 5 — Reverse Field: square outline with curved reverse arrow
+    private Texture genEmberPerkIconReverse(int s) {
+        Pixmap pm = new Pixmap(s, s, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        pm.setColor(0f, 0f, 0f, 0f); pm.fill();
+        // square outline
+        pm.setColor(0.75f, 0.50f, 1.00f, 1f);
+        int m = 6;
+        pm.fillRectangle(m,     m,     s-2*m, 3);
+        pm.fillRectangle(m,     s-m-3, s-2*m, 3);
+        pm.fillRectangle(m,     m,     3,     s-2*m);
+        pm.fillRectangle(s-m-3, m,     3,     s-2*m);
+        // reverse arrow inside (two short horizontal arrows pointing opposite)
+        pm.setColor(1.00f, 0.85f, 0.20f, 1f);
+        int my = s / 2;
+        // left arrow pointing left
+        for (int x = m+5; x <= s/2 - 3; x++) pm.fillRectangle(x, my-1, 1, 3);
+        pm.fillTriangle(m+4, my, m+10, my-5, m+10, my+5);
+        // right arrow pointing right
+        for (int x = s/2+3; x <= s-m-6; x++) pm.fillRectangle(x, my-1, 1, 3);
+        pm.fillTriangle(s-m-4, my, s-m-10, my-5, s-m-10, my+5);
         Texture t = new Texture(pm); pm.dispose(); return t;
     }
 
@@ -1315,7 +1625,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
     // ---- Rendering setup --------------------------------------------------------
 
     private void buildRendering() {
-        batch = new SpriteBatch();
+        batch  = new SpriteBatch();
+        shapeR = new ShapeRenderer();
+        shapeR.setAutoShapeType(true);
         renderCam = new OrthographicCamera();
         renderViewport = new ExtendViewport(RENDER_W, RENDER_H, renderCam);
         renderCam.position.set(RENDER_W / 2f, RENDER_H / 2f, 0f);
@@ -1338,26 +1650,73 @@ public class EngineeringLabScreen extends ScreenAdapter {
         spawnBall(CENTRIFUGE_CX + CENTRIFUGE_R * 0.4f, CENTRIFUGE_CY - CENTRIFUGE_R * 0.4f);
     }
 
+    /** 0=circle, -1=rectangle, 3=triangle, 4=diamond, 5=pentagon */
+    private int centrifugeSides() {
+        return switch (ShipData.get().currentPlanetIndex) {
+            case 1  -> -1; // Ember IV     — rectangle
+            case 2  ->  3; // Frostheim    — triangle
+            case 3  ->  4; // Cryon Reach  — diamond
+            case 4  ->  5; // Helios Forge — pentagon
+            default ->  0; // Solara       — circle
+        };
+    }
+
+    // Ember IV square half-size (world units)
+    private static final float RECT_HW = CENTRIFUGE_R * 0.80f;
+    private static final float RECT_HH = CENTRIFUGE_R * 0.80f;
+
+    private float centrifugeShapeAngle() {
+        return switch (ShipData.get().currentPlanetIndex) {
+            case 2  -> MathUtils.PI / 2f;  // Frostheim: flat base
+            case 3  -> MathUtils.PI / 4f;  // Cryon: rotated 45° = diamond
+            default -> 0f;
+        };
+    }
+
     private void spawnWalls() {
         BodyDef bd = new BodyDef();
         bd.type = BodyDef.BodyType.KinematicBody;
         bd.position.set(CENTRIFUGE_CX, CENTRIFUGE_CY);
         centrifugeBody = world.createBody(bd);
 
-        float step = (float)(2 * Math.PI / CENTRIFUGE_SEGS);
         EdgeShape edge = new EdgeShape();
         FixtureDef fd  = new FixtureDef();
         fd.shape       = edge;
         fd.restitution = WALL_RESTITUTION;
         fd.friction    = 0.05f;
 
-        for (int i = 0; i < CENTRIFUGE_SEGS; i++) {
-            float a0 = step * i, a1 = step * (i + 1);
-            edge.set(
-                (float)Math.cos(a0) * CENTRIFUGE_R, (float)Math.sin(a0) * CENTRIFUGE_R,
-                (float)Math.cos(a1) * CENTRIFUGE_R, (float)Math.sin(a1) * CENTRIFUGE_R
-            );
-            centrifugeBody.createFixture(fd);
+        int sides = centrifugeSides();
+        if (sides == 0) {
+            float step = (float)(2 * Math.PI / CENTRIFUGE_SEGS);
+            for (int i = 0; i < CENTRIFUGE_SEGS; i++) {
+                float a0 = step * i, a1 = step * (i + 1);
+                edge.set(
+                    MathUtils.cos(a0) * CENTRIFUGE_R, MathUtils.sin(a0) * CENTRIFUGE_R,
+                    MathUtils.cos(a1) * CENTRIFUGE_R, MathUtils.sin(a1) * CENTRIFUGE_R
+                );
+                centrifugeBody.createFixture(fd);
+            }
+        } else if (sides < 0) {
+            // Rectangle: 4 walls (local coords, body rotates)
+            float hw = RECT_HW, hh = RECT_HH;
+            float[][] walls = {
+                {-hw, -hh,  hw, -hh}, // bottom
+                { hw, -hh,  hw,  hh}, // right
+                { hw,  hh, -hw,  hh}, // top
+                {-hw,  hh, -hw, -hh}, // left
+            };
+            for (float[] w : walls) { edge.set(w[0],w[1],w[2],w[3]); centrifugeBody.createFixture(fd); }
+        } else {
+            float sa = centrifugeShapeAngle();
+            for (int i = 0; i < sides; i++) {
+                float a0 = sa + (float)(2 * Math.PI * i / sides);
+                float a1 = sa + (float)(2 * Math.PI * (i + 1) / sides);
+                edge.set(
+                    MathUtils.cos(a0) * CENTRIFUGE_R, MathUtils.sin(a0) * CENTRIFUGE_R,
+                    MathUtils.cos(a1) * CENTRIFUGE_R, MathUtils.sin(a1) * CENTRIFUGE_R
+                );
+                centrifugeBody.createFixture(fd);
+            }
         }
         edge.dispose();
         centrifugeBody.setAngularVelocity(0f);
@@ -1480,34 +1839,38 @@ public class EngineeringLabScreen extends ScreenAdapter {
         teslaCoils.add(body);
     }
 
-    public void spawnKineticBlade(float angleDegrees) {
-        float angleRad = angleDegrees * MathUtils.degreesToRadians;
-        // Initial position — orbit tracking in stepPhysics will keep this correct every frame
-        float bladeR = CENTRIFUGE_R - BLADE_LENGTH * 0.5f;
-        float bx = CENTRIFUGE_CX + MathUtils.cos(angleRad) * bladeR;
-        float by = CENTRIFUGE_CY + MathUtils.sin(angleRad) * bladeR;
-
+    public void spawnKineticBlade() {
         BodyDef bd = new BodyDef();
         bd.type = BodyDef.BodyType.KinematicBody;
-        bd.position.set(bx, by);
-        bd.angle = angleRad;
-
+        bd.position.set(CENTRIFUGE_CX, CENTRIFUGE_CY);
         Body body = world.createBody(bd);
 
-        PolygonShape box = new PolygonShape();
-        box.setAsBox(BLADE_LENGTH * 0.5f, BLADE_WIDTH * 0.5f);
+        // Triangle: base at origin (wide), tip extending along +X axis
+        float halfW = BLADE_WIDTH * 2.5f;
+        float len   = BLADE_LENGTH;
+        PolygonShape tri = new PolygonShape();
+        tri.set(new float[]{ 0f, -halfW,  len, 0f,  0f, halfW });
 
         FixtureDef fd = new FixtureDef();
-        fd.shape       = box;
+        fd.shape       = tri;
         fd.restitution = 1.55f;
         fd.density     = 0f;
         fd.friction    = 0f;
         body.createFixture(fd);
         body.setUserData("KINETIC_BLADE");
-        box.dispose();
-        // Store placement angle relative to current centrifuge angle so the blade orbits with the ring
-        bladeInitAngles.add(angleRad - centrifugeBody.getAngle());
+        tri.dispose();
+
+        bladeInitAngles.add(0f); // redistributed below
         kineticBlades.add(body);
+        redistributeBlades();
+    }
+
+    private void redistributeBlades() {
+        int n = kineticBlades.size;
+        float baseOffset = -centrifugeBody.getAngle(); // counter-rotate so visual angle stays intuitive
+        for (int i = 0; i < n; i++) {
+            bladeInitAngles.set(i, (float)(Math.PI * 2.0 * i / n));
+        }
     }
 
     // ---- UI setup ---------------------------------------------------------------
@@ -1835,6 +2198,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             @Override public void changed(ChangeEvent e, Actor a) {
                 if (!isJumpReady()) return;
                 ShipData sd2 = ShipData.get();
+                commitNextPlanetDestination(sd2);
                 sd2.internsLeftOnPlanet[sd2.currentPlanetIndex] = balls.size;
                 sd2.lastFarmingTimestamp = System.currentTimeMillis();
                 sd2.savedFlightJPS = sd2.currentJPS;
@@ -1906,7 +2270,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         crystalsLabel.setFontScale(1.10f);
         crystalsLabel.setColor(0.25f, 0.80f, 1.00f, 1f); // cyan-blue = SP
 
-        ringSpeedLabel.setFontScale(1.10f);
+        ringSpeedLabel.setFontScale(1.40f);
         ringSpeedLabel.setColor(0.70f, 0.72f, 0.82f, 1f);
 
         // Each label lives in its own fixed-size Container — completely isolated from siblings
@@ -1926,9 +2290,29 @@ public class EngineeringLabScreen extends ScreenAdapter {
             new com.badlogic.gdx.scenes.scene2d.ui.Container<>(ringSpeedLabel);
         speedBox.fill().right();
 
+        // Invisible tap zone in the centre — fires gravity shift when perk3 earned
+        com.badlogic.gdx.scenes.scene2d.Actor gravTapZone = new com.badlogic.gdx.scenes.scene2d.Actor();
+        gravTapZone.addListener(new com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
+            @Override public void clicked(com.badlogic.gdx.scenes.scene2d.InputEvent event, float x, float y) {
+                if (!emberPerk3) return;
+                ShipData sd2 = ShipData.get();
+                if (!sd2.spend(5000f)) { showNotif("NOT ENOUGH SP", "Gravity shift costs 5000 SP"); return; }
+                gravShiftStep = (gravShiftStep + 1) % 4;
+                float g = 9.81f * 1.6f;
+                switch (gravShiftStep) {
+                    case 0: world.setGravity(new Vector2( 0f, -g)); break;
+                    case 1: world.setGravity(new Vector2(-g,  0f)); break;
+                    case 2: world.setGravity(new Vector2( 0f,  g)); break;
+                    case 3: world.setGravity(new Vector2( g,   0f)); break;
+                }
+                triggerShake(3f, 0.08f);
+            }
+        });
+
         Table statsRow = new Table();
-        statsRow.add(spCell).width(210f).height(28f).left();
-        statsRow.add(speedBox).width(210f).height(28f);
+        statsRow.add(spCell).width(160f).height(28f).left();
+        statsRow.add(gravTapZone).expandX().fillX().height(28f);
+        statsRow.add(speedBox).width(160f).height(28f);
         // Perk strip — just above stats row, inside bottom panel
         Table perkStrip = new Table();
         perkStrip.setBackground(new NinePatchDrawable(game.skin.get("rounded_dark", NinePatch.class)));
@@ -1939,24 +2323,46 @@ public class EngineeringLabScreen extends ScreenAdapter {
         lockWallImg  = new com.badlogic.gdx.scenes.scene2d.ui.Image(lockDrw);
         lockBoostImg = new com.badlogic.gdx.scenes.scene2d.ui.Image(lockDrw);
         lockBumpImg  = new com.badlogic.gdx.scenes.scene2d.ui.Image(lockDrw);
-        perkIconSpeed = new com.badlogic.gdx.scenes.scene2d.ui.Image(new TextureRegionDrawable(new TextureRegion(texPerkSpeed)));
-        perkIconElas  = new com.badlogic.gdx.scenes.scene2d.ui.Image(new TextureRegionDrawable(new TextureRegion(texPerkElas)));
-        perkIconWall  = new com.badlogic.gdx.scenes.scene2d.ui.Image(new TextureRegionDrawable(new TextureRegion(texPerkWall)));
-        perkIconColl  = new com.badlogic.gdx.scenes.scene2d.ui.Image(new TextureRegionDrawable(new TextureRegion(texPerkColl)));
-        perkIconBump  = new com.badlogic.gdx.scenes.scene2d.ui.Image(new TextureRegionDrawable(new TextureRegion(texPerkBump)));
-
-        perkStrip.add(makePerkSlot(perkIconSpeed, lockSpeedImg, 1)).expandX().padLeft(4f);
-        perkStrip.add(makeDotSep()).width(24f);
-        perkStrip.add(makePerkSlot(perkIconElas,  lockCollImg,  0)).expandX();
-        perkStrip.add(makeDotSep()).width(24f);
-        perkStrip.add(makePerkSlot(perkIconWall,  lockWallImg,  2)).expandX();
-        perkStrip.add(makeDotSep()).width(24f);
-        perkStrip.add(makePerkSlot(perkIconColl,  lockBoostImg, 3)).expandX();
-        perkStrip.add(makeDotSep()).width(24f);
-        perkStrip.add(makePerkSlot(perkIconBump,  lockBumpImg,  4)).expandX().padRight(4f);
+        if (isEmberIV()) {
+            perkIconSpeed = new com.badlogic.gdx.scenes.scene2d.ui.Image(new TextureRegionDrawable(new TextureRegion(texEmberPerk1)));
+            perkIconElas  = new com.badlogic.gdx.scenes.scene2d.ui.Image(new TextureRegionDrawable(new TextureRegion(texEmberPerk2)));
+            perkIconWall  = new com.badlogic.gdx.scenes.scene2d.ui.Image(new TextureRegionDrawable(new TextureRegion(texEmberPerk3)));
+            perkIconColl  = new com.badlogic.gdx.scenes.scene2d.ui.Image(new TextureRegionDrawable(new TextureRegion(texEmberPerk4)));
+            perkIconBump  = new com.badlogic.gdx.scenes.scene2d.ui.Image(new TextureRegionDrawable(new TextureRegion(texEmberPerk5)));
+            perkStrip.add(makePerkSlot(perkIconSpeed, lockSpeedImg, 0)).expandX().padLeft(4f);
+            perkStrip.add(makeDotSep()).width(24f);
+            perkStrip.add(makePerkSlot(perkIconElas,  lockCollImg,  1)).expandX();
+            perkStrip.add(makeDotSep()).width(24f);
+            perkStrip.add(makePerkSlot(perkIconWall,  lockWallImg,  2)).expandX();
+            perkStrip.add(makeDotSep()).width(24f);
+            perkStrip.add(makePerkSlot(perkIconColl,  lockBoostImg, 3)).expandX();
+            perkStrip.add(makeDotSep()).width(24f);
+            perkStrip.add(makePerkSlot(perkIconBump,  lockBumpImg,  4)).expandX().padRight(4f);
+        } else {
+            perkIconSpeed = new com.badlogic.gdx.scenes.scene2d.ui.Image(new TextureRegionDrawable(new TextureRegion(texPerkSpeed)));
+            perkIconElas  = new com.badlogic.gdx.scenes.scene2d.ui.Image(new TextureRegionDrawable(new TextureRegion(texPerkElas)));
+            perkIconWall  = new com.badlogic.gdx.scenes.scene2d.ui.Image(new TextureRegionDrawable(new TextureRegion(texPerkWall)));
+            perkIconColl  = new com.badlogic.gdx.scenes.scene2d.ui.Image(new TextureRegionDrawable(new TextureRegion(texPerkColl)));
+            perkIconBump  = new com.badlogic.gdx.scenes.scene2d.ui.Image(new TextureRegionDrawable(new TextureRegion(texPerkBump)));
+            perkStrip.add(makePerkSlot(perkIconSpeed, lockSpeedImg, 1)).expandX().padLeft(4f);
+            perkStrip.add(makeDotSep()).width(24f);
+            perkStrip.add(makePerkSlot(perkIconElas,  lockCollImg,  0)).expandX();
+            perkStrip.add(makeDotSep()).width(24f);
+            perkStrip.add(makePerkSlot(perkIconWall,  lockWallImg,  2)).expandX();
+            perkStrip.add(makeDotSep()).width(24f);
+            perkStrip.add(makePerkSlot(perkIconColl,  lockBoostImg, 3)).expandX();
+            perkStrip.add(makeDotSep()).width(24f);
+            perkStrip.add(makePerkSlot(perkIconBump,  lockBumpImg,  4)).expandX().padRight(4f);
+        }
         panel.add(perkStrip).growX().padBottom(3f).row();
 
         panel.add(statsRow).width(420f).padBottom(3).row();
+
+        btnGravShift = new TextButton("SHIFT GRAVITY\n5000 SP", tileStyleLock);
+        btnGravShift.getLabel().setFontScale(0.75f);
+        btnGravShift.setVisible(false);
+        gravShiftCell = panel.add(btnGravShift).height(0f).pad(0f);
+        panel.row();
 
         // Row 2: 4 equal boxes side by side — INTERNS | BUMPERS | GRAVITY | ENGAGE JUMP
         // Use a custom button style with card_large as background so no extra wrapper table inflates preferred width
@@ -1986,9 +2392,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
         // 3 bigger squares at bottom
         float btnSz = (RENDER_W - 20f - 18f) / 3f;  // ~147px
         Table tileRow = new Table();
-        Stack stackAdd = new Stack(); stackAdd.add(btnAdd); stackAdd.add(makeIconLayer(texParticle,   62f));
-        Stack stackBmp = new Stack(); stackBmp.add(btnBumper); stackBmp.add(makeIconLayer(texBumper,     58f));
-        Stack stackGrv = new Stack(); stackGrv.add(btnGravityWell); stackGrv.add(makeIconLayer(texGravCenter, 58f));
+        Texture btnAddTex = isEmberIV() ? texEmberIntern : texParticle;
+        Stack stackAdd = new Stack(); stackAdd.add(btnAdd); stackAdd.add(makeIconLayer(btnAddTex, 62f));
+        Texture btnBmpTex = isEmberIV() ? texPortalIcon : texBumper;
+        Texture btnGrvTex = isEmberIV() ? texRailIcon   : texGravCenter;
+        Stack stackBmp = new Stack(); stackBmp.add(btnBumper); stackBmp.add(makeIconLayer(btnBmpTex, 58f));
+        Stack stackGrv = new Stack(); stackGrv.add(btnGravityWell); stackGrv.add(makeIconLayer(btnGrvTex, 58f));
         tileRow.add(stackAdd).size(btnSz, btnSz).pad(3);
         tileRow.add(stackBmp).size(btnSz, btnSz).pad(3);
         tileRow.add(stackGrv).size(btnSz, btnSz).pad(3);
@@ -2010,10 +2419,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 // Check capacity and affordability before starting actual drag
                 boolean frostheimUnlock = isFrostheim() && !frostheimThirdInternUnlocked
                         && sd2.sectorReached < 0 && balls.size >= internCap() && sd2.crystals >= 800f;
-                boolean emberUnlock = isEmberIV() && !emberThirdInternUnlocked
-                        && sd2.sectorReached < 0 && balls.size >= internCap() && sd2.crystals >= 1200f;
                 boolean normalHire  = balls.size < internCap() && sd2.crystals >= internCost();
-                if (!frostheimUnlock && !emberUnlock && !normalHire) return tutorialStep == 1; // capture for step 1 even if not affordable
+                if (!frostheimUnlock && !normalHire) return tutorialStep == 1; // capture for step 1 even if not affordable
                 dragMode   = PLACE_INTERN;
                 dragStageX = event.getStageX();
                 dragStageY = event.getStageY();
@@ -2044,19 +2451,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     spawnBall(wx, wy);
                     internAddedNewSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
                     internAddedTimer    = INTERN_ADDED_HOLD;
+                    hireIdleTimer       = 0f;
                     showNotif("3RD INTERN UNLOCKED", "Cap now 3 · Keep generating for CP I");
-                    SoundManager.get().playHire();
-                    triggerShake(2f, 0.06f);
-                    return;
-                }
-                if (isEmberIV() && !emberThirdInternUnlocked && sd2.sectorReached < 0
-                        && balls.size >= internCap() && sd2.spendCrystals(1200f)) {
-                    emberThirdInternUnlocked = true;
-                    internAddedOldSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
-                    spawnBall(wx, wy);
-                    internAddedNewSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
-                    internAddedTimer    = INTERN_ADDED_HOLD;
-                    showNotif("3RD INTERN UNLOCKED", "Cap now 3 · Reach CP I for 5 interns");
                     SoundManager.get().playHire();
                     triggerShake(2f, 0.06f);
                     return;
@@ -2066,6 +2462,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     spawnBall(wx, wy);
                     internAddedNewSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
                     internAddedTimer    = INTERN_ADDED_HOLD;
+                    hireIdleTimer       = 0f;
                     SoundManager.get().playHire();
                     triggerShake(2f, 0.06f);
                     if (tutorialStep == 1 && tutorialPostDropTimer < 0f) tutorialPostDropTimer = 0f;
@@ -2083,14 +2480,19 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     eligible = (!frostheimCryoUnlocked && sd2.sectorReached < 0 && sd2.crystals >= 400f)
                                || (frostheimCryoUnlocked && cryoVents.size < maxCryoVentsAllowed() && sd2.crystals >= cryoVentCost());
                 } else if (isEmberIV()) {
-                    eligible = kineticBlades.size < maxBladesAllowed() && sd2.crystals >= bladeCost();
+                    eligible = emberCpI && portalPairs.size < MAX_PORTAL_PAIRS && sd2.crystals >= portalCost();
                 } else {
                     eligible = bumpers.size < maxBumpersAllowed() && sd2.crystals >= bumperCost();
                 }
                 if (!eligible) return false;
-                dragMode   = isFrostheim() ? PLACE_BUMPER
-                           : isEmberIV()   ? PLACE_BLADE
-                           :                 PLACE_BUMPER;
+                if (isEmberIV()) {
+                    dragMode   = PLACE_PORTAL;
+                    dragStageX = event.getStageX();
+                    dragStageY = event.getStageY();
+                    ShipData.get().placingStructure = true;
+                    return true;
+                }
+                dragMode   = PLACE_BUMPER;
                 dragStageX = event.getStageX();
                 dragStageY = event.getStageY();
                 return true;
@@ -2106,11 +2508,25 @@ public class EngineeringLabScreen extends ScreenAdapter {
                                 float x, float y, int pointer, int button) {
                 int dm = dragMode;
                 dragMode = PLACE_NONE;
+                ShipData.get().placingStructure = false;
                 if (dm == PLACE_NONE) return;
                 float wx = dragStageX / PPM, wy = (dragStageY + 80f) / PPM;
+                ShipData sd2 = ShipData.get();
+                if (isEmberIV() && dm == PLACE_PORTAL) {
+                    if (portalPairs.size < MAX_PORTAL_PAIRS && sd2.spendCrystals(portalCost())) {
+                        com.badlogic.gdx.math.Vector2 localA = snapPortalToNearestWall(wx, wy);
+                        com.badlogic.gdx.math.Vector2 localB = oppositePortalLocal(localA);
+                        portalPairs.add(new com.badlogic.gdx.math.Vector2[]{localA, localB});
+                        int needed = balls.size * MAX_PORTAL_PAIRS;
+                        if (portalOrbCooldowns.length < needed)
+                            portalOrbCooldowns = new float[needed];
+                        portalGlow = new float[MAX_PORTAL_PAIRS * 2];
+                        savePortalState(sd2);
+                    }
+                    return;
+                }
                 float ddx = wx - CENTRIFUGE_CX, ddy = wy - CENTRIFUGE_CY;
                 if (ddx * ddx + ddy * ddy >= CENTRIFUGE_R * CENTRIFUGE_R) return;
-                ShipData sd2 = ShipData.get();
                 if (isFrostheim()) {
                     if (!frostheimCryoUnlocked && sd2.sectorReached < 0) {
                         if (sd2.spendCrystals(400f)) {
@@ -2120,11 +2536,6 @@ public class EngineeringLabScreen extends ScreenAdapter {
                         }
                     } else if (cryoVents.size < maxCryoVentsAllowed() && sd2.spendCrystals(cryoVentCost())) {
                         spawnCryoVent(wx, wy);
-                    }
-                } else if (isEmberIV()) {
-                    float angleDeg = MathUtils.atan2(ddy, ddx) * MathUtils.radiansToDegrees;
-                    if (kineticBlades.size < maxBladesAllowed() && sd2.spendCrystals(bladeCost())) {
-                        spawnKineticBlade(angleDeg);
                     }
                 } else {
                     if (bumpers.size < maxBumpersAllowed() && sd2.spendCrystals(bumperCost())) {
@@ -2143,24 +2554,18 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     if (teslaCoils.size >= maxTeslaCoilsAllowed()) return false;
                     if (sd2.crystals < teslaCost()) return false;
                 } else if (isEmberIV()) {
-                    // hub tier purchase: no drag needed, execute immediately on touchDown
-                    if (hubUpgradeTier < HUB_UPGRADE_COSTS.length) {
-                        float cost = HUB_UPGRADE_COSTS[hubUpgradeTier];
-                        if (!sd2.spendCrystals(cost)) return false;
-                        hubUpgradeTier++;
-                        if (hubUpgradeTier == 3) hubCycleLength = 10f;
-                        String[] tierNames = {"Suction Boost x1.35", "Blast Boost x1.50", "Resonance Overdrive"};
-                        showNotif("HUB UPGRADED T" + hubUpgradeTier,
-                            tierNames[hubUpgradeTier - 1] + "\nHub Tier " + hubUpgradeTier + " / 3");
-                        return true;
-                    }
-                    if (springPads.size >= MAX_SPRING_PADS) return false;
-                    if (sd2.crystals < springPadCost()) return false;
+                    if (!emberCpII || relayNodes.size >= MAX_RELAY_NODES) return false;
+                    if (sd2.crystals < relayCost()) return false;
+                    dragMode   = PLACE_RELAY;
+                    dragStageX = event.getStageX();
+                    dragStageY = event.getStageY();
+                    ShipData.get().placingStructure = true;
+                    return true;
                 } else {
                     if (!gravityUnlocked() || attractors.size >= maxGravityAllowed()) return false;
                     if (sd2.crystals < gravityCost()) return false;
                 }
-                dragMode   = isEmberIV() ? PLACE_SPRING_PAD : PLACE_GRAVITY;
+                dragMode   = PLACE_GRAVITY;
                 dragStageX = event.getStageX();
                 dragStageY = event.getStageY();
                 return true;
@@ -2176,18 +2581,26 @@ public class EngineeringLabScreen extends ScreenAdapter {
                                 float x, float y, int pointer, int button) {
                 int dm = dragMode;
                 dragMode = PLACE_NONE;
+                ShipData.get().placingStructure = false;
                 if (dm == PLACE_NONE) return;
                 float wx = dragStageX / PPM, wy = (dragStageY + 80f) / PPM;
+                ShipData sd2 = ShipData.get();
+                // Relay snaps to wall — skip radius check, direction from center determines snap
+                if (isEmberIV() && dm == PLACE_RELAY) {
+                    if (relayNodes.size < MAX_RELAY_NODES && sd2.spendCrystals(relayCost())) {
+                        com.badlogic.gdx.math.Vector2 wallPt = snapRelayToWall(wx, wy);
+                        relayNodes.add(wallPt);
+                        int needed = (balls.size + 1) * MAX_RELAY_NODES;
+                        if (relayCooldowns.length < needed) relayCooldowns = new float[needed];
+                        saveRelayState(sd2);
+                    }
+                    return;
+                }
                 float ddx = wx - CENTRIFUGE_CX, ddy = wy - CENTRIFUGE_CY;
                 if (ddx * ddx + ddy * ddy >= CENTRIFUGE_R * CENTRIFUGE_R) return;
-                ShipData sd2 = ShipData.get();
                 if (isFrostheim()) {
                     if (teslaCoils.size < maxTeslaCoilsAllowed() && sd2.spendCrystals(teslaCost())) {
                         spawnTeslaCoil(wx, wy);
-                    }
-                } else if (isEmberIV()) {
-                    if (springPads.size < MAX_SPRING_PADS && sd2.spendCrystals(springPadCost())) {
-                        spawnSpringPad(wx, wy);
                     }
                 } else {
                     if (attractors.size < maxGravityAllowed() && sd2.spendCrystals(gravityCost())) {
@@ -2196,6 +2609,23 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 }
             }
         });
+        btnGravShift.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent e, Actor a) {
+                if (!emberPerk3) return;
+                ShipData sd2 = ShipData.get();
+                if (!sd2.spend(5000f)) return;
+                gravShiftStep = (gravShiftStep + 1) % 4;
+                float g = 9.81f * 1.6f;
+                switch (gravShiftStep) {
+                    case 0: world.setGravity(new Vector2( 0f, -g)); break;
+                    case 1: world.setGravity(new Vector2(-g,  0f)); break;
+                    case 2: world.setGravity(new Vector2( 0f,  g)); break;
+                    case 3: world.setGravity(new Vector2( g,   0f)); break;
+                }
+                triggerShake(3f, 0.08f);
+            }
+        });
+
         btnFlight.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
                 if (!isFullyUpgraded()) {
@@ -2204,6 +2634,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 }
                 if (!isJumpReady()) return;
                 ShipData sd2 = ShipData.get();
+                commitNextPlanetDestination(sd2);
                 sd2.internsLeftOnPlanet[sd2.currentPlanetIndex] = balls.size;
                 sd2.lastFarmingTimestamp = System.currentTimeMillis();
                 sd2.savedFlightJPS = sd2.currentJPS;
@@ -2287,6 +2718,50 @@ public class EngineeringLabScreen extends ScreenAdapter {
         });
         pauseTable.add(btnCheatSP).width(280f).height(48f).row();
 
+        // DEV cheat: pass full level — max resources, spawn all upgrades, trigger launch
+        TextButton.TextButtonStyle cheatPassStyle = new TextButton.TextButtonStyle();
+        cheatPassStyle.font      = game.skin.getFont("font");
+        cheatPassStyle.up        = game.skin.newDrawable("white", new Color(0.22f, 0.08f, 0.08f, 0.85f));
+        cheatPassStyle.down      = game.skin.newDrawable("white", new Color(0.40f, 0.12f, 0.12f, 0.90f));
+        cheatPassStyle.over      = cheatPassStyle.down;
+        cheatPassStyle.fontColor = new Color(1f, 0.40f, 0.35f, 1f);
+        TextButton btnCheatPass = new TextButton("DEV: PASS LEVEL", cheatPassStyle);
+        btnCheatPass.getLabel().setFontScale(0.62f);
+        btnCheatPass.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent e, Actor a) {
+                cheatPassLevel();
+            }
+        });
+        pauseTable.add(btnCheatPass).width(280f).height(48f).row();
+
+        // DEV cheat: jump to any planet directly
+        Label planetCheatLabel = new Label("DEV: JUMP TO PLANET", game.skin);
+        planetCheatLabel.setFontScale(0.52f);
+        planetCheatLabel.setColor(0.60f, 1f, 0.55f, 0.80f);
+        pauseTable.add(planetCheatLabel).padTop(14f).padBottom(4f).row();
+
+        TextButton.TextButtonStyle planetBtnStyle = new TextButton.TextButtonStyle();
+        planetBtnStyle.font      = game.skin.getFont("font");
+        planetBtnStyle.up        = game.skin.newDrawable("white", new Color(0.05f, 0.20f, 0.08f, 0.85f));
+        planetBtnStyle.down      = game.skin.newDrawable("white", new Color(0.10f, 0.38f, 0.14f, 0.95f));
+        planetBtnStyle.over      = planetBtnStyle.down;
+        planetBtnStyle.fontColor = new Color(0.45f, 1f, 0.50f, 1f);
+
+        Table devPlanetRow = new Table();
+        for (int pi = 0; pi < ShipData.PLANETS.length; pi++) {
+            final int planetIdx = pi;
+            String shortName = ShipData.PLANETS[pi].name.split(" ")[0]; // first word
+            TextButton btn = new TextButton(shortName, planetBtnStyle);
+            btn.getLabel().setFontScale(0.50f);
+            btn.addListener(new ChangeListener() {
+                @Override public void changed(ChangeEvent e, Actor a) {
+                    cheatJumpToPlanet(planetIdx);
+                }
+            });
+            devPlanetRow.add(btn).width(52f).height(40f).pad(2f);
+        }
+        pauseTable.add(devPlanetRow).padBottom(8f).row();
+
         ui.addActor(pauseTable);
 
         // ---- CP III Decision tree dialog (Frostheim only) ----
@@ -2359,14 +2834,6 @@ public class EngineeringLabScreen extends ScreenAdapter {
                         spawnAttractorBumper(wx, wy);
                         placementMode = PLACE_NONE;
                     }
-                } else if (placementMode == PLACE_BLADE) {
-                    // Snap blade to ring wall at the tapped angle
-                    float angleDeg = MathUtils.atan2(dy, dx) * MathUtils.radiansToDegrees;
-                    if (isEmberIV() && kineticBlades.size < maxBladesAllowed()
-                            && sd.spendCrystals(bladeCost())) {
-                        spawnKineticBlade(angleDeg);
-                        placementMode = PLACE_NONE;
-                    }
                 } else if (placementMode == PLACE_SPRING_PAD) {
                     // Snap spring pad to ring inner wall at the tapped angle
                     if (isEmberIV() && springPads.size < MAX_SPRING_PADS
@@ -2405,17 +2872,101 @@ public class EngineeringLabScreen extends ScreenAdapter {
             world.setGravity(new Vector2(0f, GRAVITY * sd.planetGravityMultiplier));
         }
 
-        // Solara tutorial starts with 1 intern so the player learns to hire their first one.
-        // All other planets start with 2.
         if (balls.size == 0) {
-            spawnBall(CENTRIFUGE_CX - 0.6f, CENTRIFUGE_CY + 0.4f);
-            if (ShipData.get().arrivalsCompleted > 0) {
-                spawnBall(CENTRIFUGE_CX + 0.6f, CENTRIFUGE_CY - 0.4f);
+            ShipData sdInit = ShipData.get();
+            int saved = sdInit.internsLeftOnPlanet[sdInit.currentPlanetIndex];
+            int needed = saved > 0 ? saved : (sdInit.arrivalsCompleted > 0 ? 2 : 1);
+            needed = Math.max(0, needed - sdInit.pendingNewRecruits);
+            float[][] initSpots = {
+                {CENTRIFUGE_CX - 0.6f, CENTRIFUGE_CY + 0.4f},
+                {CENTRIFUGE_CX + 0.6f, CENTRIFUGE_CY - 0.4f},
+                {CENTRIFUGE_CX - 0.8f, CENTRIFUGE_CY - 0.3f},
+                {CENTRIFUGE_CX + 0.8f, CENTRIFUGE_CY + 0.3f},
+                {CENTRIFUGE_CX,        CENTRIFUGE_CY + 0.7f},
+                {CENTRIFUGE_CX - 0.4f, CENTRIFUGE_CY - 0.7f},
+                {CENTRIFUGE_CX + 0.4f, CENTRIFUGE_CY + 0.7f},
+                {CENTRIFUGE_CX - 0.7f, CENTRIFUGE_CY + 0.1f},
+            };
+            for (int i = 0; i < needed && i < initSpots.length; i++) {
+                spawnBall(initSpots[i][0], initSpots[i][1]);
             }
         }
 
+        restorePortalsAndRelays();
         applySectorPerks();
+        claimOfflineFarming();
+        claimPendingRecruits();
         checkOfflineHarvestProgress();
+    }
+
+    private void savePortalState(ShipData sd) {
+        sd.savedPortalPairs = new float[portalPairs.size * 4];
+        for (int i = 0; i < portalPairs.size; i++) {
+            com.badlogic.gdx.math.Vector2[] pair = portalPairs.get(i);
+            sd.savedPortalPairs[i * 4]     = pair[0].x;
+            sd.savedPortalPairs[i * 4 + 1] = pair[0].y;
+            sd.savedPortalPairs[i * 4 + 2] = pair[1].x;
+            sd.savedPortalPairs[i * 4 + 3] = pair[1].y;
+        }
+    }
+
+    private void saveRelayState(ShipData sd) {
+        sd.savedRelayNodes = new float[relayNodes.size * 2];
+        for (int i = 0; i < relayNodes.size; i++) {
+            sd.savedRelayNodes[i * 2]     = relayNodes.get(i).x;
+            sd.savedRelayNodes[i * 2 + 1] = relayNodes.get(i).y;
+        }
+    }
+
+    private void restorePortalsAndRelays() {
+        ShipData sd = ShipData.get();
+        if (sd.savedPortalPairs.length >= 4) {
+            for (int i = 0; i + 3 < sd.savedPortalPairs.length; i += 4) {
+                com.badlogic.gdx.math.Vector2 a = new com.badlogic.gdx.math.Vector2(
+                    sd.savedPortalPairs[i], sd.savedPortalPairs[i + 1]);
+                com.badlogic.gdx.math.Vector2 b = new com.badlogic.gdx.math.Vector2(
+                    sd.savedPortalPairs[i + 2], sd.savedPortalPairs[i + 3]);
+                portalPairs.add(new com.badlogic.gdx.math.Vector2[]{a, b});
+            }
+            int needed = balls.size * MAX_PORTAL_PAIRS;
+            if (portalOrbCooldowns.length < needed) portalOrbCooldowns = new float[needed];
+            portalGlow = new float[MAX_PORTAL_PAIRS * 2];
+        }
+        if (sd.savedRelayNodes.length >= 2) {
+            for (int i = 0; i + 1 < sd.savedRelayNodes.length; i += 2) {
+                relayNodes.add(new com.badlogic.gdx.math.Vector2(
+                    sd.savedRelayNodes[i], sd.savedRelayNodes[i + 1]));
+            }
+            int needed = (balls.size + 1) * MAX_RELAY_NODES;
+            if (relayCooldowns.length < needed) relayCooldowns = new float[needed];
+        }
+    }
+
+    private void claimOfflineFarming() {
+        float earned = ShipData.get().claimOfflineFarming();
+        if (earned > 0f) {
+            ShipData.get().addCrystals(earned);
+            showNotif("FARMING INCOME", "+" + (int)earned + " SP from deployed interns");
+        }
+    }
+
+    private void claimPendingRecruits() {
+        ShipData sd = ShipData.get();
+        int n = sd.pendingNewRecruits;
+        if (n <= 0) return;
+        sd.pendingNewRecruits = 0;
+        float[][] spots = {
+            {CENTRIFUGE_CX - 0.5f, CENTRIFUGE_CY + 0.5f},
+            {CENTRIFUGE_CX + 0.5f, CENTRIFUGE_CY - 0.5f},
+            {CENTRIFUGE_CX - 0.8f, CENTRIFUGE_CY - 0.3f},
+            {CENTRIFUGE_CX + 0.8f, CENTRIFUGE_CY + 0.3f},
+        };
+        for (int i = 0; i < n && i < spots.length; i++) {
+            if (balls.size < internCap()) {
+                spawnBall(spots[i][0], spots[i][1]);
+            }
+        }
+        if (n > 0) showNotif("NEW CREW", n + " recruits from Nova Terra joined!");
     }
 
     private void applySectorPerks() {
@@ -2505,6 +3056,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
         if (internAddedTimer > 0) internAddedTimer = Math.max(0, internAddedTimer - delta);
         if (notifActive)  notifTimer  = Math.min(notifTimer + delta, NOTIF_FADEIN * 2f);
         if (celebActive)  celebTimer  = Math.min(celebTimer + delta, CELEB_SLIDE + 0.1f);
+        // Idle nudge: count up while player has ≤2 interns and can still hire
+        if (balls.size <= 2 && balls.size < internCap()) hireIdleTimer += delta;
+        else hireIdleTimer = 0f;
         if (tutorialDone) checkFreeInternCondition();
         checkMilestones();
 
@@ -2566,6 +3120,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         drawHudBar();
         drawBackground();
         drawCentrifuge();
+        if (isEmberIV()) drawEmberCenter();
         drawEmberHub();
         drawKineticBlades();
         // Objective 2: bypass Solara/Frostheim structures on Ember IV — visual layer isolation
@@ -2577,6 +3132,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
         drawTeslaCoils();
         drawCryoVents();
         drawInterns();
+        drawRelayNodes();
+        drawPortals();
+        drawInternCountBadge();
+        drawHireIdleNudge();
         drawFloatNumbers();
         drawPlacementPreview();
         // drawHeartbeatPulse() removed — coin bump effect disabled
@@ -2599,11 +3158,15 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         SoundManager.get().update(delta);
 
-        // Drain bumper sound events
+        // Drain physics sound events (throttled in SoundManager)
         ShipData snd = ShipData.get();
         while (snd.pendingBumperSounds > 0) {
             SoundManager.get().playBumper();
             snd.pendingBumperSounds--;
+        }
+        while (snd.pendingCollisionSounds > 0) {
+            SoundManager.get().playCollision();
+            snd.pendingCollisionSounds--;
         }
 
         // Update HUD strip
@@ -2621,11 +3184,19 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // Perk strip — highlight multipliers above base value
         // Left→right: Elas(5.3) → Wall×3(6.0) → Coll×2(7.5) → Bump×3(9.5)
-        updatePerkIcon(perkIconSpeed, lockSpeedImg, milestoneAchieved[1]);
-        updatePerkIcon(perkIconElas,  lockCollImg,  milestoneAchieved[0]);
-        updatePerkIcon(perkIconWall,  lockWallImg,  milestoneAchieved[2]);
-        updatePerkIcon(perkIconColl,  lockBoostImg, milestoneAchieved[3]);
-        updatePerkIcon(perkIconBump,  lockBumpImg,  milestoneAchieved[4]);
+        if (isEmberIV()) {
+            updatePerkIcon(perkIconSpeed, lockSpeedImg, milestoneAchieved[0]);
+            updatePerkIcon(perkIconElas,  lockCollImg,  milestoneAchieved[1]);
+            updatePerkIcon(perkIconWall,  lockWallImg,  milestoneAchieved[2]);
+            updatePerkIcon(perkIconColl,  lockBoostImg, milestoneAchieved[3]);
+            updatePerkIcon(perkIconBump,  lockBumpImg,  milestoneAchieved[4]);
+        } else {
+            updatePerkIcon(perkIconSpeed, lockSpeedImg, milestoneAchieved[1]);
+            updatePerkIcon(perkIconElas,  lockCollImg,  milestoneAchieved[0]);
+            updatePerkIcon(perkIconWall,  lockWallImg,  milestoneAchieved[2]);
+            updatePerkIcon(perkIconColl,  lockBoostImg, milestoneAchieved[3]);
+            updatePerkIcon(perkIconBump,  lockBumpImg,  milestoneAchieved[4]);
+        }
         int cap = internCap();
 
         float ringNow = centrifugeBody.getAngularVelocity();
@@ -2653,10 +3224,6 @@ public class EngineeringLabScreen extends ScreenAdapter {
             btnAdd.setText(sd.crystals >= 800f
                 ? "UNLOCK 3RD\n800 FS"
                 : "3RD INTERN\n800 FS");
-        } else if (ember && !emberThirdInternUnlocked && sd.sectorReached < 0 && balls.size >= cap) {
-            btnAdd.setText(sd.crystals >= 1200f
-                ? "UNLOCK 3RD\n1200 SP"
-                : "3RD INTERN\n1200 SP");
         } else if (balls.size >= cap) {
             String nxt;
             if (fh || ember) {
@@ -2691,16 +3258,14 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 btnBumper.setText(String.format("CRYO %d/%d\n%.0f FS", cryoVents.size, maxCV, cryoVentCost()));
             }
         } else if (ember) {
-            int maxBl = maxBladesAllowed();
-            if (maxBl == 0) {
-                btnBumper.setText("BLADE\nReq: CP I");
-            } else if (kineticBlades.size >= maxBl) {
-                btnBumper.setText(String.format("BLADES\n%d/%d FULL", kineticBlades.size, maxBl));
-            } else if (placementMode == PLACE_BLADE) {
-                btnBumper.setText("BLADE\nTap Ring");
+            if (!emberCpI) {
+                btnBumper.setText("PORTAL\nReq: CP I");
+            } else if (portalPairs.size >= MAX_PORTAL_PAIRS) {
+                btnBumper.setText(String.format("PORTAL\n%d/%d FULL", portalPairs.size, MAX_PORTAL_PAIRS));
+            } else if (dragMode == PLACE_PORTAL) {
+                btnBumper.setText("PORTAL\nDrag to Wall");
             } else {
-                btnBumper.setText(String.format("BLADE %d/%d\n%.0f SP",
-                    kineticBlades.size, maxBl, bladeCost()));
+                btnBumper.setText(String.format("PORTAL %d/%d\n%.0f SP", portalPairs.size, MAX_PORTAL_PAIRS, portalCost()));
             }
         } else {
             int maxB = maxBumpersAllowed();
@@ -2729,24 +3294,14 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     teslaCoils.size, maxTC, teslaCost()));
             }
         } else if (ember) {
-            if (hubUpgradeTier >= HUB_UPGRADE_COSTS.length) {
-                if (springPads.size >= MAX_SPRING_PADS) {
-                    btnGravityWell.setText(String.format("SPRING PAD\n%d/%d FULL", springPads.size, MAX_SPRING_PADS));
-                } else if (placementMode == PLACE_SPRING_PAD) {
-                    btnGravityWell.setText("SPRING PAD\nTap Ring");
-                } else {
-                    btnGravityWell.setText(String.format("SPRING %d/%d\n%.0f SP",
-                        springPads.size, MAX_SPRING_PADS, springPadCost()));
-                }
+            if (!emberCpII) {
+                btnGravityWell.setText("RELAY\nReq: CP II");
+            } else if (relayNodes.size >= MAX_RELAY_NODES) {
+                btnGravityWell.setText(String.format("RELAY\n%d/%d FULL", relayNodes.size, MAX_RELAY_NODES));
+            } else if (dragMode == PLACE_RELAY) {
+                btnGravityWell.setText("RELAY\nDrag to Ring");
             } else {
-                String[] tierLabels = {"HUB +SUCTION", "HUB +BLAST", "HUB OVERDRIVE"};
-                if (sd.crystals >= HUB_UPGRADE_COSTS[hubUpgradeTier]) {
-                    btnGravityWell.setText(String.format("%s\n%.0f SP",
-                        tierLabels[hubUpgradeTier], HUB_UPGRADE_COSTS[hubUpgradeTier]));
-                } else {
-                    btnGravityWell.setText(String.format("%s\nNEED %.0f SP",
-                        tierLabels[hubUpgradeTier], HUB_UPGRADE_COSTS[hubUpgradeTier]));
-                }
+                btnGravityWell.setText(String.format("RELAY %d/%d\n%.0f SP", relayNodes.size, MAX_RELAY_NODES, relayCost()));
             }
         } else {
             if (!gravityUnlocked()) {
@@ -2759,6 +3314,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 btnGravityWell.setText(String.format("GRAVITY %d/%d\n%.0f SP",
                     attractors.size, maxGravityAllowed(), gravityCost()));
             }
+        }
+
+        if (isEmberIV() && btnGravShift != null) {
+            setGravShiftVisible(emberPerk3);
+            String[] dirs = {"↓ DOWN", "← LEFT", "↑ UP", "→ RIGHT"};
+            btnGravShift.setText("GRAVITY: " + dirs[gravShiftStep] + "\n5000 SP");
         }
 
         // ---- LAUNCH / progress button ----
@@ -2774,13 +3335,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // ---- Button tints ----
         boolean showFhInternUnlock    = fh    && !frostheimThirdInternUnlocked && sd.sectorReached < 0 && balls.size >= cap;
-        boolean showEmberInternUnlock = ember && !emberThirdInternUnlocked     && sd.sectorReached < 0 && balls.size >= cap;
         // ADD ORB: buyable when purchasable, locked when capped
         btnAdd.setStyle(
-            showFhInternUnlock    ? (sd.crystals >= 800f   ? BUY : NORM) :
-            showEmberInternUnlock ? (sd.crystals >= 1200f  ? BUY : NORM) :
-            balls.size >= cap     ? LOCK :
-            orbCanBuy             ? CORAL : NORM);
+            showFhInternUnlock ? (sd.crystals >= 800f ? BUY : NORM) :
+            balls.size >= cap  ? LOCK :
+            orbCanBuy          ? CORAL : NORM);
 
         if (fh) {
             boolean showCryoUnlock = !frostheimCryoUnlocked && sd.sectorReached < 0;
@@ -2795,20 +3354,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 : teslaCoils.size >= maxTC        ? LOCK
                 : sd.crystals >= teslaCost()      ? BUY : NORM);
         } else if (ember) {
-            int maxBl = maxBladesAllowed();
-            btnBumper.setStyle(placementMode == PLACE_BLADE              ? ACT
-                : maxBl == 0 || kineticBlades.size >= maxBl ? LOCK
-                : sd.crystals >= bladeCost()                ? BUY : NORM);
-            // Hub upgrade / spring pad style
-            if (hubUpgradeTier >= HUB_UPGRADE_COSTS.length) {
-                btnGravityWell.setStyle(
-                    placementMode == PLACE_SPRING_PAD        ? ACT
-                    : springPads.size >= MAX_SPRING_PADS     ? LOCK
-                    : sd.crystals >= springPadCost()         ? BUY : NORM);
-            } else {
-                btnGravityWell.setStyle(
-                    sd.crystals >= HUB_UPGRADE_COSTS[hubUpgradeTier] ? BUY : LOCK);
-            }
+            btnBumper.setStyle(!emberCpI || portalPairs.size >= MAX_PORTAL_PAIRS ? LOCK
+                : dragMode == PLACE_PORTAL ? ACT
+                : sd.crystals >= portalCost() ? BUY : NORM);
+            btnGravityWell.setStyle(!emberCpII || relayNodes.size >= MAX_RELAY_NODES ? LOCK
+                : dragMode == PLACE_RELAY ? ACT
+                : sd.crystals >= relayCost() ? BUY : NORM);
         } else {
             int maxB = maxBumpersAllowed();
             btnBumper.setStyle(placementMode == PLACE_BUMPER             ? ACT
@@ -2908,7 +3459,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // Launch hint: fires once when all conditions met, dismisses on tap
         boolean launchAllReady = isJumpReady() && isFullyUpgraded();
-        if (!bigOverlayActive && launchAllReady && !launchHintShown) {
+        if (!bigOverlayActive && launchAllReady && !launchHintShown && !isEmberIV()) {
             batch.begin();
             drawLaunchReadyHint();
             batch.end();
@@ -2918,7 +3469,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         // Perk icon hint: fires once after first perk unlocks, teaches tap-for-info
         boolean anyPerkUnlocked = milestoneAchieved[0] || milestoneAchieved[1] || milestoneAchieved[2]
                                 || milestoneAchieved[3] || milestoneAchieved[4];
-        if (!bigOverlayActive && anyPerkUnlocked && !perkIconHintShown && tutorialStep >= 6) {
+        if (!bigOverlayActive && anyPerkUnlocked && !perkIconHintShown && tutorialStep >= 6 && !isEmberIV()) {
             batch.begin();
             drawPerkIconHint();
             batch.end();
@@ -3006,14 +3557,16 @@ public class EngineeringLabScreen extends ScreenAdapter {
         // Title
         floatFont.getData().setScale(1.05f);
         floatFont.setColor(0.25f, 0.95f, 1.00f, alpha);
-        floatLayout.setText(floatFont, MILESTONE_NAMES[idx]);
-        floatFont.draw(batch, MILESTONE_NAMES[idx],
+        String perkName = isEmberIV() ? EMBER_PERK_NAMES[idx] : MILESTONE_NAMES[idx];
+        String perkDesc = isEmberIV() ? EMBER_PERK_DESCS[idx] : MILESTONE_DESCS[idx];
+        floatLayout.setText(floatFont, perkName);
+        floatFont.draw(batch, perkName,
             cardX + 14f, cardY + cardH - 10f);
 
         // Description
         floatFont.getData().setScale(0.82f);
         floatFont.setColor(0.85f, 0.88f, 0.95f, alpha);
-        floatFont.draw(batch, MILESTONE_DESCS[idx],
+        floatFont.draw(batch, perkDesc,
             cardX + 14f, cardY + cardH - 28f);
 
         floatFont.getData().setScale(1f);
@@ -3736,20 +4289,255 @@ public class EngineeringLabScreen extends ScreenAdapter {
         }
     }
 
+    private void drawRectRing() {
+        float bodyAng = centrifugeBody.getAngle(); // visual matches physics (body runs at 1/3 speed)
+        float ca = MathUtils.cos(bodyAng), sa = MathUtils.sin(bodyAng);
+        float speedT  = Math.min(Math.abs(centrifugeBody.getAngularVelocity()) / centrifugeRpmMax, 1f);
+        float pulse   = 0.55f + 0.45f * MathUtils.sin(animTime * (2.5f + speedT * 8f));
+
+        // Rectangle corners (world → pixel, rotated by body angle)
+        float hw = RECT_HW * PPM, hh = RECT_HH * PPM;
+        float thick = 18f; // ring thickness in pixels
+        // Local corners of outer rect
+        float[][] outerL = {{-hw,-hh},{hw,-hh},{hw,hh},{-hw,hh}};
+        float[][] innerL = {{-(hw-thick),-(hh-thick)},{(hw-thick),-(hh-thick)},{(hw-thick),(hh-thick)},{-(hw-thick),(hh-thick)}};
+
+        // Rotate and translate to screen
+        float[] ox = new float[4], oy = new float[4];
+        float[] ix = new float[4], iy = new float[4];
+        for (int i = 0; i < 4; i++) {
+            ox[i] = CCX_PX + outerL[i][0]*ca - outerL[i][1]*sa;
+            oy[i] = CCY_PX + outerL[i][0]*sa + outerL[i][1]*ca;
+            ix[i] = CCX_PX + innerL[i][0]*ca - innerL[i][1]*sa;
+            iy[i] = CCY_PX + innerL[i][0]*sa + innerL[i][1]*ca;
+        }
+
+        batch.end();
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeR.setProjectionMatrix(batch.getProjectionMatrix());
+
+        // Outer glow (bloomed border)
+        shapeR.begin(ShapeRenderer.ShapeType.Filled);
+        for (int g = 6; g > 0; g--) {
+            float ga = 0.030f * g * pulse * (0.4f + speedT * 0.6f);
+            shapeR.setColor(0.65f, 0.15f, 1.00f, ga);
+            float eg = g * 5f;
+            float[][] gl2 = {{-(hw+eg),-(hh+eg)},{(hw+eg),-(hh+eg)},{(hw+eg),(hh+eg)},{-(hw+eg),(hh+eg)}};
+            float[] gox = new float[4], goy = new float[4];
+            for (int i = 0; i < 4; i++) {
+                gox[i] = CCX_PX + gl2[i][0]*ca - gl2[i][1]*sa;
+                goy[i] = CCY_PX + gl2[i][0]*sa + gl2[i][1]*ca;
+            }
+            // Fill as 2 triangles (fan from first corner)
+            for (int i = 1; i < 3; i++) shapeR.triangle(gox[0],goy[0],gox[i],goy[i],gox[i+1],goy[i+1]);
+        }
+        shapeR.end();
+
+        // Ring fill: 4 wall quads (each quad = outer edge i→i+1, inner edge i→i+1)
+        shapeR.begin(ShapeRenderer.ShapeType.Filled);
+        float bright = 0.15f + speedT * 0.30f;
+        for (int i = 0; i < 4; i++) {
+            int n = (i + 1) % 4;
+            shapeR.setColor(0.40f, 0.08f, 0.75f+bright, 0.88f);
+            shapeR.triangle(ox[i],oy[i], ox[n],oy[n], ix[i],iy[i]);
+            shapeR.triangle(ox[n],oy[n], ix[n],iy[n], ix[i],iy[i]);
+        }
+        // Corner accent circles
+        shapeR.setColor(0.85f, 0.55f, 1.00f, 0.95f);
+        for (int i = 0; i < 4; i++) shapeR.circle(ox[i], oy[i], 6f, 10);
+        shapeR.end();
+
+        // Edge lines — outer and inner ring borders
+        shapeR.begin(ShapeRenderer.ShapeType.Line);
+        shapeR.setColor(0.90f, 0.65f, 1.00f, 0.90f + 0.10f * pulse);
+        for (int i = 0; i < 4; i++) { int n=(i+1)%4; shapeR.line(ox[i],oy[i],ox[n],oy[n]); }
+        shapeR.setColor(0.35f, 0.08f, 0.60f, 0.50f);
+        for (int i = 0; i < 4; i++) { int n=(i+1)%4; shapeR.line(ix[i],iy[i],ix[n],iy[n]); }
+        shapeR.end();
+
+        // Second inner square — rotates with same body angle, shows playing field boundary
+        float hw2 = hw - thick - 8f, hh2 = hh - thick - 8f;
+        float[][] inner2L = {{-hw2,-hh2},{hw2,-hh2},{hw2,hh2},{-hw2,hh2}};
+        float[] i2x = new float[4], i2y = new float[4];
+        for (int i = 0; i < 4; i++) {
+            i2x[i] = CCX_PX + inner2L[i][0]*ca - inner2L[i][1]*sa;
+            i2y[i] = CCY_PX + inner2L[i][0]*sa + inner2L[i][1]*ca;
+        }
+        shapeR.begin(ShapeRenderer.ShapeType.Line);
+        shapeR.setColor(0.75f, 0.35f, 1.00f, 0.70f + 0.20f * pulse);
+        for (int i = 0; i < 4; i++) { int n=(i+1)%4; shapeR.line(i2x[i],i2y[i],i2x[n],i2y[n]); }
+        shapeR.end();
+
+        // Rotation indicators: tick marks along each edge at 25% and 75%
+        // plus one BRIGHT corner (corner 0 = "leading corner") so spin is visible
+        shapeR.begin(ShapeRenderer.ShapeType.Filled);
+        // Bright leading corner — corner 0 gets a bigger white dot
+        shapeR.setColor(1f, 1f, 0.6f, 0.98f);
+        shapeR.circle(ox[0], oy[0], 9f, 12);
+        shapeR.setColor(1f, 0.9f, 0.3f, 0.70f);
+        shapeR.circle(ox[0], oy[0], 5f, 10);
+        // Tick marks at ¼ and ¾ of each edge (perpendicular inward)
+        shapeR.setColor(0.80f, 0.50f, 1.00f, 0.80f);
+        for (int i = 0; i < 4; i++) {
+            int n = (i + 1) % 4;
+            for (float frac : new float[]{0.28f, 0.72f}) {
+                float tx = ox[i] + (ox[n] - ox[i]) * frac;
+                float ty = oy[i] + (oy[n] - oy[i]) * frac;
+                // inward normal direction
+                float edgeDx = ox[n]-ox[i], edgeDy = oy[n]-oy[i];
+                float len = (float)Math.sqrt(edgeDx*edgeDx + edgeDy*edgeDy);
+                float nx2 = -edgeDy/len, ny2 = edgeDx/len; // inward toward center
+                float tickLen = thick * 0.9f;
+                shapeR.rectLine(tx, ty, tx + nx2*tickLen, ty + ny2*tickLen, 3f);
+            }
+        }
+        shapeR.end();
+
+        batch.begin();
+    }
+
+    private void drawPolygonRing() {
+        int sides = centrifugeSides();
+        if (sides == 0) return;
+        if (sides < 0) { drawRectRing(); return; }
+
+        float drumR    = CENTRIFUGE_R * PPM;
+        float innerR   = drumR * 0.72f;
+        float bodyAng  = centrifugeBody.getAngle();
+        float sa       = centrifugeShapeAngle();
+        float speedT   = Math.min(Math.abs(centrifugeBody.getAngularVelocity()) / centrifugeRpmMax, 1f);
+        float pulse    = 0.55f + 0.45f * MathUtils.sin(animTime * (2.5f + speedT * 8f));
+
+        // Planet fill / edge colors
+        float[] fill, edge;
+        switch (ShipData.get().currentPlanetIndex) {
+            case 1: fill=new float[]{0.85f,0.28f,0.04f,0.82f}; edge=new float[]{1f,0.55f,0.15f}; break; // hex orange
+            case 2: fill=new float[]{0.35f,0.75f,1.00f,0.82f}; edge=new float[]{0.80f,0.95f,1.0f}; break; // tri ice
+            case 3: fill=new float[]{0.05f,0.55f,0.80f,0.82f}; edge=new float[]{0.28f,1.00f,0.90f}; break; // diamond teal
+            case 4: fill=new float[]{0.80f,0.55f,0.05f,0.82f}; edge=new float[]{1.00f,0.85f,0.25f}; break; // penta forge
+            default: fill=new float[]{0.10f,0.50f,0.90f,0.82f}; edge=new float[]{0.60f,0.90f,1.0f};
+        }
+
+        batch.end();
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeR.setProjectionMatrix(batch.getProjectionMatrix());
+
+        // Outer glow layers
+        shapeR.begin(ShapeRenderer.ShapeType.Filled);
+        for (int g = 5; g > 0; g--) {
+            float gr = drumR + g * 7f;
+            float ga = 0.025f * g * speedT * pulse;
+            shapeR.setColor(edge[0], edge[1], edge[2], ga);
+            for (int i = 0; i < sides; i++) {
+                float a0 = sa + bodyAng + (float)(2 * Math.PI * i / sides);
+                float a1 = sa + bodyAng + (float)(2 * Math.PI * (i + 1) / sides);
+                float ox0=CCX_PX+MathUtils.cos(a0)*gr, oy0=CCY_PX+MathUtils.sin(a0)*gr;
+                float ox1=CCX_PX+MathUtils.cos(a1)*gr, oy1=CCY_PX+MathUtils.sin(a1)*gr;
+                shapeR.triangle(CCX_PX, CCY_PX, ox0, oy0, ox1, oy1);
+            }
+        }
+        shapeR.end();
+
+        // Ring fill (outer polygon - inner polygon)
+        shapeR.begin(ShapeRenderer.ShapeType.Filled);
+        for (int i = 0; i < sides; i++) {
+            float a0 = sa + bodyAng + (float)(2 * Math.PI * i / sides);
+            float a1 = sa + bodyAng + (float)(2 * Math.PI * (i + 1) / sides);
+            float ox0=CCX_PX+MathUtils.cos(a0)*drumR, oy0=CCY_PX+MathUtils.sin(a0)*drumR;
+            float ox1=CCX_PX+MathUtils.cos(a1)*drumR, oy1=CCY_PX+MathUtils.sin(a1)*drumR;
+            float ix0=CCX_PX+MathUtils.cos(a0)*innerR, iy0=CCY_PX+MathUtils.sin(a0)*innerR;
+            float ix1=CCX_PX+MathUtils.cos(a1)*innerR, iy1=CCY_PX+MathUtils.sin(a1)*innerR;
+            // mid-edge brightness boost
+            float mid = sa + bodyAng + (float)(2 * Math.PI * (i + 0.5) / sides);
+            float mx0=CCX_PX+MathUtils.cos(mid)*drumR, my0=CCY_PX+MathUtils.sin(mid)*drumR;
+            float mx1=CCX_PX+MathUtils.cos(mid)*innerR, my1=CCY_PX+MathUtils.sin(mid)*innerR;
+            float bright = 0.15f + speedT * 0.25f;
+            shapeR.setColor(fill[0]+bright, fill[1]+bright, fill[2]+bright, fill[3]);
+            shapeR.triangle(ox0, oy0, mx0, my0, ix0, iy0);
+            shapeR.triangle(mx0, my0, mx1, my1, ix0, iy0);
+            shapeR.setColor(fill[0], fill[1], fill[2], fill[3]);
+            shapeR.triangle(mx0, my0, ox1, oy1, mx1, my1);
+            shapeR.triangle(ox1, oy1, ix1, iy1, mx1, my1);
+        }
+        // Corner accent circles at vertices
+        shapeR.setColor(edge[0], edge[1], edge[2], 0.92f);
+        for (int i = 0; i < sides; i++) {
+            float a = sa + bodyAng + (float)(2 * Math.PI * i / sides);
+            shapeR.circle(CCX_PX+MathUtils.cos(a)*drumR, CCY_PX+MathUtils.sin(a)*drumR, 5.5f, 10);
+        }
+        shapeR.end();
+
+        // Outer + inner edge lines
+        shapeR.begin(ShapeRenderer.ShapeType.Line);
+        for (int i = 0; i < sides; i++) {
+            float a0 = sa + bodyAng + (float)(2 * Math.PI * i / sides);
+            float a1 = sa + bodyAng + (float)(2 * Math.PI * (i + 1) / sides);
+            shapeR.setColor(edge[0], edge[1], edge[2], 0.88f + 0.12f * pulse);
+            shapeR.line(CCX_PX+MathUtils.cos(a0)*drumR, CCY_PX+MathUtils.sin(a0)*drumR,
+                        CCX_PX+MathUtils.cos(a1)*drumR, CCY_PX+MathUtils.sin(a1)*drumR);
+            shapeR.setColor(edge[0]*0.6f, edge[1]*0.6f, edge[2]*0.6f, 0.55f);
+            shapeR.line(CCX_PX+MathUtils.cos(a0)*innerR, CCY_PX+MathUtils.sin(a0)*innerR,
+                        CCX_PX+MathUtils.cos(a1)*innerR, CCY_PX+MathUtils.sin(a1)*innerR);
+        }
+        shapeR.end();
+
+        batch.begin();
+    }
+
     private void drawCentrifuge() {
         float speedT = Math.min(centrifugeBody.getAngularVelocity() / centrifugeRpmMax, 1f);
         float angle  = centrifugeBody.getAngle() * MathUtils.radiansToDegrees;
         float drumR  = CENTRIFUGE_R * PPM;   // 180 px
 
-        // --- Ring texture rotated with the centrifuge body ---
-        batch.setColor(0.82f + 0.18f * speedT, 0.88f + 0.12f * speedT, 1f, 1f);
-        batch.draw(texRing,
-            CCX_PX - drumR, CCY_PX - drumR,
-            RING_TEX_SIZE * 0.5f, RING_TEX_SIZE * 0.5f,
-            RING_TEX_SIZE, RING_TEX_SIZE,
-            1f, 1f, angle,
-            0, 0, texRing.getWidth(), texRing.getHeight(),
-            false, false);
+        // === Speed outer aura — only for circle ===
+        if (centrifugeSides() == 0 && speedT > 0.05f) {
+            float pulseRate  = 2.5f + speedT * 10f;
+            float glowPulse  = 0.55f + 0.45f * MathUtils.sin(animTime * pulseRate);
+            float glowAlpha  = speedT * 0.55f * glowPulse;
+            float glowExtra  = speedT * 22f;  // expands outward at high speed
+            float gs         = RING_TEX_SIZE + glowExtra * 2f;
+            float go         = glowExtra;
+            // Colour shifts from cool blue → electric cyan at max speed
+            batch.setColor(0.30f + speedT * 0.20f, 0.70f + speedT * 0.30f, 1.00f, glowAlpha);
+            batch.draw(texRing,
+                CCX_PX - drumR - go, CCY_PX - drumR - go,
+                gs * 0.5f, gs * 0.5f, gs, gs,
+                1f, 1f, angle,
+                0, 0, texRing.getWidth(), texRing.getHeight(), false, false);
+        }
+
+        // === Motion blur — only for circle ===
+        if (centrifugeSides() == 0 && speedT > 0.20f) {
+            float trailDeg = speedT * 30f;
+            batch.setColor(0.75f, 0.90f, 1f, speedT * 0.22f);
+            batch.draw(texRing,
+                CCX_PX - drumR, CCY_PX - drumR,
+                RING_TEX_SIZE * 0.5f, RING_TEX_SIZE * 0.5f, RING_TEX_SIZE, RING_TEX_SIZE,
+                1f, 1f, angle - trailDeg * 0.5f,
+                0, 0, texRing.getWidth(), texRing.getHeight(), false, false);
+            batch.setColor(0.75f, 0.90f, 1f, speedT * 0.12f);
+            batch.draw(texRing,
+                CCX_PX - drumR, CCY_PX - drumR,
+                RING_TEX_SIZE * 0.5f, RING_TEX_SIZE * 0.5f, RING_TEX_SIZE, RING_TEX_SIZE,
+                1f, 1f, angle - trailDeg,
+                0, 0, texRing.getWidth(), texRing.getHeight(), false, false);
+        }
+
+        // === Main ring — circle or polygon ===
+        if (centrifugeSides() == 0) {
+            batch.setColor(0.82f + 0.18f * speedT, 0.88f + 0.12f * speedT, 1f, 1f);
+            batch.draw(texRing,
+                CCX_PX - drumR, CCY_PX - drumR,
+                RING_TEX_SIZE * 0.5f, RING_TEX_SIZE * 0.5f,
+                RING_TEX_SIZE, RING_TEX_SIZE,
+                1f, 1f, angle,
+                0, 0, texRing.getWidth(), texRing.getHeight(),
+                false, false);
+        } else {
+            drawPolygonRing(); // ends batch, draws with shapeR, re-opens batch
+        }
 
         batch.setColor(1f, 1f, 1f, 1f);
     }
@@ -3933,31 +4721,65 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
     private void drawKineticBlades() {
         if (kineticBlades.size == 0) return;
-        float bw    = BLADE_LENGTH * PPM;   // 90 px
-        float bh    = BLADE_WIDTH  * PPM;   // 9 px
-        float pulse = 0.85f + MathUtils.sin(animTime * 4f) * 0.15f;
+
+        float pulse = 0.80f + MathUtils.sin(animTime * 5f) * 0.20f;
+        float len   = BLADE_LENGTH * PPM;
+        float hw    = BLADE_WIDTH  * PPM * 2.5f; // visual half-width at base
+        float cx    = CCX_PX, cy = CCY_PX;
+
+        // ---- Draw hub glow (batch is already open from caller) ----
+        float hubR = hw * 2.2f;
+        if (batch.isDrawing()) {
+            batch.setColor(0.50f, 0.80f, 1f, 0.30f * pulse);
+            batch.draw(texGravField, cx - hubR, cy - hubR, hubR, hubR,
+                       hubR * 2f, hubR * 2f, 1f, 1f, animTime * -60f,
+                       0, 0, texGravField.getWidth(), texGravField.getHeight(), false, false);
+            batch.end();
+        }
+
+        // ---- Draw triangle blade arms via ShapeRenderer ----
+        shapeR.setProjectionMatrix(renderCam.combined);
+        shapeR.begin(ShapeRenderer.ShapeType.Filled);
 
         for (int i = 0; i < kineticBlades.size; i++) {
-            Body    blade = kineticBlades.get(i);
-            Vector2 pos   = blade.getPosition();
-            float   px    = pos.x * PPM;
-            float   py    = pos.y * PPM;
-            float   ang   = blade.getAngle() * MathUtils.radiansToDegrees;
+            float angle = kineticBlades.get(i).getAngle();
+            float ca = MathUtils.cos(angle), sa = MathUtils.sin(angle);
+            // Perpendicular direction for base width
+            float pca = -sa, psa = ca;
 
-            Texture tex;
-            float   cr, cg, cb;
-            if (i == 0)      { tex = texBlade1; cr = 0.55f; cg = 0.60f; cb = 0.65f; }
-            else if (i == 1) { tex = texBlade2; cr = 0.72f; cg = 0.82f; cb = 1.00f; }
-            else             { tex = texBlade3; cr = 0.60f; cg = 1.00f; cb = 1.00f; }
+            // Blade tip
+            float tx = cx + ca * len, ty = cy + sa * len;
+            // Base corners (at center, half-width apart)
+            float bx1 = cx + pca * hw, by1 = cy + psa * hw;
+            float bx2 = cx - pca * hw, by2 = cy - psa * hw;
 
-            batch.setColor(cr * pulse, cg * pulse, cb * pulse, 0.92f);
-            batch.draw(tex,
-                px - bw * 0.5f, py - bh * 0.5f,
-                bw * 0.5f, bh * 0.5f,
-                bw, bh, 1f, 1f, ang,
-                0, 0, tex.getWidth(), tex.getHeight(), false, false);
+            // Outer glow triangle (wider, transparent)
+            float og = 1.22f;
+            float[] c = i == 0 ? new float[]{0.55f, 0.65f, 0.80f}
+                       : i == 1 ? new float[]{0.60f, 0.85f, 1.00f}
+                       :          new float[]{0.45f, 1.00f, 0.90f};
+            shapeR.setColor(c[0] * 0.5f, c[1] * 0.5f, c[2] * 0.5f, 0.28f * pulse);
+            shapeR.triangle(bx1 * og - cx * (og-1), by1 * og - cy * (og-1),
+                            bx2 * og - cx * (og-1), by2 * og - cy * (og-1),
+                            tx  * 1.08f - cx * 0.08f, ty * 1.08f - cy * 0.08f);
+
+            // Core triangle
+            shapeR.setColor(c[0] * pulse, c[1] * pulse, c[2] * pulse, 0.90f);
+            shapeR.triangle(bx1, by1, bx2, by2, tx, ty);
+
+            // Bright leading edge line
+            shapeR.setColor(0.90f, 0.96f, 1f, 0.70f * pulse);
+            shapeR.rectLine(cx, cy, tx, ty, 1.5f);
         }
-        batch.setColor(1f, 1f, 1f, 1f);
+
+        // Hub center dot
+        shapeR.setColor(0.70f, 0.88f, 1f, 0.85f);
+        shapeR.circle(cx, cy, hw * 0.55f);
+        shapeR.setColor(0.95f, 0.98f, 1f, 1f);
+        shapeR.circle(cx, cy, hw * 0.28f);
+
+        shapeR.end();
+        if (!batch.isDrawing()) batch.begin();
     }
 
     private void drawEmberHub() {
@@ -4054,6 +4876,633 @@ public class EngineeringLabScreen extends ScreenAdapter {
         batch.setColor(1f, 1f, 1f, 1f);
     }
 
+    // Intern count badge — bold text just below the ring
+    private void drawInternCountBadge() {
+        int count = balls.size;
+        int cap   = internCap();
+        float bx  = CCX_PX;
+        float by  = CCY_PX - CENTRIFUGE_R * PPM - 18f;
+
+        // Main count — large, bright white
+        floatFont.getData().setScale(1.15f);
+        floatFont.setColor(0.90f, 0.93f, 1.00f, 0.95f);
+        drawFontCentered(count + "/" + cap + " interns", bx, by);
+
+        // Sub-hint — actual next-intern gain (capped)
+        float nextGain = Math.min(targetRPM + 0.75f, centrifugeRpmMax) - targetRPM;
+        String gainText = nextGain > 0.01f
+            ? String.format("+%.2f r/s per intern", nextGain)
+            : "SPEED CAPPED";
+        floatFont.getData().setScale(0.85f);
+        floatFont.setColor(0.45f, 0.85f, 1.00f, 0.82f);
+        drawFontCentered(gainText, bx, by - 22f);
+
+        floatFont.getData().setScale(1f);
+        floatFont.setColor(1f, 1f, 1f, 1f);
+    }
+
+    // Idle nudge — large pulsing hint above HIRE button when ≤2 interns for 8+ seconds
+    private void drawHireIdleNudge() {
+        if (isEmberIV()) return;
+        if (hireIdleTimer < 8f || notifActive || celebActive) return;
+        float pulse = 0.60f + 0.40f * MathUtils.sin(animTime * 3.5f);
+        float nx = 87f; // HIRE button center x in render coords
+        // Background dim rect to improve legibility
+        floatFont.getData().setScale(0.98f);
+        floatFont.setColor(1.00f, 0.78f, 0.15f, 0.95f * pulse);
+        drawFontCentered("hire more -> ring spins faster", nx, 200f);
+        floatFont.getData().setScale(1.10f);
+        floatFont.setColor(1.00f, 0.65f, 0.10f, 0.80f * pulse);
+        drawFontCentered("v", nx, 178f);
+        floatFont.getData().setScale(1f);
+        floatFont.setColor(1f, 1f, 1f, 1f);
+    }
+
+    private void drawEmberCenter() {
+        float speedT  = Math.min(Math.abs(centrifugeBody.getAngularVelocity()) / centrifugeRpmMax, 1f);
+        float pulse   = 0.55f + 0.45f * MathUtils.sin(animTime * 4.0f);
+        float spin1   = animTime * 1.2f;   // outer ring rotation
+        float spin2   = -animTime * 1.8f;  // inner diamond counter-rotation
+        float cx      = CCX_PX, cy = CCY_PX;
+
+        if (batch.isDrawing()) batch.end();
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeR.setProjectionMatrix(batch.getProjectionMatrix());
+
+        // ── Outer glow corona ──
+        shapeR.begin(ShapeRenderer.ShapeType.Filled);
+        for (int g = 8; g >= 1; g--) {
+            float r = 28f + g * 4f;
+            float a = 0.022f * g * pulse * (0.5f + speedT * 0.5f);
+            shapeR.setColor(0.55f, 0.15f, 1.00f, a);
+            shapeR.circle(cx, cy, r, 24);
+        }
+        shapeR.end();
+
+        // ── Outer orbit ring — 6 satellite dots ──
+        shapeR.begin(ShapeRenderer.ShapeType.Filled);
+        for (int i = 0; i < 6; i++) {
+            float a = spin1 + (float)(Math.PI * 2.0 * i / 6.0);
+            float sx = cx + MathUtils.cos(a) * 22f;
+            float sy = cy + MathUtils.sin(a) * 22f;
+            float dotR = i % 2 == 0 ? 3.5f : 2.0f;
+            float bright = i == 0 ? 1.0f : 0.65f; // lead satellite brighter
+            shapeR.setColor(bright, 0.55f * bright, 1.00f, 0.85f * pulse);
+            shapeR.circle(sx, sy, dotR, 8);
+        }
+        shapeR.end();
+
+        // ── Outer dashed orbit circle ──
+        shapeR.begin(ShapeRenderer.ShapeType.Line);
+        shapeR.setColor(0.65f, 0.30f, 1.00f, 0.30f * pulse);
+        shapeR.circle(cx, cy, 22f, 36);
+        shapeR.end();
+
+        // ── Rotating diamond (4-point star) ──
+        float dR = 13f + speedT * 3f;
+        float[] dax = new float[4], day = new float[4];
+        for (int i = 0; i < 4; i++) {
+            float a = spin2 + (float)(Math.PI * 0.5 * i);
+            float r = (i % 2 == 0) ? dR : dR * 0.55f;
+            dax[i] = cx + MathUtils.cos(a) * r;
+            day[i] = cy + MathUtils.sin(a) * r;
+        }
+        shapeR.begin(ShapeRenderer.ShapeType.Filled);
+        shapeR.setColor(0.45f, 0.10f, 0.90f, 0.70f);
+        shapeR.triangle(dax[0], day[0], dax[1], day[1], dax[2], day[2]);
+        shapeR.triangle(dax[2], day[2], dax[3], day[3], dax[0], day[0]);
+        shapeR.end();
+        shapeR.begin(ShapeRenderer.ShapeType.Line);
+        shapeR.setColor(0.85f, 0.55f, 1.00f, 0.90f);
+        for (int i = 0; i < 4; i++) shapeR.line(dax[i], day[i], dax[(i+1)%4], day[(i+1)%4]);
+        shapeR.end();
+
+        // ── Inner bright core ──
+        shapeR.begin(ShapeRenderer.ShapeType.Filled);
+        shapeR.setColor(0.70f, 0.30f, 1.00f, 0.50f + speedT * 0.20f);
+        shapeR.circle(cx, cy, 8f, 16);
+        shapeR.setColor(0.95f, 0.80f, 1.00f, 0.90f + 0.10f * pulse);
+        shapeR.circle(cx, cy, 4.5f, 12);
+        shapeR.setColor(1.00f, 1.00f, 1.00f, 1.00f);
+        shapeR.circle(cx, cy, 2.0f, 8);
+        shapeR.end();
+
+        // ── Speed ring — outer arc fills at higher speed ──
+        if (speedT > 0.05f) {
+            shapeR.begin(ShapeRenderer.ShapeType.Line);
+            shapeR.setColor(0.80f, 0.50f, 1.00f, speedT * 0.60f * pulse);
+            shapeR.arc(cx, cy, 17f, MathUtils.radiansToDegrees * spin1, speedT * 360f, 36);
+            shapeR.end();
+        }
+
+        if (!batch.isDrawing()) batch.begin();
+    }
+
+    private void drawRelayNodes() {
+        if (!isEmberIV() || (relayNodes.size == 0 && dragMode != PLACE_RELAY)) return;
+        float pulse = 0.55f + 0.45f * MathUtils.sin(animTime * 3.5f);
+        float nr    = RELAY_NODE_RADIUS * PPM;
+
+        // Tick down hit-glow timers
+        float rdt = Gdx.graphics.getDeltaTime();
+        for (int i = 0; i < relaySegGlow.length; i++) {
+            if (relaySegGlow[i] > 0f) relaySegGlow[i] = Math.max(0f, relaySegGlow[i] - rdt);
+        }
+
+        batch.end();
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeR.setProjectionMatrix(batch.getProjectionMatrix());
+
+        // ---- Draw placed rails: center → node (node in local frame → world each frame) ----
+        for (int i = 0; i < relayNodes.size; i++) {
+            com.badlogic.gdx.math.Vector2 wp = relayNodeWorldPos(i);
+            float bx  = wp.x * PPM, by = wp.y * PPM;
+            float hitT = (i < relaySegGlow.length) ? relaySegGlow[i] / 0.35f : 0f;
+
+            // Thin stacked Line passes = soft glow without width bar
+            int glowPasses = hitT > 0.01f ? 6 : 4;
+            for (int g = glowPasses; g >= 1; g--) {
+                shapeR.begin(ShapeRenderer.ShapeType.Line);
+                shapeR.setColor(0.55f + hitT * 0.45f, 0.20f + hitT * 0.55f, 1.00f,
+                                0.09f * g * pulse + hitT * 0.12f * g);
+                shapeR.line(CCX_PX, CCY_PX, bx, by);
+                shapeR.end();
+            }
+            // Core — 2px rectLine
+            shapeR.begin(ShapeRenderer.ShapeType.Filled);
+            shapeR.setColor(0.88f + hitT * 0.12f, 0.65f + hitT * 0.35f, 1.00f,
+                            0.90f * pulse + hitT * 0.10f);
+            shapeR.rectLine(CCX_PX, CCY_PX, bx, by, 2.0f);
+            shapeR.end();
+
+            // Far-end node
+            float nt = hitT;
+            shapeR.begin(ShapeRenderer.ShapeType.Filled);
+            shapeR.setColor(0.50f + nt * 0.50f, 0.20f + nt * 0.60f, 1.00f, (0.40f + nt * 0.50f) * pulse);
+            shapeR.circle(bx, by, nr * (2.5f + nt * 2.0f), 12);
+            shapeR.setColor(0.90f + nt * 0.10f, 0.75f + nt * 0.25f, 1.00f, 0.95f);
+            shapeR.circle(bx, by, nr * (1f + nt * 0.5f), 10);
+            shapeR.end();
+        }
+
+        // ---- Drag preview: dashed line from center to wall-snapped point ----
+        if (dragMode == PLACE_RELAY) {
+            float fw = dragStageX / PPM, fh = (dragStageY + 80f) / PPM;
+            com.badlogic.gdx.math.Vector2 local = snapRelayToWall(fw, fh);
+            // local → world
+            float angle = centrifugeBody.getAngle();
+            float ca = (float) Math.cos(angle), sa = (float) Math.sin(angle);
+            float wx2 = (CENTRIFUGE_CX + local.x * ca - local.y * sa) * PPM;
+            float wy2 = (CENTRIFUGE_CY + local.x * sa + local.y * ca) * PPM;
+            float ldx = wx2 - CCX_PX, ldy = wy2 - CCY_PX;
+            float len = (float) Math.sqrt(ldx * ldx + ldy * ldy);
+            if (len > 4f) {
+                float dashLen = 18f, stepLen = 28f;
+                int segs = (int)(len / stepLen) + 1;
+                for (int pass = 4; pass >= 1; pass--) {
+                    shapeR.begin(ShapeRenderer.ShapeType.Line);
+                    shapeR.setColor(0.70f, 0.35f, 1.00f, 0.12f * pass * pulse);
+                    for (int d = 0; d < segs; d++) {
+                        float t0 = d * stepLen / len;
+                        float t1 = Math.min((d * stepLen + dashLen) / len, 1f);
+                        shapeR.line(CCX_PX + ldx * t0, CCY_PX + ldy * t0,
+                                    CCX_PX + ldx * t1, CCY_PX + ldy * t1);
+                    }
+                    shapeR.end();
+                }
+                shapeR.begin(ShapeRenderer.ShapeType.Filled);
+                shapeR.setColor(0.92f, 0.72f, 1.00f, 0.90f * pulse);
+                for (int d = 0; d < segs; d++) {
+                    float t0 = d * stepLen / len;
+                    float t1 = Math.min((d * stepLen + dashLen) / len, 1f);
+                    shapeR.rectLine(CCX_PX + ldx * t0, CCY_PX + ldy * t0,
+                                    CCX_PX + ldx * t1, CCY_PX + ldy * t1, 2.0f);
+                }
+                shapeR.end();
+                // Ghost node at wall point
+                shapeR.begin(ShapeRenderer.ShapeType.Filled);
+                for (int r2 = 4; r2 >= 1; r2--) {
+                    shapeR.setColor(0.65f, 0.25f, 1.00f, 0.10f * r2 * pulse);
+                    shapeR.circle(wx2, wy2, nr * (1.5f + r2 * 1.5f), 14);
+                }
+                shapeR.setColor(1.00f, 0.85f, 1.00f, 0.95f);
+                shapeR.circle(wx2, wy2, nr * 1.8f, 12);
+                shapeR.setColor(1.00f, 1.00f, 1.00f, 1.00f);
+                shapeR.circle(wx2, wy2, nr * 0.8f, 8);
+                shapeR.end();
+            }
+        }
+
+        batch.begin();
+    }
+
+    private void checkRelayCrosses(float delta) {
+        if (!isEmberIV() || relayNodes.size == 0) return;
+        // Tick down cooldowns
+        for (int i = 0; i < relayCooldowns.length; i++) {
+            if (relayCooldowns[i] > 0f) relayCooldowns[i] -= delta;
+        }
+        int needed = balls.size * MAX_RELAY_NODES;
+        if (relayCooldowns.length < needed) relayCooldowns = java.util.Arrays.copyOf(relayCooldowns, needed);
+
+        float ballR = BALL_RADIUS;
+        for (int bi = 0; bi < balls.size; bi++) {
+            com.badlogic.gdx.math.Vector2 bPos = balls.get(bi).getPosition();
+            float cx = bPos.x, cy = bPos.y;
+            // Each rail = centrifuge center → relayNodes[si] (world pos, rotates with body)
+            for (int si = 0; si < relayNodes.size; si++) {
+                int cdIdx = bi * MAX_RELAY_NODES + si;
+                if (cdIdx >= relayCooldowns.length || relayCooldowns[cdIdx] > 0f) continue;
+                com.badlogic.gdx.math.Vector2 wp = relayNodeWorldPos(si);
+                float bx = wp.x, by = wp.y;
+                if (segmentCircleIntersects(CENTRIFUGE_CX, CENTRIFUGE_CY, bx, by, cx, cy, ballR)) {
+                    relayCooldowns[cdIdx] = RELAY_CROSS_COOLDOWN;
+                    if (si < relaySegGlow.length) relaySegGlow[si] = 0.35f;
+                    onRelayCross(cx, cy);
+                }
+            }
+        }
+    }
+
+    /**
+     * Snaps world pos (wx,wy) to the EmberIV rectangle wall IN LOCAL FRAME.
+     * Returned Vector2 is in local (un-rotated) coords relative to centrifuge center.
+     * Store this in relayNodes; use relayNodeWorldPos() to get world coords each frame.
+     */
+    private com.badlogic.gdx.math.Vector2 snapRelayToWall(float wx, float wy) {
+        float angle = centrifugeBody.getAngle();
+        float cos = (float) Math.cos(-angle), sin = (float) Math.sin(-angle);
+        float dx = wx - CENTRIFUGE_CX, dy = wy - CENTRIFUGE_CY;
+        // Transform to local frame
+        float lx = dx * cos - dy * sin;
+        float ly = dx * sin + dy * cos;
+        float len = (float) Math.sqrt(lx * lx + ly * ly);
+        if (len < 0.001f) return new com.badlogic.gdx.math.Vector2(RECT_HW, 0f);
+        float nx = lx / len, ny = ly / len;
+        float tx = Math.abs(nx) > 0.0001f ? RECT_HW / Math.abs(nx) : Float.MAX_VALUE;
+        float ty = Math.abs(ny) > 0.0001f ? RECT_HH / Math.abs(ny) : Float.MAX_VALUE;
+        float t  = Math.min(tx, ty);
+        return new com.badlogic.gdx.math.Vector2(nx * t, ny * t);
+    }
+
+    // ---- Phase Portal helpers -------------------------------------------------------
+
+    /** Snaps world pos to nearest wall face, returns LOCAL frame coords. */
+    private com.badlogic.gdx.math.Vector2 snapPortalToNearestWall(float wx, float wy) {
+        float angle = centrifugeBody.getAngle();
+        float cos = (float) Math.cos(-angle), sin = (float) Math.sin(-angle);
+        float dx = wx - CENTRIFUGE_CX, dy = wy - CENTRIFUGE_CY;
+        float lx = dx * cos - dy * sin;
+        float ly = dx * sin + dy * cos;
+        // Clamp inside rect first
+        lx = Math.max(-RECT_HW, Math.min(RECT_HW, lx));
+        ly = Math.max(-RECT_HH, Math.min(RECT_HH, ly));
+        // Distance to each wall face
+        float dL = Math.abs(lx + RECT_HW), dR = Math.abs(lx - RECT_HW);
+        float dB = Math.abs(ly + RECT_HH), dT = Math.abs(ly - RECT_HH);
+        float min = Math.min(Math.min(dL, dR), Math.min(dB, dT));
+        if (min == dL) lx = -RECT_HW;
+        else if (min == dR) lx = RECT_HW;
+        else if (min == dB) ly = -RECT_HH;
+        else ly = RECT_HH;
+        return new com.badlogic.gdx.math.Vector2(lx, ly);
+    }
+
+    /** Given portal A in local frame, returns opposite parallel wall position for portal B. */
+    private com.badlogic.gdx.math.Vector2 oppositePortalLocal(com.badlogic.gdx.math.Vector2 localA) {
+        if (Math.abs(Math.abs(localA.x) - RECT_HW) < 0.001f) {
+            // Left/right wall — mirror x, keep y
+            return new com.badlogic.gdx.math.Vector2(-localA.x, localA.y);
+        } else {
+            // Top/bottom wall — keep x, mirror y
+            return new com.badlogic.gdx.math.Vector2(localA.x, -localA.y);
+        }
+    }
+
+    /** Returns world position of portal pair[pairIdx][side] (side 0=A,1=B) by rotating by body angle. */
+    private com.badlogic.gdx.math.Vector2 portalWorldPos(int pairIdx, int side) {
+        float angle = centrifugeBody.getAngle();
+        float cos = (float) Math.cos(angle), sin = (float) Math.sin(angle);
+        com.badlogic.gdx.math.Vector2 local = portalPairs.get(pairIdx)[side];
+        return new com.badlogic.gdx.math.Vector2(
+            CENTRIFUGE_CX + local.x * cos - local.y * sin,
+            CENTRIFUGE_CY + local.x * sin + local.y * cos
+        );
+    }
+
+    /** Inward wall normal for a LOCAL frame portal position (points toward interior). */
+    private com.badlogic.gdx.math.Vector2 portalInwardNormalLocal(com.badlogic.gdx.math.Vector2 local) {
+        if (Math.abs(Math.abs(local.x) - RECT_HW) < Math.abs(Math.abs(local.y) - RECT_HH)) {
+            return new com.badlogic.gdx.math.Vector2(local.x > 0 ? -1f : 1f, 0f);
+        } else {
+            return new com.badlogic.gdx.math.Vector2(0f, local.y > 0 ? -1f : 1f);
+        }
+    }
+
+    /** Transforms local-frame direction to world direction using current body angle. */
+    private com.badlogic.gdx.math.Vector2 localDirToWorld(float lx, float ly) {
+        float angle = centrifugeBody.getAngle();
+        float cos = (float) Math.cos(angle), sin = (float) Math.sin(angle);
+        return new com.badlogic.gdx.math.Vector2(lx * cos - ly * sin, lx * sin + ly * cos);
+    }
+
+    // ---- Portal draw ---------------------------------------------------------------
+
+    private void drawPortals() {
+        if (!isEmberIV()) return;
+        float pulse = 0.55f + 0.45f * MathUtils.sin(animTime * 5f);
+        float rdt   = Gdx.graphics.getDeltaTime();
+        for (int i = 0; i < 2; i++) {
+            if (portalGlow[i] > 0f) portalGlow[i] = Math.max(0f, portalGlow[i] - rdt);
+        }
+
+        if (dragMode == PLACE_PORTAL) {
+            float fw = dragStageX / PPM, fh = (dragStageY + 80f) / PPM;
+            com.badlogic.gdx.math.Vector2 preA = snapPortalToNearestWall(fw, fh);
+            com.badlogic.gdx.math.Vector2 preB = oppositePortalLocal(preA);
+            // Connecting beam between previewed portals
+            drawPortalBeam(preA, preB, pulse * 0.7f);
+            drawPortalGlyph(preA, 0, pulse, 0f, true);
+            drawPortalGlyph(preB, 1, pulse, 0f, true);
+        }
+
+        for (int pi = 0; pi < portalPairs.size; pi++) {
+            com.badlogic.gdx.math.Vector2[] pair = portalPairs.get(pi);
+            float hitA = (portalGlow.length > pi*2)   ? (portalGlow[pi*2]   > 0f ? portalGlow[pi*2]   / 0.4f : 0f) : 0f;
+            float hitB = (portalGlow.length > pi*2+1) ? (portalGlow[pi*2+1] > 0f ? portalGlow[pi*2+1] / 0.4f : 0f) : 0f;
+            drawPortalBeam(pair[0], pair[1], pulse * (0.4f + hitA * 0.6f));
+            drawPortalGlyph(pair[0], 0, pulse, hitA, false);
+            drawPortalGlyph(pair[1], 1, pulse, hitB, false);
+        }
+    }
+
+    /** Dashed energy beam connecting both portals. */
+    private void drawPortalBeam(com.badlogic.gdx.math.Vector2 localA, com.badlogic.gdx.math.Vector2 localB, float alpha) {
+        com.badlogic.gdx.math.Vector2 wA = localToWorldPx(localA);
+        com.badlogic.gdx.math.Vector2 wB = localToWorldPx(localB);
+        float dx = wB.x - wA.x, dy = wB.y - wA.y;
+        float len = (float) Math.sqrt(dx * dx + dy * dy);
+        if (len < 2f) return;
+
+        batch.end();
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeR.setProjectionMatrix(batch.getProjectionMatrix());
+
+        float dashLen = 14f, gap = 18f, step = dashLen + gap;
+        float offset  = (animTime * 60f) % step; // animated flow A→B
+        int segs = (int)(len / step) + 2;
+        // Beam color: cyan when unidirectional, gold when bidirectional
+        float br = portalBidirectional ? 1.00f : 0.50f;
+        float bg = portalBidirectional ? 0.90f : 0.85f;
+        float bb = portalBidirectional ? 0.10f : 1.00f;
+        float cr2 = portalBidirectional ? 1.00f : 0.70f;
+        float cg2 = portalBidirectional ? 0.95f : 0.95f;
+        float cb2 = portalBidirectional ? 0.15f : 1.00f;
+        // Glow pass
+        for (int pass = 3; pass >= 1; pass--) {
+            shapeR.begin(ShapeRenderer.ShapeType.Line);
+            shapeR.setColor(br, bg, bb, 0.06f * pass * alpha);
+            for (int d = 0; d < segs; d++) {
+                float t0 = (d * step - offset) / len;
+                float t1 = (d * step - offset + dashLen) / len;
+                if (t1 < 0f || t0 > 1f) continue;
+                t0 = Math.max(0f, t0); t1 = Math.min(1f, t1);
+                shapeR.line(wA.x + dx*t0, wA.y + dy*t0, wA.x + dx*t1, wA.y + dy*t1);
+            }
+            shapeR.end();
+        }
+        // Core
+        shapeR.begin(ShapeRenderer.ShapeType.Filled);
+        shapeR.setColor(cr2, cg2, cb2, 0.65f * alpha);
+        for (int d = 0; d < segs; d++) {
+            float t0 = (d * step - offset) / len;
+            float t1 = (d * step - offset + dashLen) / len;
+            if (t1 < 0f || t0 > 1f) continue;
+            t0 = Math.max(0f, t0); t1 = Math.min(1f, t1);
+            shapeR.rectLine(wA.x + dx*t0, wA.y + dy*t0, wA.x + dx*t1, wA.y + dy*t1, 2.5f);
+        }
+        shapeR.end();
+        batch.begin();
+    }
+
+    /** World pixel position of a local-frame point. */
+    private com.badlogic.gdx.math.Vector2 localToWorldPx(com.badlogic.gdx.math.Vector2 local) {
+        float angle = centrifugeBody.getAngle();
+        float cos = (float) Math.cos(angle), sin = (float) Math.sin(angle);
+        return new com.badlogic.gdx.math.Vector2(
+            (CENTRIFUGE_CX + local.x * cos - local.y * sin) * PPM,
+            (CENTRIFUGE_CY + local.x * sin + local.y * cos) * PPM
+        );
+    }
+
+    /** Full portal ring: outer halo, spinning vortex arcs, filled disc, white core, label. */
+    private void drawPortalGlyph(com.badlogic.gdx.math.Vector2 local, int side,
+                                  float pulse, float hit, boolean ghost) {
+        com.badlogic.gdx.math.Vector2 wp = localToWorldPx(local);
+        float wx = wp.x, wy = wp.y;
+
+        // Portal visual radius — much larger than physics trigger for clarity
+        float r = PORTAL_RADIUS * PPM * 2.8f;
+
+        // default: A=cyan, B=orange; bidirectional perk: A=green, B=purple
+        float cr, cg, cb;
+        if (portalBidirectional) {
+            cr = side == 0 ? 0.10f : 0.75f;
+            cg = side == 0 ? 1.00f : 0.15f;
+            cb = side == 0 ? 0.45f : 1.00f;
+        } else {
+            cr = side == 0 ? 0.00f : 1.00f;
+            cg = side == 0 ? 0.90f : 0.50f;
+            cb = side == 0 ? 1.00f : 0.05f;
+        }
+        float baseA = ghost ? 0.55f : 0.85f;
+        float gA = baseA + hit * 0.15f;
+
+        batch.end();
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeR.setProjectionMatrix(batch.getProjectionMatrix());
+
+        // --- Outer halo: 8 fading rings ---
+        for (int g = 8; g >= 1; g--) {
+            shapeR.begin(ShapeRenderer.ShapeType.Line);
+            shapeR.setColor(cr, cg, cb, 0.055f * g * gA * pulse);
+            shapeR.circle(wx, wy, r * (1f + g * 0.28f), 28);
+            shapeR.end();
+        }
+
+        // --- Spinning vortex arcs ---
+        int SPOKES = 6;
+        float spinA = animTime * (side == 0 ? 2.8f : -2.2f); // opposite spin per portal
+        for (int k = 0; k < SPOKES; k++) {
+            float baseAngle = spinA + k * (float)(Math.PI * 2.0 / SPOKES);
+            // Draw arc from r*0.3 to r outward as a series of tiny lines
+            int arcSegs = 8;
+            float arcSpan = (float)(Math.PI * 0.35);
+            shapeR.begin(ShapeRenderer.ShapeType.Filled);
+            shapeR.setColor(cr, cg, cb, 0.55f * gA * pulse);
+            for (int s = 0; s < arcSegs; s++) {
+                float t0 = baseAngle + s * arcSpan / arcSegs;
+                float t1 = baseAngle + (s + 1) * arcSpan / arcSegs;
+                float rad0 = r * (0.28f + 0.72f * s / arcSegs);
+                float rad1 = r * (0.28f + 0.72f * (s + 1) / arcSegs);
+                shapeR.rectLine(
+                    wx + (float)Math.cos(t0) * rad0, wy + (float)Math.sin(t0) * rad0,
+                    wx + (float)Math.cos(t1) * rad1, wy + (float)Math.sin(t1) * rad1,
+                    2.5f
+                );
+            }
+            shapeR.end();
+        }
+
+        // --- Thick ring border ---
+        for (int pass = 4; pass >= 1; pass--) {
+            shapeR.begin(ShapeRenderer.ShapeType.Line);
+            shapeR.setColor(cr, cg, cb, 0.18f * pass * gA);
+            shapeR.circle(wx, wy, r * (1f + pass * 0.04f), 32);
+            shapeR.end();
+        }
+
+        // --- Filled disc ---
+        shapeR.begin(ShapeRenderer.ShapeType.Filled);
+        // Dark interior
+        shapeR.setColor(cr * 0.12f, cg * 0.12f, cb * 0.12f, 0.78f * gA);
+        shapeR.circle(wx, wy, r * 0.92f, 28);
+        // Bright ring band
+        shapeR.setColor(cr, cg, cb, (0.70f + hit * 0.30f) * gA);
+        shapeR.circle(wx, wy, r * 0.92f, 28);
+        // Re-darken center
+        shapeR.setColor(0f, 0f, 0.08f, 0.82f);
+        shapeR.circle(wx, wy, r * 0.72f, 24);
+        // Inner bright ring
+        shapeR.setColor(cr, cg, cb, (0.55f + hit * 0.45f) * pulse);
+        shapeR.circle(wx, wy, r * 0.52f, 20);
+        shapeR.setColor(0f, 0f, 0.06f, 0.90f);
+        shapeR.circle(wx, wy, r * 0.36f, 16);
+        // White hot core
+        shapeR.setColor(0.85f + cr * 0.15f, 0.85f + cg * 0.15f, 1.00f, (ghost ? 0.60f : 0.92f) * pulse);
+        shapeR.circle(wx, wy, r * 0.18f, 12);
+        shapeR.setColor(1f, 1f, 1f, ghost ? 0.5f : 1.0f);
+        shapeR.circle(wx, wy, r * 0.08f, 8);
+        shapeR.end();
+        batch.begin();
+    }
+
+    // ---- Portal teleportation ------------------------------------------------------
+
+    private void checkPortalTeleport(float delta) {
+        if (!isEmberIV() || portalPairs.size == 0 || balls.size == 0) return;
+
+        // Resize flat cooldown array: [ballIdx * MAX_PORTAL_PAIRS + pairIdx]
+        int needed = balls.size * MAX_PORTAL_PAIRS;
+        if (portalOrbCooldowns.length < needed)
+            portalOrbCooldowns = java.util.Arrays.copyOf(portalOrbCooldowns, needed);
+
+        // Tick down all cooldowns
+        for (int i = 0; i < portalOrbCooldowns.length; i++)
+            if (portalOrbCooldowns[i] > 0f) portalOrbCooldowns[i] -= delta;
+
+        float trigR      = BALL_RADIUS + PORTAL_RADIUS;
+        float exitOffset = BALL_RADIUS + 0.08f;
+
+        for (int pi = 0; pi < portalPairs.size; pi++) {
+            com.badlogic.gdx.math.Vector2[] pair = portalPairs.get(pi);
+            com.badlogic.gdx.math.Vector2 wA = portalWorldPos(pi, 0);
+            com.badlogic.gdx.math.Vector2 wB = portalWorldPos(pi, 1);
+
+            com.badlogic.gdx.math.Vector2 entryDir = localDirToWorld(
+                portalInwardNormalLocal(pair[0]).x, portalInwardNormalLocal(pair[0]).y);
+            com.badlogic.gdx.math.Vector2 exitDir = localDirToWorld(
+                portalInwardNormalLocal(pair[1]).x, portalInwardNormalLocal(pair[1]).y);
+
+            for (int bi = 0; bi < balls.size; bi++) {
+                int cdIdx = bi * MAX_PORTAL_PAIRS + pi;
+                if (cdIdx < portalOrbCooldowns.length && portalOrbCooldowns[cdIdx] > 0f) continue;
+
+                com.badlogic.gdx.physics.box2d.Body orb = balls.get(bi);
+                com.badlogic.gdx.math.Vector2 pos = orb.getPosition();
+                float dx = pos.x - wA.x, dy = pos.y - wA.y;
+                if (dx * dx + dy * dy <= trigR * trigR) {
+                    com.badlogic.gdx.math.Vector2 vel = orb.getLinearVelocity();
+                    float speed    = vel.len();
+                    float exitSpeed = Math.max(speed * PORTAL_EXIT_MULT, 3.0f);
+
+                    orb.setTransform(
+                        wB.x + exitDir.x * exitOffset,
+                        wB.y + exitDir.y * exitOffset,
+                        orb.getAngle());
+                    orb.setLinearVelocity(exitDir.x * exitSpeed, exitDir.y * exitSpeed);
+
+                    if (cdIdx < portalOrbCooldowns.length) portalOrbCooldowns[cdIdx] = PORTAL_COOLDOWN;
+                    if (portalGlow.length > pi*2)   portalGlow[pi*2]   = 0.4f;
+                    if (portalGlow.length > pi*2+1) portalGlow[pi*2+1] = 0.4f;
+
+                    ShipData.get().addJoules(PORTAL_ENTER_REWARD);
+                    pulseHistory.insert(0, new float[]{PORTAL_ENTER_REWARD, 0f, pos.x * PPM, pos.y * PPM});
+                    continue;
+                }
+                // B→A if bidirectional
+                if (portalBidirectional) {
+                    float bx = pos.x - wB.x, by = pos.y - wB.y;
+                    if (bx * bx + by * by <= trigR * trigR) {
+                        com.badlogic.gdx.math.Vector2 vel = orb.getLinearVelocity();
+                        float speed    = vel.len();
+                        float exitSpeed = Math.max(speed * PORTAL_EXIT_MULT, 3.0f);
+                        com.badlogic.gdx.math.Vector2 exitDirRev = localDirToWorld(
+                            portalInwardNormalLocal(pair[0]).x, portalInwardNormalLocal(pair[0]).y);
+                        orb.setTransform(
+                            wA.x + exitDirRev.x * exitOffset,
+                            wA.y + exitDirRev.y * exitOffset,
+                            orb.getAngle());
+                        orb.setLinearVelocity(exitDirRev.x * exitSpeed, exitDirRev.y * exitSpeed);
+                        if (cdIdx < portalOrbCooldowns.length) portalOrbCooldowns[cdIdx] = PORTAL_COOLDOWN;
+                        if (portalGlow.length > pi*2)   portalGlow[pi*2]   = 0.4f;
+                        if (portalGlow.length > pi*2+1) portalGlow[pi*2+1] = 0.4f;
+                        ShipData.get().addJoules(PORTAL_ENTER_REWARD);
+                        pulseHistory.insert(0, new float[]{PORTAL_ENTER_REWARD, 0f, pos.x * PPM, pos.y * PPM});
+                    }
+                }
+            }
+        }
+    }
+
+    /** Returns world-space position of relayNodes[i] by rotating its local coords by body angle. */
+    private com.badlogic.gdx.math.Vector2 relayNodeWorldPos(int i) {
+        float angle = centrifugeBody.getAngle();
+        float cos = (float) Math.cos(angle), sin = (float) Math.sin(angle);
+        com.badlogic.gdx.math.Vector2 local = relayNodes.get(i);
+        return new com.badlogic.gdx.math.Vector2(
+            CENTRIFUGE_CX + local.x * cos - local.y * sin,
+            CENTRIFUGE_CY + local.x * sin + local.y * cos
+        );
+    }
+
+    private boolean segmentCircleIntersects(float ax, float ay, float bx, float by,
+                                             float cx, float cy, float r) {
+        float dx = bx - ax, dy = by - ay;
+        float fx = ax - cx, fy = ay - cy;
+        float a = dx*dx + dy*dy;
+        if (a < 1e-9f) return false; // zero-length segment
+        float b = 2f*(fx*dx + fy*dy);
+        float c = fx*fx + fy*fy - r*r;
+        float disc = b*b - 4f*a*c;
+        if (disc < 0f) return false;
+        float sq = (float)Math.sqrt(disc);
+        float t1 = (-b - sq) / (2f*a);
+        float t2 = (-b + sq) / (2f*a);
+        return (t1 >= 0f && t1 <= 1f) || (t2 >= 0f && t2 <= 1f);
+    }
+
+    private void onRelayCross(float wx, float wy) {
+        ShipData.get().addJoules(RELAY_CROSS_REWARD);
+        float px = wx * PPM, py = wy * PPM;
+        pulseHistory.insert(0, new float[]{RELAY_CROSS_REWARD, 0f, px, py});
+        if (pulseHistory.size > 8) pulseHistory.removeIndex(pulseHistory.size - 1);
+    }
+
     private void drawInterns() {
         float hw = INTERN_W * 0.5f, hh = INTERN_H * 0.5f;
         float coreW = 32f, coreH = 32f, chw = coreW * 0.5f, chh = coreH * 0.5f;
@@ -4077,16 +5526,19 @@ public class EngineeringLabScreen extends ScreenAdapter {
             // Speed-based glow intensity
             float glow = Math.min(0.55f + speed * 0.09f, 1f);
 
+            boolean ember = isEmberIV();
             // Outer glow layer
-            if (cyber) batch.setColor(0.20f * glow, 0.75f * glow, 1.00f * glow, 0.65f);
-            else        batch.setColor(1.00f * glow, 0.55f * glow, 0.10f * glow, 0.65f);
+            if (cyber)       batch.setColor(0.20f * glow, 0.75f * glow, 1.00f * glow, 0.65f);
+            else if (ember)  batch.setColor(1.00f * glow, 0.10f * glow, 0.80f * glow, 0.65f);
+            else             batch.setColor(1.00f * glow, 0.55f * glow, 0.10f * glow, 0.65f);
             batch.draw(texParticle, px - hw, py - hh, hw, hh,
                 INTERN_W, INTERN_H, scaleX, scaleY, drawAngle,
                 0, 0, texParticle.getWidth(), texParticle.getHeight(), false, false);
 
             // Bright inner core
-            if (cyber) batch.setColor(0.70f, 0.95f, 1.00f, 0.90f);
-            else        batch.setColor(1.00f, 0.88f, 0.50f, 0.90f);
+            if (cyber)       batch.setColor(0.70f, 0.95f, 1.00f, 0.90f);
+            else if (ember)  batch.setColor(1.00f, 0.55f, 0.95f, 0.90f);
+            else             batch.setColor(1.00f, 0.88f, 0.50f, 0.90f);
             batch.draw(texParticleCore, px - chw, py - chh, chw, chh,
                 coreW, coreH, scaleX, scaleY, drawAngle,
                 0, 0, texParticleCore.getWidth(), texParticleCore.getHeight(), false, false);
@@ -4282,6 +5734,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // Ember IV reset
         emberCpI = emberCpII = emberCpIII = false;
+        emberPerk1 = emberPerk2 = emberPerk3 = emberPerk4 = emberPerk5 = false;
+        portalBidirectional = false;
+        emberSpinReversed   = false;
+        gravShiftStep       = 0;
+        setGravShiftVisible(false);
         emberThirdInternUnlocked = false;
         hubStateTimer  = 0f;
         hubCycleLength = 20f;
@@ -4304,10 +5761,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
         teslaCoils.clear(); kineticBlades.clear(); springPads.clear(); balls.clear();
         bladeInitAngles.clear();
 
-        // Reset centrifuge ring
-        centrifugeBody.setAngularVelocity(0f);
-        com.badlogic.gdx.utils.Array<Fixture> wallFx = centrifugeBody.getFixtureList();
-        for (int i = 0; i < wallFx.size; i++) wallFx.get(i).setRestitution(WALL_RESTITUTION);
+        // Rebuild centrifuge ring with correct shape for current planet
+        world.destroyBody(centrifugeBody);
+        spawnWalls();
 
         // Physics params
         bumperTier    = 0;
@@ -4335,6 +5791,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // Ember IV state
         emberCpI = emberCpII = emberCpIII = false;
+        emberPerk1 = emberPerk2 = emberPerk3 = emberPerk4 = emberPerk5 = false;
+        portalBidirectional = false;
+        emberSpinReversed   = false;
+        gravShiftStep       = 0;
+        setGravShiftVisible(false);
         emberThirdInternUnlocked = false;
         emberHeavyChassis  = false;
         emberMagneticRim   = false;
@@ -4342,6 +5803,16 @@ public class EngineeringLabScreen extends ScreenAdapter {
         hubCycleLength = 20f;
         hubBlastFired  = false;
         hubUpgradeTier = 0;
+        emberGravityEnabled = false;
+        emberGravityPush    = false;
+
+        relayNodes.clear();
+        relayCooldowns = new float[0];
+        relaySegGlow   = new float[MAX_RELAY_NODES];
+
+        portalPairs.clear();
+        portalOrbCooldowns = new float[0];
+        portalGlow         = new float[MAX_PORTAL_PAIRS * 2];
 
         // ShipData per-level stats
         ShipData sd = ShipData.get();
@@ -4391,6 +5862,14 @@ public class EngineeringLabScreen extends ScreenAdapter {
         prevCrystalsPulse           = 0f;
     }
 
+    private void commitNextPlanetDestination(ShipData sd) {
+        int next = sd.currentPlanetIndex + 1;
+        if (next < ShipData.PLANETS.length) {
+            sd.selectPlanet(next);
+            sd.commitSelectedPlanet();
+        }
+    }
+
     private void cheatAddEnergy() {
         ShipData.get().addJoules(100_000f);
         pauseTable.setVisible(false);
@@ -4403,15 +5882,65 @@ public class EngineeringLabScreen extends ScreenAdapter {
         showNotif("DEV CHEAT", "+100 000 Space Points injected");
     }
 
-    private void cheatSkipToNextPlanet() {
+    private void cheatPassLevel() {
         ShipData sd = ShipData.get();
-        int nextIdx = sd.currentPlanetIndex + 1;
-        if (nextIdx >= ShipData.PLANETS.length) nextIdx = ShipData.PLANETS.length - 1;
-        sd.selectPlanet(nextIdx);
+
+        // Max out sector and resources
+        sd.sectorReached = 3;
+        sd.addJoules(500_000f);
+        sd.addCrystals(500_000f);
+
+        // Apply sector perks now that sr=3
+        applySectorPerks();
+
+        // Hire interns up to cap (12 at sr>=2)
+        int cap = internCap();
+        float[] internSpawnX = {-0.8f, 0.8f, -1.2f, 1.2f, -0.4f, 0.4f, -1.5f, 1.5f, 0f, -1.0f, 1.0f, 0f};
+        float[] internSpawnY = { 0.6f, 0.6f,  0.0f, 0.0f, -0.8f,-0.8f,  0.6f, 0.6f, 0.5f,-0.4f,-0.4f,-0.9f};
+        for (int i = balls.size; i < cap && i < internSpawnX.length; i++) {
+            spawnBall(CENTRIFUGE_CX + internSpawnX[i], CENTRIFUGE_CY + internSpawnY[i]);
+        }
+
+        // Spawn bumpers up to max (5 at sr>=2) — evenly around inner ring
+        int maxB = maxBumpersAllowed();
+        float bumperR = CENTRIFUGE_R * 0.55f;
+        for (int i = bumpers.size; i < maxB; i++) {
+            double angle = Math.PI * 2.0 * i / maxB + Math.PI * 0.25;
+            spawnCentrifugeBumper(
+                CENTRIFUGE_CX + (float)(Math.cos(angle) * bumperR),
+                CENTRIFUGE_CY + (float)(Math.sin(angle) * bumperR));
+        }
+
+        // Spawn gravity attractors or blades depending on planet
+        if (isEmberIV()) {
+            int maxBl = maxBladesAllowed();
+            for (int i = kineticBlades.size; i < maxBl; i++) spawnKineticBlade();
+        } else {
+            int maxG = maxGravityAllowed();
+            float gravR = CENTRIFUGE_R * 0.30f;
+            for (int i = attractors.size; i < maxG; i++) {
+                double angle = Math.PI * 2.0 * i / maxG + Math.PI * 0.5;
+                spawnAttractorBumper(
+                    CENTRIFUGE_CX + (float)(Math.cos(angle) * gravR),
+                    CENTRIFUGE_CY + (float)(Math.sin(angle) * gravR));
+            }
+        }
+
+        pauseTable.setVisible(false);
+        showNotif("DEV: PASS LEVEL", "All upgrades placed — tap LAUNCH");
+    }
+
+    private void cheatSkipToNextPlanet() {
+        cheatJumpToPlanet(ShipData.get().currentPlanetIndex + 1);
+    }
+
+    private void cheatJumpToPlanet(int idx) {
+        ShipData sd = ShipData.get();
+        idx = Math.max(0, Math.min(idx, ShipData.PLANETS.length - 1));
+        sd.selectPlanet(idx);
         sd.commitSelectedPlanet();
         sd.markArrival(sd.targetPlanetDistance, 0f);
-        // transitionTo() is a no-op when already on this screen, so drive the reset directly
-        lastPlanetIndex = nextIdx;
+        lastPlanetIndex = idx;
         fullReset();
         texBackground.dispose();
         texRing.dispose();
@@ -4423,6 +5952,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
         spawnBall(CENTRIFUGE_CX - 0.6f, CENTRIFUGE_CY + 0.4f);
         spawnBall(CENTRIFUGE_CX + 0.6f, CENTRIFUGE_CY - 0.4f);
         applySectorPerks();
+        pauseTable.setVisible(false);
+        Gdx.app.postRunnable(() -> game.forceRebuildLab());
     }
 
     private void showNotif(String title, String body) {
@@ -4484,7 +6015,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         float slideProgress = Math.min(1f, celebTimer / CELEB_SLIDE);
         float ease = 1f - (float) Math.pow(1f - slideProgress, 3.0);
-        float targetY = renderViewport.getWorldHeight() * 0.28f;
+        float targetY = renderViewport.getWorldHeight() * (isEmberIV() ? 0.45f : 0.28f);
         celebSlideY = -200f + (targetY + 200f) * ease;
 
         float alpha = Math.min(1f, celebTimer / 0.12f);
@@ -4538,11 +6069,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     : 1f;
         alpha = Math.min(1f, alpha);
 
-        // Small tooltip centred above the r/s label (stats row ~Y=139, tooltip sits just above)
+        // Small tooltip: higher in EmberIV because panel is taller
         float pw = 190f, ph = 44f;
         float cx = RENDER_W * 0.5f;
         float px = cx - pw * 0.5f;
-        float py = 156f; // just above stats row
+        float py = isEmberIV() ? 310f : 156f;
 
         batch.setColor(0f, 0.05f, 0.18f, 0.90f * alpha);
         batch.draw(texPixel, px, py, pw, ph);
@@ -4813,59 +6344,83 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
     private void checkMilestones() {
         if (isEmberIV()) {
-            // ---- Ember IV: ring-speed checkpoint perks ----
+            // Keep flight-checkpoint unlocks for portal/rail gating
+            if (!emberCpI && ShipData.get().sectorReached >= 0) emberCpI = true;
+            if (!emberCpII && ShipData.get().sectorReached >= 1) emberCpII = true;
+            if (!emberCpIII && ShipData.get().sectorReached >= 2) emberCpIII = true;
 
-            // CP I — Heavy Chassis (5.5 r/s): intern density 3.5f
-            if (!emberCpI && targetRPM >= EMBER_MILESTONE_RPMS[0]) {
-                emberCpI = true;
-                milestoneAchieved[1] = true;
-                ShipData.get().sectorReached = 0;
-                emberHeavyChassis = true;
-                for (int i = 0; i < balls.size; i++) {
-                    Body b = balls.get(i);
-                    Array<Fixture> fx = b.getFixtureList();
-                    for (int f = 0; f < fx.size; f++) fx.get(f).setDensity(3.5f);
-                    b.resetMassData();
+            // Speed-based perks — skip celebration if already earned in a previous session
+            ShipData sdp = ShipData.get();
+            if (!emberPerk1 && targetRPM >= 3.75f) {
+                emberPerk1 = true; milestoneAchieved[0] = true;
+                applyResonance();
+                if (!sdp.emberPerksEarned[0]) {
+                    sdp.emberPerksEarned[0] = true;
+                    showCeleb("SPEED KEEP", "Interns keep 97% speed after every hit");
+                    SoundManager.get().playMilestone(); triggerShake(4f, 0.12f);
                 }
-                showCeleb("CP I — HEAVY CHASSIS", "Intern density 3.5\nTanks take hits harder");
-                triggerShake(8f, 0.20f);
+            }
+            if (!emberPerk2 && targetRPM >= 5.25f) {
+                emberPerk2 = true; milestoneAchieved[1] = true;
+                sdp.wallEnergyMult = 2.0f;
+                if (!sdp.emberPerksEarned[1]) {
+                    sdp.emberPerksEarned[1] = true;
+                    showCeleb("WALL ENERGY", "Wall bounces now generate Space Points");
+                    SoundManager.get().playMilestone(); triggerShake(4f, 0.12f);
+                }
+            }
+            if (!emberPerk3 && targetRPM >= 6.75f) {
+                emberPerk3 = true; milestoneAchieved[2] = true;
+                if (!sdp.emberPerksEarned[2]) {
+                    sdp.emberPerksEarned[2] = true;
+                    showCeleb("GRAVITY SHIFT", "Tap the centre area to redirect gravity");
+                    SoundManager.get().playMilestone(); triggerShake(4f, 0.12f);
+                }
+            }
+            if (!emberPerk4 && targetRPM >= 7.5f) {
+                emberPerk4 = true; milestoneAchieved[3] = true;
+                portalBidirectional = true;
+                if (!sdp.emberPerksEarned[3]) {
+                    sdp.emberPerksEarned[3] = true;
+                    showCeleb("PORTAL SYNC", "Portals now pull and push in both directions");
+                    SoundManager.get().playMilestone(); triggerShake(4f, 0.12f);
+                }
+            }
+            if (!emberPerk5 && targetRPM >= 9.75f) {
+                emberPerk5 = true; milestoneAchieved[4] = true;
+                emberSpinReversed = true;
+                if (!sdp.emberPerksEarned[4]) {
+                    sdp.emberPerksEarned[4] = true;
+                    showCeleb("REVERSE FIELD", "Centrifuge spin direction reversed");
+                    SoundManager.get().playMilestone(); triggerShake(4f, 0.12f);
+                }
             }
 
-            // CP II — Magnetic Rim (6.5 r/s): wall restitution boost to 0.88
-            if (!emberCpII && targetRPM >= EMBER_MILESTONE_RPMS[1]) {
-                emberCpII = true;
-                milestoneAchieved[2] = true;
-                ShipData.get().sectorReached = 1;
-                emberMagneticRim = true;
-                Array<Fixture> wallFx = centrifugeBody.getFixtureList();
-                for (int i = 0; i < wallFx.size; i++) wallFx.get(i).setRestitution(0.88f);
-                showCeleb("CP II — MAGNETIC RIM", "Wall restitution 0.88\nInterns roll the ring");
-                triggerShake(8f, 0.20f);
-            }
-
-            // CP III — Hub Resonance (7.5 r/s): hub cycle 20s → 10s
-            if (!emberCpIII && targetRPM >= EMBER_MILESTONE_RPMS[2]) {
-                emberCpIII = true;
-                milestoneAchieved[3] = true;
-                ShipData.get().sectorReached = 2;
-                hubCycleLength = 10f;
-                showCeleb("CP III — HUB RESONANCE", "Hub cycle halved\nBlast fires every 20s");
-                triggerShake(8f, 0.20f);
-            }
-
-            // Status label
+            // Status label — also show flight CP gate info when relevant
             if (!emberCpI) {
-                milestoneStatusLabel.setColor(1f, 0.65f, 0.15f, 1f);
-                milestoneStatusLabel.setText(String.format("Next: CP I at %.1f r/s", EMBER_MILESTONE_RPMS[0]));
+                milestoneStatusLabel.setColor(0.8f, 0.8f, 1f, 1f);
+                milestoneStatusLabel.setText("Reach Flight CP I to unlock Portal");
             } else if (!emberCpII) {
+                milestoneStatusLabel.setColor(0.8f, 0.8f, 1f, 1f);
+                milestoneStatusLabel.setText("Reach Flight CP II to unlock Rail");
+            } else if (!emberPerk1) {
                 milestoneStatusLabel.setColor(1f, 0.65f, 0.15f, 1f);
-                milestoneStatusLabel.setText(String.format("Next: CP II at %.1f r/s", EMBER_MILESTONE_RPMS[1]));
-            } else if (!emberCpIII) {
+                milestoneStatusLabel.setText("Speed Keep at 3.75 r/s");
+            } else if (!emberPerk2) {
                 milestoneStatusLabel.setColor(1f, 0.65f, 0.15f, 1f);
-                milestoneStatusLabel.setText(String.format("Next: CP III at %.1f r/s", EMBER_MILESTONE_RPMS[2]));
+                milestoneStatusLabel.setText("Wall Energy at 5.25 r/s");
+            } else if (!emberPerk3) {
+                milestoneStatusLabel.setColor(1f, 0.65f, 0.15f, 1f);
+                milestoneStatusLabel.setText("Gravity Shift at 6.75 r/s");
+            } else if (!emberPerk4) {
+                milestoneStatusLabel.setColor(1f, 0.65f, 0.15f, 1f);
+                milestoneStatusLabel.setText("Portal Sync at 7.5 r/s");
+            } else if (!emberPerk5) {
+                milestoneStatusLabel.setColor(1f, 0.65f, 0.15f, 1f);
+                milestoneStatusLabel.setText("Reverse Field at 9.75 r/s");
             } else {
                 milestoneStatusLabel.setColor(1f, 0.45f, 0.10f, 1f);
-                milestoneStatusLabel.setText("All Nova Terra perks active. Hub in overdrive.");
+                milestoneStatusLabel.setText("All Nova Terra perks active.");
             }
             return;
         }
@@ -4985,28 +6540,31 @@ public class EngineeringLabScreen extends ScreenAdapter {
         // ---- 1. Centrifuge ring speed: driven by intern count ----
         // Each orb adds +0.75 r/s to target — this is the core economy loop the player must learn.
         targetRPM = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
+        // Ember IV: body spins at 1/3 visual speed; energy coefficient compensates (×3)
+        float bodyTargetRPM = isEmberIV() ? targetRPM * (1f / 3f) : targetRPM;
+        if (isEmberIV() && emberSpinReversed) bodyTargetRPM = -bodyTargetRPM;
+        boolean placing = ShipData.get().placingStructure;
+        if (placing) bodyTargetRPM = 0f;
+        float accel = CENTRIFUGE_RPM_ACCEL * (placing ? 8f : 1f);
         float cur = centrifugeBody.getAngularVelocity();
-        if (cur < targetRPM)
-            centrifugeBody.setAngularVelocity(Math.min(cur + CENTRIFUGE_RPM_ACCEL * delta, targetRPM));
-        else if (cur > targetRPM)
-            centrifugeBody.setAngularVelocity(Math.max(cur - CENTRIFUGE_RPM_ACCEL * delta, targetRPM));
+        if (cur < bodyTargetRPM)
+            centrifugeBody.setAngularVelocity(Math.min(cur + accel * delta, bodyTargetRPM));
+        else if (cur > bodyTargetRPM)
+            centrifugeBody.setAngularVelocity(Math.max(cur - accel * delta, bodyTargetRPM));
 
-        // ---- 2. Blade orbit: co-rotate rigidly with centrifuge ring ----
-        // Contact with a sweeping blade shatters gravity-lock stacks and awards +35 SP
-        // (handled by EnergyContactListener for KINETIC_BLADE userData).
+        // ---- 2. Blade spin: triangle arms pivot from centrifuge center ----
         if (kineticBlades.size > 0) {
             float centAngle = centrifugeBody.getAngle();
             float omega     = centrifugeBody.getAngularVelocity();
-            float bladeR    = CENTRIFUGE_R - BLADE_LENGTH * 0.5f;
+            float tipR      = BLADE_LENGTH * 0.70f; // effective impact radius for velocity
             for (int i = 0; i < kineticBlades.size; i++) {
                 float angle = bladeInitAngles.get(i) + centAngle;
-                float bx    = CENTRIFUGE_CX + MathUtils.cos(angle) * bladeR;
-                float by    = CENTRIFUGE_CY + MathUtils.sin(angle) * bladeR;
-                kineticBlades.get(i).setTransform(bx, by, angle);
-                // Tangential velocity gives physically-correct collision impulses
+                kineticBlades.get(i).setTransform(CENTRIFUGE_CX, CENTRIFUGE_CY, angle);
+                float tipX = CENTRIFUGE_CX + MathUtils.cos(angle) * tipR;
+                float tipY = CENTRIFUGE_CY + MathUtils.sin(angle) * tipR;
                 kineticBlades.get(i).setLinearVelocity(
-                    -omega * (by - CENTRIFUGE_CY),
-                     omega * (bx - CENTRIFUGE_CX));
+                    -omega * (tipY - CENTRIFUGE_CY),
+                     omega * (tipX - CENTRIFUGE_CX));
                 kineticBlades.get(i).setAngularVelocity(omega);
             }
         }
@@ -5031,7 +6589,27 @@ public class EngineeringLabScreen extends ScreenAdapter {
             }
         }
 
-        // ---- 4. Tesla Coil passive harvest (Frostheim) — no gravitational pull ----
+        // ---- 4. Ember IV central gravity toggle (push or pull toward square center) ----
+        if (isEmberIV() && emberGravityEnabled) {
+            for (int j = 0; j < balls.size; j++) {
+                Body    ball  = balls.get(j);
+                Vector2 bPos  = ball.getPosition();
+                float   dx    = CENTRIFUGE_CX - bPos.x;
+                float   dy    = CENTRIFUGE_CY - bPos.y;
+                float   dist  = (float) Math.sqrt(dx * dx + dy * dy);
+                if (dist > 0.05f) {
+                    float nx = dx / dist, ny = dy / dist;
+                    float sign = emberGravityPush ? -1f : 1f; // pull=toward center, push=away
+                    ball.applyForceToCenter(nx * sign * EMBER_GRAVITY_FORCE * ball.getMass(),
+                                            ny * sign * EMBER_GRAVITY_FORCE * ball.getMass(), true);
+                }
+            }
+        }
+
+        checkRelayCrosses(delta);
+        checkPortalTeleport(delta);
+
+        // ---- 5. Tesla Coil passive harvest (Frostheim) — no gravitational pull ----
         for (int i = 0; i < teslaCoils.size; i++) {
             Body    coil = teslaCoils.get(i);
             Vector2 cPos = coil.getPosition();
@@ -5158,9 +6736,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
         }
 
         // ---- 8. Passive energy: ring speed x intern count ----
+        // EmberIV body spins at 1/3 speed → multiply coefficient by 3 to keep energy equal
         float ringSpeed = centrifugeBody.getAngularVelocity();
         if (ringSpeed > 0f && balls.size > 0) {
-            ShipData.get().addJoules(ringSpeed * balls.size * 3f * dt);
+            float energyMult = isEmberIV() ? 9f : 3f;
+            ShipData.get().addJoules(ringSpeed * balls.size * energyMult * dt);
         }
 
         // ---- 9. Intern velocity cap ----
@@ -5227,11 +6807,22 @@ public class EngineeringLabScreen extends ScreenAdapter {
     // ---- Helpers ----------------------------------------------------------------
 
     private boolean isFrostheim() {
-        return ShipData.get().targetPlanetDistance == 5000f;
+        return ShipData.get().currentPlanetIndex == 2;
     }
 
     private boolean isEmberIV() {
-        return ShipData.get().targetPlanetDistance == 2500f;
+        return ShipData.get().currentPlanetIndex == 1;
+    }
+
+    private void setGravShiftVisible(boolean visible) {
+        if (btnGravShift == null || gravShiftCell == null) return;
+        btnGravShift.setVisible(visible);
+        if (visible) {
+            gravShiftCell.height(40f).width(220f).padBottom(4f).padTop(2f);
+        } else {
+            gravShiftCell.height(0f).width(0f).pad(0f);
+        }
+        gravShiftCell.getTable().invalidate();
     }
 
     private float price(float base) {
@@ -5244,10 +6835,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
         int sr = ShipData.get().sectorReached;
         if (isEmberIV()) {
             if (sr >= 3) return 12;
-            if (sr >= 2) return 10;
-            if (sr >= 1) return 8;
-            if (sr >= 0) return 5;
-            return emberThirdInternUnlocked ? 3 : 2;
+            if (sr >= 2) return 9;
+            if (sr >= 1) return 9;
+            if (sr >= 0) return 7;
+            return 4;
         }
         if (isFrostheim()) {
             if (sr >= 2) return frostheimDecision == 3 ? 12 : 10;
@@ -5277,7 +6868,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             if (sr >= 0) return 1;
             return 0;
         }
-        if (sr >= 2) return 4;
+        if (sr >= 2) return 3;
         if (sr >= 1) return 2;
         return 0;
     }
@@ -5310,9 +6901,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private int maxBladesAllowed() {
         if (!isEmberIV()) return 0;
         int sr = ShipData.get().sectorReached;
-        if (sr >= 2) return 3;   // CP III
-        if (sr >= 1) return 2;   // CP II
-        if (sr >= 0) return 1;   // CP I
+        if (sr >= 2) return 3;   // CP III: 3rd blade available but not gated
+        if (sr >= 0) return 2;   // CP I+: 2 blades
         return 0;
     }
 
@@ -5323,9 +6913,14 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
     private float internCost() {
         int idx = Math.max(0, balls.size - 2);
+        if (isEmberIV()) {
+            return idx < EMBER_INTERN_COSTS.length ? EMBER_INTERN_COSTS[idx] : EMBER_INTERN_COSTS[EMBER_INTERN_COSTS.length - 1];
+        }
         float base = idx < INTERN_COSTS.length ? INTERN_COSTS[idx] : INTERN_COSTS[INTERN_COSTS.length - 1];
         return price(base);
     }
+    private float portalCost()  { return portalPairs.size == 0 ? 3_000f : 10_000f; }
+    private float relayCost()   { return relayNodes.size  == 0 ? 15_000f : 25_000f; }
     private float bumperCost() {
         int idx = bumpers.size;
         return idx < BUMPER_COSTS.length ? BUMPER_COSTS[idx] : BUMPER_COSTS[BUMPER_COSTS.length - 1];
@@ -5420,11 +7015,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 if (teslaCoils.size < maxTeslaCoilsAllowed()) return false;
             }
         } else if (isEmberIV()) {
-            // Pre-CP-I: must buy the 3rd intern unlock first
-            if (sr < 0 && !emberThirdInternUnlocked) return false;
-            // CP-I+: blades and gravity maxed
-            if (kineticBlades.size < maxBladesAllowed()) return false;
-            if (gravityUnlocked() && attractors.size < maxGravityAllowed()) return false;
+            // perks TBD — no upgrade gate for now
         } else {
             // Solara: bumpers and gravity maxed
             if (bumpers.size < maxBumpersAllowed()) return false;
@@ -5447,9 +7038,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 if (teslaCoils.size < maxTeslaCoilsAllowed()) return "MAX TESLA " + teslaCoils.size + "/" + maxTeslaCoilsAllowed();
             }
         } else if (isEmberIV()) {
-            if (sr < 0 && !emberThirdInternUnlocked) return "BUY 3RD INTERN";
-            int mb = maxBladesAllowed();
-            if (kineticBlades.size < mb) return "MAX BLADES " + kineticBlades.size + "/" + mb;
+            if (sr >= 0 && kineticBlades.size < 2) return "BUY 2 BLADES " + kineticBlades.size + "/2";
             if (gravityUnlocked()) {
                 int mg = maxGravityAllowed();
                 if (attractors.size < mg) return "MAX GRAVITY " + attractors.size + "/" + mg;
@@ -5522,6 +7111,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     public void dispose() {
         world.dispose();
         batch.dispose();
+        shapeR.dispose();
         texBackground.dispose();
         texParticle.dispose();
         texParticleCore.dispose();

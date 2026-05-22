@@ -69,6 +69,7 @@ public class NovaTerraArrivalScreen extends ScreenAdapter {
         claimButton.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent event, Actor actor) {
                 ShipData.get().claimArrivalReward();
+                game.resetLabScreen();
                 game.transitionTo(GameState.ENGINEERING_LAB);
             }
         });

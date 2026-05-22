@@ -8,6 +8,7 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.Align;
@@ -97,6 +98,7 @@ public class MainMenuScreen extends ScreenAdapter {
                 viewport.unproject(tv);
                 float dx = tv.x - rocketX, dy = tv.y - rocketY;
                 if (dx*dx + dy*dy < ROCKET_HIT * ROCKET_HIT) {
+                    game.resetLabScreen();
                     game.transitionTo(GameState.ENGINEERING_LAB);
                     return true;
                 }
@@ -173,13 +175,16 @@ public class MainMenuScreen extends ScreenAdapter {
         drawGrid();
         drawPaths();
         drawPlanets();
+        drawFarmingDots();
         drawRocket();
 
         drawNewGameButton();
+        drawTopStatsBg();
 
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
         drawTitle();
+        drawTopStatsText();
         drawLabels();
         drawBottomBar();
         drawNewGameLabel();
@@ -261,6 +266,29 @@ public class MainMenuScreen extends ScreenAdapter {
                 float cy = y1 + (y2 - y1) * t;
                 sr.setColor(c.r, c.g, c.b, 0.55f);
                 sr.circle(cx, cy, 9.5f, 14);
+            }
+        }
+        sr.end();
+    }
+
+    private void drawFarmingDots() {
+        ShipData sd = ShipData.get();
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        for (int i = 0; i < ShipData.PLANETS.length && i < NX.length && i < COL.length; i++) {
+            int count = sd.internsLeftOnPlanet[i];
+            if (count <= 0) continue;
+            float cx = NX[i], cy = NY[i], r = NR[i];
+            float orbitR = r + 13f;
+            float dotR   = 4.5f;
+            float[] c    = COL[i];
+            for (int d = 0; d < count; d++) {
+                float angle = (float)(Math.PI * 2.0 * d / count) - (float)(Math.PI / 2.0) + animTime * 0.35f;
+                float dx = cx + (float)Math.cos(angle) * orbitR;
+                float dy = cy + (float)Math.sin(angle) * orbitR;
+                sr.setColor(c[0], c[1], c[2], 0.92f);
+                sr.circle(dx, dy, dotR, 8);
+                sr.setColor(c[3], c[4], c[5], 0.75f);
+                sr.circle(dx, dy, dotR * 0.50f, 6);
             }
         }
         sr.end();
@@ -452,11 +480,103 @@ public class MainMenuScreen extends ScreenAdapter {
     }
 
     private void drawTitle() {
+        titleFont.getData().setScale(4.2f);
         titleFont.setColor(CYAN);
-        titleFont.draw(batch, "GALACTIC MAP", 0f, viewport.getWorldHeight() - 22f, W, Align.center, false);
+        titleFont.draw(batch, "GALACTIC MAP", 0f, viewport.getWorldHeight() - 18f, W, Align.center, false);
+    }
+
+    private float statsY() { return viewport.getWorldHeight() - 96f; }
+
+    private void drawTopStatsBg() {
+        float sy = statsY();
+        float pulse = 0.5f + 0.5f * MathUtils.sin(animTime * 1.8f);
+        float pulse2 = 0.5f + 0.5f * MathUtils.sin(animTime * 2.4f + 1.0f);
+
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        // Outer glow layers
+        for (int g = 6; g > 0; g--) {
+            float ex = g * 3.5f;
+            sr.setColor(0.05f, 0.55f, 1.00f, 0.018f * g * pulse);
+            sr.rect(20f - ex, sy - 22f - ex, W - 40f + ex*2f, 28f + ex*2f);
+        }
+        // Dark fill
+        sr.setColor(0.03f, 0.06f, 0.18f, 0.92f);
+        sr.rect(20f, sy - 22f, W - 40f, 28f);
+        // Left accent band (gem color)
+        sr.setColor(0.10f, 0.60f, 1.00f, 0.18f * pulse2);
+        sr.rect(20f, sy - 22f, 90f, 28f);
+        // Right accent band (income color)
+        sr.setColor(0.08f, 0.85f, 0.40f, 0.18f * pulse);
+        sr.rect(W - 110f, sy - 22f, 90f, 28f);
+        sr.end();
+
+        // Animated border
+        sr.begin(ShapeRenderer.ShapeType.Line);
+        sr.setColor(0.15f, 0.72f, 1.00f, 0.55f + 0.35f * pulse);
+        sr.rect(20f, sy - 22f, W - 40f, 28f);
+        // Inner border
+        sr.setColor(0.10f, 0.50f, 0.85f, 0.22f);
+        sr.rect(22f, sy - 20f, W - 44f, 24f);
+        sr.end();
+
+        // Gem diamond (left side)
+        float gx = 72f, gy = sy - 8f, gs = 7f;
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        sr.setColor(0.38f, 0.92f, 1.00f, 0.95f);
+        sr.triangle(gx, gy + gs, gx + gs, gy, gx, gy - gs);
+        sr.triangle(gx, gy + gs, gx - gs, gy, gx, gy - gs);
+        sr.end();
+        sr.begin(ShapeRenderer.ShapeType.Line);
+        sr.setColor(0.72f, 1.00f, 1.00f, 0.80f);
+        sr.triangle(gx, gy + gs, gx + gs, gy, gx, gy - gs);
+        sr.triangle(gx, gy + gs, gx - gs, gy, gx, gy - gs);
+        sr.end();
+
+        // Energy icon (right side) — small lightning bolt as 2 triangles
+        float ex = W - 72f, ey = sy - 8f;
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        sr.setColor(0.25f, 1.00f, 0.55f, 0.92f);
+        sr.triangle(ex + 2f, ey + 8f,  ex - 5f, ey + 1f,  ex + 1f, ey + 1f);
+        sr.triangle(ex - 2f, ey - 8f,  ex + 5f, ey - 1f,  ex - 1f, ey - 1f);
+        sr.end();
+    }
+
+    private void drawTopStatsText() {
+        ShipData sd = ShipData.get();
+
+        // Total hourly income
+        float totalHr = 0f;
+        for (int i = 0; i < ShipData.PLANETS.length; i++)
+            totalHr += sd.internsLeftOnPlanet[i] * ShipData.FARM_RATE_PER_INTERN * 3600f;
+
+        // Gem count
+        int gems = (int) sd.crystals;
+
+        float sy = statsY();
+        smallFont.getData().setScale(1.25f);
+
+        // Gems — left half
+        smallFont.setColor(0.38f, 0.92f, 1.00f, 1f);
+        String gemStr = String.valueOf(gems);
+        smallFont.draw(batch, gemStr, 84f, sy);
+
+        // Label
+        smallFont.setColor(0.40f, 0.55f, 0.68f, 0.80f);
+        smallFont.draw(batch, "CRYSTALS", 84f + gemStr.length() * 7.5f + 4f, sy);
+
+        // SP/HR — right half
+        String hrStr = totalHr >= 1000f
+            ? String.format("%d,%03d/HR", (int)totalHr / 1000, (int)totalHr % 1000)
+            : String.format("%d/HR", (int)totalHr);
+        smallFont.setColor(0.22f, 1.00f, 0.52f, totalHr > 0 ? 1f : 0.35f);
+        float hrW = hrStr.length() * 7.5f;
+        smallFont.draw(batch, hrStr, W - 84f - hrW - 10f, sy);
+        smallFont.setColor(0.40f, 0.55f, 0.68f, 0.80f);
+        smallFont.draw(batch, "INCOME", W - 84f - hrW - 58f, sy);
     }
 
     private void drawLabels() {
+        ShipData sd = ShipData.get();
         for (int i = 0; i < NX.length; i++) {
             float cx = NX[i], cy = NY[i], r = NR[i];
             if (i < ShipData.PLANETS.length) {
@@ -465,6 +585,16 @@ public class MainMenuScreen extends ScreenAdapter {
                 bodyFont.setColor(dimmed ? DIM : Color.WHITE);
                 float tw = name.length() * 7.2f;
                 bodyFont.draw(batch, name, cx - tw * 0.5f, cy - r - 7f);
+
+                int internCount = sd.internsLeftOnPlanet[i];
+                if (internCount > 0) {
+                    int ratePerHr = (int)(internCount * ShipData.FARM_RATE_PER_INTERN * 3600f);
+                    String rateStr = ratePerHr >= 1000
+                        ? String.format("+%d,%03d/HR", ratePerHr / 1000, ratePerHr % 1000)
+                        : String.format("+%d/HR", ratePerHr);
+                    smallFont.setColor(0.18f, 1f, 0.52f, 0.88f);
+                    smallFont.draw(batch, rateStr, cx - 64f, cy + r + 28f, 128f, Align.center, false);
+                }
             } else {
                 smallFont.setColor(0.40f, 0.40f, 0.46f, 0.70f);
                 smallFont.draw(batch, "COMING", cx - 20f, cy - r -  6f);
