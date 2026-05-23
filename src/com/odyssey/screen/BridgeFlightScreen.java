@@ -39,7 +39,7 @@ public class BridgeFlightScreen extends ScreenAdapter {
         "Wall sparks x3 · Collision sparks x2 · Free intern added to bay",
         "Mission complete — colony established!"
     };
-    public static final float[] CHECKPOINT_ENERGIES = {2_000f, 10_000f, 50_000f, 100_000f};
+    public static final float[] CHECKPOINT_ENERGIES = {2_000f, 10_000f, 60_000f, 200_000f};
     public static final float ENERGY_AU_SCALE = 1.0f;
 
     // ---- Layout ----------------------------------------------------------------
@@ -524,7 +524,6 @@ public class BridgeFlightScreen extends ScreenAdapter {
             SoundManager.get().playCheckpoint();
             sd.totalJoules        = 0f;
             sd.energyAtLastLaunch = sd.powerGenerated;
-            game.resetLabScreen();
             game.transitionTo(GameState.ENGINEERING_LAB);
         }
     }

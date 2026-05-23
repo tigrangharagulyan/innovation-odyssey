@@ -130,8 +130,8 @@ public class MainMenuScreen extends ScreenAdapter {
         // Map sectorReached (-1..2) to a position along the current edge.
         // Checkpoint dots are at t = 0.25, 0.50, 0.75.
         float t;
-        if (sd.arrivalReady) {
-            t = 1.0f; // show at destination planet
+        if (sd.arrivalReady && sd.sectorReached < 0) {
+            t = 0.0f; // arrived, no flights yet — sit at destination planet
         } else {
             switch (sd.sectorReached) {
                 case 0:  t = 0.25f; break; // CP I  — first dot

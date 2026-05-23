@@ -53,7 +53,9 @@ public class OdysseyGame extends Game {
         fadePixel = new Texture(fp);
         fp.dispose();
 
-        ShipData.get().reset();
+        if (!ShipData.get().load()) {
+            ShipData.get().reset();
+        }
         switchScreenImmediate(GameState.MAIN_MENU);
     }
 
@@ -361,7 +363,15 @@ public class OdysseyGame extends Game {
     public GameState getCurrentState() { return currentState; }
 
     @Override
+    public void pause() {
+        if (labScreen != null) labScreen.snapshotState();
+        ShipData.get().save();
+    }
+
+    @Override
     public void dispose() {
+        if (labScreen != null) labScreen.snapshotState();
+        ShipData.get().save();
         if (mainMenuScreen != null) mainMenuScreen.dispose();
         if (labScreen      != null) labScreen.dispose();
         if (flightScreen   != null) flightScreen.dispose();

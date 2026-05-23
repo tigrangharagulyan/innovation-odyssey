@@ -88,6 +88,32 @@ public final class ShipData {
     public float[] savedPortalPairs = new float[0];
     public float[] savedRelayNodes  = new float[0];
 
+    // Placed-structure positions — flat [x, y, x, y, ...] per type
+    public float[] savedBumpers    = new float[0];
+    public float[] savedAttractors = new float[0];
+    public float[] savedCryoVents  = new float[0];
+    public float[] savedTeslaCoils = new float[0];
+    public float[] savedSpringPads = new float[0];
+
+    // Checkpoint / milestone flags for restore after RAM-clear
+    public boolean[] savedMilestoneAchieved      = new boolean[6];
+    public boolean   savedFrostheimCpI            = false;
+    public boolean   savedFrostheimCpII           = false;
+    public boolean   savedFrostheimCpIII          = false;
+    public boolean   savedFrostheimCryoUnlocked   = false;
+    public boolean   savedEmberHeavyChassis       = false;
+    public boolean   savedEmberMagneticRim        = false;
+    public int       savedHubUpgradeTier          = 0;
+    public int       savedBallCount               = 0;
+    public int       savedKineticBladeCount            = 0;
+    public int       savedFrostheimDecision            = 0;
+    public float     savedTeslaHarvestRate             = 15f;
+    public boolean   savedPortalBidirectional          = false;
+    public boolean   savedEmberSpinReversed            = false;
+    public int       savedGravShiftStep                = 0;
+    public boolean   savedEmberThirdInternUnlocked     = false;
+    public boolean   savedFrostheimThirdInternUnlocked = false;
+
     // Offline farming
     public int[]  internsLeftOnPlanet  = new int[PLANETS.length];
     public long   lastFarmingTimestamp = 0L;
@@ -140,6 +166,28 @@ public final class ShipData {
         for (int i = 0; i < emberPerksEarned.length; i++) emberPerksEarned[i] = false;
         savedPortalPairs = new float[0];
         savedRelayNodes  = new float[0];
+        savedBumpers     = new float[0];
+        savedAttractors  = new float[0];
+        savedCryoVents   = new float[0];
+        savedTeslaCoils  = new float[0];
+        savedSpringPads  = new float[0];
+        for (int i = 0; i < savedMilestoneAchieved.length; i++) savedMilestoneAchieved[i] = false;
+        savedFrostheimCpI          = false;
+        savedFrostheimCpII         = false;
+        savedFrostheimCpIII        = false;
+        savedFrostheimCryoUnlocked = false;
+        savedEmberHeavyChassis     = false;
+        savedEmberMagneticRim      = false;
+        savedHubUpgradeTier        = 0;
+        savedBallCount             = 0;
+        savedKineticBladeCount           = 0;
+        savedFrostheimDecision           = 0;
+        savedTeslaHarvestRate            = 15f;
+        savedPortalBidirectional         = false;
+        savedEmberSpinReversed           = false;
+        savedGravShiftStep               = 0;
+        savedEmberThirdInternUnlocked    = false;
+        savedFrostheimThirdInternUnlocked = false;
         pendingContactEvents.clear();
         pendingBumperSounds    = 0;
         pendingCollisionSounds = 0;
@@ -175,6 +223,152 @@ public final class ShipData {
             total = Math.min(total + rate * elapsed, total + cap);
         }
         return total;
+    }
+
+    // ---- Persistence ----------------------------------------------------------------
+
+    public void save() {
+        com.badlogic.gdx.Preferences p = com.badlogic.gdx.Gdx.app.getPreferences("odyssey_save");
+        p.putFloat("totalJoules",           totalJoules);
+        p.putFloat("crystals",              crystals);
+        p.putFloat("bumperEnergyMult",      bumperEnergyMult);
+        p.putFloat("wallEnergyMult",        wallEnergyMult);
+        p.putFloat("collisionEnergyMult",   collisionEnergyMult);
+        p.putFloat("bumperMult",            bumperMult);
+        p.putFloat("gravityMult",           gravityMult);
+        p.putFloat("bumperSparkValue",      bumperSparkValue);
+        p.putFloat("internBoostStrength",   internBoostStrength);
+        p.putFloat("maxInternSpeed",        maxInternSpeed);
+        p.putFloat("targetPlanetDistance",  targetPlanetDistance);
+        p.putFloat("planetGravMult",        planetGravityMultiplier);
+        p.putFloat("accumulatedDist",       accumulatedDist);
+        p.putFloat("powerGenerated",        powerGenerated);
+        p.putFloat("energyAtLastLaunch",    energyAtLastLaunch);
+        p.putFloat("lastArrivalEnergyUsed", lastArrivalEnergyUsed);
+        p.putFloat("lastArrivalJourneyDays",lastArrivalJourneyDays);
+        p.putFloat("savedFlightJPS",        savedFlightJPS);
+        p.putInteger("currentPlanetIndex",  currentPlanetIndex);
+        p.putInteger("selectedPlanetIndex", selectedPlanetIndex);
+        p.putInteger("sectorReached",       sectorReached);
+        p.putInteger("arrivalsCompleted",   arrivalsCompleted);
+        p.putBoolean("arrivalReady",        arrivalReady);
+        p.putString("lastArrivalPlanetName",lastArrivalPlanetName);
+        p.putLong("lastFarmingTimestamp",   lastFarmingTimestamp);
+        p.putInteger("pendingNewRecruits",  pendingNewRecruits);
+        for (int i = 0; i < PLANETS.length; i++)
+            p.putInteger("internsLeft_" + i, internsLeftOnPlanet[i]);
+        for (int i = 0; i < emberPerksEarned.length; i++)
+            p.putBoolean("emberPerk_" + i, emberPerksEarned[i]);
+        p.putString("savedPortalPairs", floatsToString(savedPortalPairs));
+        p.putString("savedRelayNodes",  floatsToString(savedRelayNodes));
+        p.putString("savedBumpers",     floatsToString(savedBumpers));
+        p.putString("savedAttractors",  floatsToString(savedAttractors));
+        p.putString("savedCryoVents",   floatsToString(savedCryoVents));
+        p.putString("savedTeslaCoils",  floatsToString(savedTeslaCoils));
+        p.putString("savedSpringPads",  floatsToString(savedSpringPads));
+        for (int i = 0; i < savedMilestoneAchieved.length; i++)
+            p.putBoolean("milestone_" + i, savedMilestoneAchieved[i]);
+        p.putBoolean("fhCpI",   savedFrostheimCpI);
+        p.putBoolean("fhCpII",  savedFrostheimCpII);
+        p.putBoolean("fhCpIII", savedFrostheimCpIII);
+        p.putBoolean("fhCryo",  savedFrostheimCryoUnlocked);
+        p.putBoolean("emHeavy", savedEmberHeavyChassis);
+        p.putBoolean("emMag",   savedEmberMagneticRim);
+        p.putInteger("hubTier", savedHubUpgradeTier);
+        p.putInteger("ballCount", savedBallCount);
+        p.putInteger("kineticBladeCount",  savedKineticBladeCount);
+        p.putInteger("fhDecision",         savedFrostheimDecision);
+        p.putFloat("teslaHarvestRate",     savedTeslaHarvestRate);
+        p.putBoolean("portalBidir",        savedPortalBidirectional);
+        p.putBoolean("emSpinRev",          savedEmberSpinReversed);
+        p.putInteger("gravShiftStep",      savedGravShiftStep);
+        p.putBoolean("emThirdIntern",      savedEmberThirdInternUnlocked);
+        p.putBoolean("fhThirdIntern",      savedFrostheimThirdInternUnlocked);
+        p.putBoolean("hasSave", true);
+        p.flush();
+    }
+
+    /** Returns true if a save file was found and loaded. */
+    public boolean load() {
+        com.badlogic.gdx.Preferences p = com.badlogic.gdx.Gdx.app.getPreferences("odyssey_save");
+        if (!p.getBoolean("hasSave", false)) return false;
+        totalJoules             = p.getFloat("totalJoules",           0f);
+        crystals                = p.getFloat("crystals",              0f);
+        bumperEnergyMult        = p.getFloat("bumperEnergyMult",      5.0f);
+        wallEnergyMult          = p.getFloat("wallEnergyMult",        1.0f);
+        collisionEnergyMult     = p.getFloat("collisionEnergyMult",   1.0f);
+        bumperMult              = p.getFloat("bumperMult",            1.0f);
+        gravityMult             = p.getFloat("gravityMult",           1.0f);
+        bumperSparkValue        = p.getFloat("bumperSparkValue",      20f);
+        internBoostStrength     = p.getFloat("internBoostStrength",   1.5f);
+        maxInternSpeed          = p.getFloat("maxInternSpeed",        5.0f);
+        targetPlanetDistance    = p.getFloat("targetPlanetDistance",  SOLARA_DISTANCE);
+        planetGravityMultiplier = p.getFloat("planetGravMult",        SOLARA_GRAVITY);
+        accumulatedDist         = p.getFloat("accumulatedDist",       0f);
+        powerGenerated          = p.getFloat("powerGenerated",        0f);
+        energyAtLastLaunch      = p.getFloat("energyAtLastLaunch",    0f);
+        lastArrivalEnergyUsed   = p.getFloat("lastArrivalEnergyUsed", 0f);
+        lastArrivalJourneyDays  = p.getFloat("lastArrivalJourneyDays",0f);
+        savedFlightJPS          = p.getFloat("savedFlightJPS",        0f);
+        currentPlanetIndex      = p.getInteger("currentPlanetIndex",  0);
+        selectedPlanetIndex     = p.getInteger("selectedPlanetIndex", 1);
+        sectorReached           = p.getInteger("sectorReached",       -1);
+        arrivalsCompleted       = p.getInteger("arrivalsCompleted",   0);
+        arrivalReady            = p.getBoolean("arrivalReady",        false);
+        lastArrivalPlanetName   = p.getString("lastArrivalPlanetName","");
+        lastFarmingTimestamp    = p.getLong("lastFarmingTimestamp",   0L);
+        pendingNewRecruits      = p.getInteger("pendingNewRecruits",  0);
+        for (int i = 0; i < PLANETS.length; i++)
+            internsLeftOnPlanet[i] = p.getInteger("internsLeft_" + i, 0);
+        for (int i = 0; i < emberPerksEarned.length; i++)
+            emberPerksEarned[i] = p.getBoolean("emberPerk_" + i, false);
+        savedPortalPairs = stringToFloats(p.getString("savedPortalPairs", ""));
+        savedRelayNodes  = stringToFloats(p.getString("savedRelayNodes",  ""));
+        savedBumpers     = stringToFloats(p.getString("savedBumpers",     ""));
+        savedAttractors  = stringToFloats(p.getString("savedAttractors",  ""));
+        savedCryoVents   = stringToFloats(p.getString("savedCryoVents",   ""));
+        savedTeslaCoils  = stringToFloats(p.getString("savedTeslaCoils",  ""));
+        savedSpringPads  = stringToFloats(p.getString("savedSpringPads",  ""));
+        for (int i = 0; i < savedMilestoneAchieved.length; i++)
+            savedMilestoneAchieved[i] = p.getBoolean("milestone_" + i, false);
+        savedFrostheimCpI          = p.getBoolean("fhCpI",   false);
+        savedFrostheimCpII         = p.getBoolean("fhCpII",  false);
+        savedFrostheimCpIII        = p.getBoolean("fhCpIII", false);
+        savedFrostheimCryoUnlocked = p.getBoolean("fhCryo",  false);
+        savedEmberHeavyChassis     = p.getBoolean("emHeavy", false);
+        savedEmberMagneticRim      = p.getBoolean("emMag",   false);
+        savedHubUpgradeTier        = p.getInteger("hubTier", 0);
+        savedBallCount             = p.getInteger("ballCount", 0);
+        savedKineticBladeCount           = p.getInteger("kineticBladeCount",  0);
+        savedFrostheimDecision           = p.getInteger("fhDecision",         0);
+        savedTeslaHarvestRate            = p.getFloat("teslaHarvestRate",     15f);
+        savedPortalBidirectional         = p.getBoolean("portalBidir",        false);
+        savedEmberSpinReversed           = p.getBoolean("emSpinRev",          false);
+        savedGravShiftStep               = p.getInteger("gravShiftStep",      0);
+        savedEmberThirdInternUnlocked    = p.getBoolean("emThirdIntern",      false);
+        savedFrostheimThirdInternUnlocked = p.getBoolean("fhThirdIntern",    false);
+        return true;
+    }
+
+    private static String floatsToString(float[] arr) {
+        if (arr == null || arr.length == 0) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < arr.length; i++) {
+            if (i > 0) sb.append(',');
+            sb.append(arr[i]);
+        }
+        return sb.toString();
+    }
+
+    private static float[] stringToFloats(String s) {
+        if (s == null || s.isEmpty()) return new float[0];
+        String[] parts = s.split(",");
+        float[] arr = new float[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            try { arr[i] = Float.parseFloat(parts[i].trim()); }
+            catch (NumberFormatException e) { arr[i] = 0f; }
+        }
+        return arr;
     }
 
     public PlanetProfile getCurrentPlanet()  { return PLANETS[currentPlanetIndex]; }
