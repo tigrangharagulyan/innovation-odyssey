@@ -119,12 +119,19 @@ public final class ShipData {
     public boolean   savedFrostheimThirdInternUnlocked = false;
     public boolean   savedFrostheimArmBumpersActive    = false;
 
+    // Lives & monetisation
+    public int     lives           = 3;
+    public int     maxLives        = 3;
+    public long    nextLifeAtMs    = 0L;   // wall-clock ms when next life auto-refills; 0 = full
+    public int     diamonds        = 0;
+    public boolean unlimitedLives  = false;
+
     // Offline farming
-    public int[]  internsLeftOnPlanet  = new int[PLANETS.length];
-    public long   lastFarmingTimestamp = 0L;
     public int    pendingNewRecruits   = 0;
 
-    public static final float FARM_RATE_PER_INTERN = 2f; // SP/s per deployed intern
+    // Gem farming — fixed gems/hr per planet index (Solara=1 … Helios Forge=5)
+    public static final int[] GEM_FARM_RATES = {1, 2, 3, 4, 5};
+    public long lastGemFarmTimestamp = 0L;   // ms epoch; 0 = uninitialised
 
     public final com.badlogic.gdx.utils.Array<float[]> pendingContactEvents = new com.badlogic.gdx.utils.Array<>();
     public int pendingBumperSounds    = 0;
@@ -166,9 +173,8 @@ public final class ShipData {
         bumperMult              = 1.0f;
         gravityMult             = 1.0f;
         gravityEnabled          = true;
-        lastFarmingTimestamp    = 0L;
+        lastGemFarmTimestamp = 0L;
         pendingNewRecruits      = 0;
-        for (int i = 0; i < internsLeftOnPlanet.length; i++) internsLeftOnPlanet[i] = 0;
         for (int i = 0; i < emberPerksEarned.length; i++) emberPerksEarned[i] = false;
         savedPortalPairs = new float[0];
         savedRelayNodes  = new float[0];
@@ -215,20 +221,74 @@ public final class ShipData {
         return false;
     }
 
-    /** Returns SP earned offline since last claim, then resets the timestamp. */
-    public float claimOfflineFarming() {
-        if (lastFarmingTimestamp == 0L) return 0f;
-        long now = System.currentTimeMillis();
-        float elapsed = (now - lastFarmingTimestamp) / 1000f;
-        lastFarmingTimestamp = now;
-        float total = 0f;
-        for (int i = 0; i < PLANETS.length; i++) {
-            if (internsLeftOnPlanet[i] <= 0) continue;
-            float rate = internsLeftOnPlanet[i] * FARM_RATE_PER_INTERN;
-            float cap  = PLANETS[i].maxFarmingStorage;
-            total = Math.min(total + rate * elapsed, total + cap);
+    // ---- Lives helpers -------------------------------------------------------
+
+    /** True when the player is allowed to launch. */
+    public boolean canPlay() { return unlimitedLives || lives > 0; }
+
+    /** Deduct one life and start the refill timer if not already running. */
+    public void consumeLife() {
+        if (unlimitedLives) return;
+        if (lives > 0) {
+            lives--;
+            if (lives < maxLives && nextLifeAtMs == 0L) {
+                nextLifeAtMs = System.currentTimeMillis() + 3_600_000L; // 1 hour
+            }
         }
+    }
+
+    /** Call every frame — refills lives from the real-time clock. */
+    public void tickLives() {
+        if (unlimitedLives || lives >= maxLives) { nextLifeAtMs = 0L; return; }
+        long now = System.currentTimeMillis();
+        while (lives < maxLives && nextLifeAtMs > 0L && now >= nextLifeAtMs) {
+            lives++;
+            nextLifeAtMs = (lives < maxLives) ? nextLifeAtMs + 3_600_000L : 0L;
+        }
+    }
+
+    /** Seconds until the next life, or 0 if full / already ready. */
+    public long secondsToNextLife() {
+        if (lives >= maxLives || nextLifeAtMs == 0L) return 0L;
+        return Math.max(0L, (nextLifeAtMs - System.currentTimeMillis()) / 1000L);
+    }
+
+    // ---- Gem farming helpers ---------------------------------------------------------
+
+    /** Total gem/hr from all planets unlocked so far. 0 if farming not yet active. */
+    public int gemFarmRatePerHour() {
+        if (arrivalsCompleted < 1) return 0;
+        int total = 0;
+        int unlocked = Math.min(arrivalsCompleted + 1, GEM_FARM_RATES.length);
+        for (int i = 0; i < unlocked; i++) total += GEM_FARM_RATES[i];
         return total;
+    }
+
+    /** Storage cap: 24 hours of the current total rate. */
+    public int gemFarmCap() {
+        return gemFarmRatePerHour() * 24;
+    }
+
+    /**
+     * Claim gems accumulated since last call. Call from EngineeringLabScreen.show().
+     * Initialises the timestamp on first call once farming is active.
+     * Returns the number of whole gems awarded (0 if farming not yet active).
+     */
+    public int claimGemFarming() {
+        if (arrivalsCompleted < 1) return 0;
+        long now = System.currentTimeMillis();
+        if (lastGemFarmTimestamp == 0L) {
+            lastGemFarmTimestamp = now;
+            return 0;
+        }
+        float elapsedHrs = (now - lastGemFarmTimestamp) / 3_600_000f;
+        int cap    = gemFarmCap();
+        int earned = (int) Math.min(gemFarmRatePerHour() * elapsedHrs, cap);
+        if (earned > 0) {
+            diamonds += earned;
+            lastGemFarmTimestamp = now;
+        }
+        return earned;
     }
 
     // ---- Persistence ----------------------------------------------------------------
@@ -259,10 +319,8 @@ public final class ShipData {
         p.putInteger("arrivalsCompleted",   arrivalsCompleted);
         p.putBoolean("arrivalReady",        arrivalReady);
         p.putString("lastArrivalPlanetName",lastArrivalPlanetName);
-        p.putLong("lastFarmingTimestamp",   lastFarmingTimestamp);
+        p.putLong("lastGemFarmTimestamp", lastGemFarmTimestamp);
         p.putInteger("pendingNewRecruits",  pendingNewRecruits);
-        for (int i = 0; i < PLANETS.length; i++)
-            p.putInteger("internsLeft_" + i, internsLeftOnPlanet[i]);
         for (int i = 0; i < emberPerksEarned.length; i++)
             p.putBoolean("emberPerk_" + i, emberPerksEarned[i]);
         p.putString("savedPortalPairs", floatsToString(savedPortalPairs));
@@ -292,6 +350,11 @@ public final class ShipData {
         p.putBoolean("fhThirdIntern",      savedFrostheimThirdInternUnlocked);
         p.putBoolean("fhArmBumpers",       savedFrostheimArmBumpersActive);
         p.putBoolean("gravityEnabled",  gravityEnabled);
+        p.putInteger("lives",          lives);
+        p.putInteger("maxLives",       maxLives);
+        p.putLong("nextLifeAtMs",      nextLifeAtMs);
+        p.putInteger("diamonds",       diamonds);
+        p.putBoolean("unlimitedLives", unlimitedLives);
         p.putBoolean("hasSave", true);
         p.flush();
     }
@@ -324,10 +387,8 @@ public final class ShipData {
         arrivalsCompleted       = p.getInteger("arrivalsCompleted",   0);
         arrivalReady            = p.getBoolean("arrivalReady",        false);
         lastArrivalPlanetName   = p.getString("lastArrivalPlanetName","");
-        lastFarmingTimestamp    = p.getLong("lastFarmingTimestamp",   0L);
+        lastGemFarmTimestamp = p.getLong("lastGemFarmTimestamp", 0L);
         pendingNewRecruits      = p.getInteger("pendingNewRecruits",  0);
-        for (int i = 0; i < PLANETS.length; i++)
-            internsLeftOnPlanet[i] = p.getInteger("internsLeft_" + i, 0);
         gravityEnabled          = p.getBoolean("gravityEnabled",  true);
         for (int i = 0; i < emberPerksEarned.length; i++)
             emberPerksEarned[i] = p.getBoolean("emberPerk_" + i, false);
@@ -357,6 +418,11 @@ public final class ShipData {
         savedEmberThirdInternUnlocked    = p.getBoolean("emThirdIntern",      false);
         savedFrostheimThirdInternUnlocked = p.getBoolean("fhThirdIntern",    false);
         savedFrostheimArmBumpersActive    = p.getBoolean("fhArmBumpers",     false);
+        lives          = p.getInteger("lives",          3);
+        maxLives       = p.getInteger("maxLives",       3);
+        nextLifeAtMs   = p.getLong("nextLifeAtMs",      0L);
+        diamonds       = p.getInteger("diamonds",       0);
+        unlimitedLives = p.getBoolean("unlimitedLives", false);
         return true;
     }
 
@@ -420,7 +486,6 @@ public final class ShipData {
 
         // Clear all saved lab state so the new planet starts fresh with 2 interns
         savedBallCount             = 0;
-        internsLeftOnPlanet[currentPlanetIndex] = 0;  // clear stale intern count for this planet
         savedBumpers               = new float[0];
         savedAttractors            = new float[0];
         savedIcicleNodes           = new float[0];

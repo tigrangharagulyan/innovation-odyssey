@@ -110,7 +110,7 @@ public class InternDeployScreen extends ScreenAdapter {
         ShipData sd = ShipData.get();
         toPlanetIdx   = sd.currentPlanetIndex;
         fromPlanetIdx = Math.max(0, toPlanetIdx - 1);
-        deployCount   = Math.max(1, Math.min(MAX_INTERNS, sd.internsLeftOnPlanet[fromPlanetIdx]));
+        deployCount   = 12;  // 12 interns auto-stationed per planet (gem farming system)
 
         // Evenly-spaced orbit positions starting at top of from-planet
         for (int i = 0; i < deployCount; i++) {
@@ -447,7 +447,8 @@ public class InternDeployScreen extends ScreenAdapter {
         // Big farm rate — shown after all interns land
         if (animTime >= tDeployDone) {
             float fa = Math.min(1f, (animTime - tDeployDone) / 0.55f);
-            int ratePerHr = (int)(deployCount * ShipData.FARM_RATE_PER_INTERN * 3600f);
+            int ratePerHr = (fromPlanetIdx < ShipData.GEM_FARM_RATES.length)
+                ? ShipData.GEM_FARM_RATES[fromPlanetIdx] : 0;
             String rateStr = ratePerHr >= 1000
                 ? String.format("+%d,%03d SP/HR", ratePerHr / 1000, ratePerHr % 1000)
                 : String.format("+%d SP/HR", ratePerHr);
@@ -490,10 +491,7 @@ public class InternDeployScreen extends ScreenAdapter {
 
     private void applyFarming() {
         ShipData sd = ShipData.get();
-        // internsLeftOnPlanet[fromPlanetIdx] already set at launch — just start clock + grant recruits
         sd.pendingNewRecruits += RECRUIT_COUNT;
-        if (sd.lastFarmingTimestamp == 0L)
-            sd.lastFarmingTimestamp = System.currentTimeMillis();
     }
 
     private float[] col(int idx) {

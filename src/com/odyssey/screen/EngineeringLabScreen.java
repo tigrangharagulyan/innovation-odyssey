@@ -379,6 +379,14 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private TextButton btnJumpReady;
     private Table      pauseTable;
 
+    // Monetisation UI
+    private Table      livesBlockTable;
+    private Table      shopTable;
+    private Label      livesLabel;
+    private Label      diamondsLabel;
+    private Label      lifeTimerLabel;
+    private Label      livesBlockGemsLabel;
+
     private final boolean[] milestoneAchieved = new boolean[6];
     private float currentBallRestitution = BALL_RESTITUTION;
     private float animTime = 0f;  // drives intern wobble animation
@@ -2453,7 +2461,37 @@ public class EngineeringLabScreen extends ScreenAdapter {
             }
         });
 
-        topRight.add(btnMenu).right().padTop(6f).width(32f).height(26f).row();
+        TextButton.TextButtonStyle shopBtnStyle = new TextButton.TextButtonStyle();
+        shopBtnStyle.font      = game.skin.getFont("font");
+        shopBtnStyle.up        = game.skin.newDrawable("white", new Color(0.30f, 0.18f, 0.05f, 0.85f));
+        shopBtnStyle.down      = game.skin.newDrawable("white", new Color(0.50f, 0.30f, 0.08f, 1.00f));
+        shopBtnStyle.over      = shopBtnStyle.down;
+        shopBtnStyle.fontColor = new Color(1f, 0.82f, 0.20f, 1f);
+        TextButton btnShop = new TextButton("SHOP", shopBtnStyle);
+        btnShop.getLabel().setFontScale(0.60f);
+        btnShop.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent e, Actor a) {
+                if (shopTable != null) shopTable.setVisible(true);
+            }
+        });
+
+        // Lives + gems HUD labels
+        livesLabel    = new Label("Lives: 3/3", game.skin);
+        livesLabel.setFontScale(0.58f);
+        livesLabel.setColor(1f, 0.32f, 0.32f, 0.92f);
+
+        diamondsLabel = new Label("Gems: 0", game.skin);
+        diamondsLabel.setFontScale(0.55f);
+        diamondsLabel.setColor(0.30f, 0.82f, 1.00f, 0.90f);
+
+        // Button row: menu + shop side by side
+        Table topRightBtns = new Table();
+        topRightBtns.add(btnMenu).width(32f).height(26f).padRight(4f);
+        topRightBtns.add(btnShop).width(50f).height(26f);
+
+        topRight.add(topRightBtns).right().padTop(6f).row();
+        topRight.add(livesLabel).right().padTop(3f).row();
+        topRight.add(diamondsLabel).right().padTop(2f).row();
 
         // Assemble: left col fixed, center expands to fill, right col fixed
         topPanel.add(topLeft).width(168f).top().left().padRight(4f);
@@ -2594,8 +2632,6 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 if (!isJumpReady()) return;
                 ShipData sd2 = ShipData.get();
                 commitNextPlanetDestination(sd2);
-                sd2.internsLeftOnPlanet[sd2.currentPlanetIndex] = balls.size;
-                sd2.lastFarmingTimestamp = System.currentTimeMillis();
                 sd2.savedFlightJPS = sd2.currentJPS;
                 SoundManager.get().playLaunch();
                 game.transitionTo(GameState.BRIDGE_FLIGHT);
@@ -3055,9 +3091,13 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 }
                 if (!isJumpReady()) return;
                 ShipData sd2 = ShipData.get();
+                // Lives gate
+                if (!sd2.canPlay()) {
+                    if (livesBlockTable != null) livesBlockTable.setVisible(true);
+                    return;
+                }
+                sd2.consumeLife();
                 commitNextPlanetDestination(sd2);
-                sd2.internsLeftOnPlanet[sd2.currentPlanetIndex] = balls.size;
-                sd2.lastFarmingTimestamp = System.currentTimeMillis();
                 sd2.savedFlightJPS = sd2.currentJPS;
                 SoundManager.get().playLaunch();
                 game.transitionTo(GameState.BRIDGE_FLIGHT);
@@ -3185,7 +3225,101 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         ui.addActor(pauseTable);
 
-        // ---- CP III Decision tree dialog (Frostheim only) ----
+        // ---- Lives block overlay (shown when player taps LAUNCH with 0 lives) ----
+        livesBlockTable = new Table();
+        livesBlockTable.setFillParent(true);
+        livesBlockTable.setVisible(false);
+        livesBlockTable.setTouchable(Touchable.enabled);
+        livesBlockTable.background(game.skin.newDrawable("white", new Color(0f, 0f, 0f, 0.90f)));
+        livesBlockTable.center();
+
+        Label noLivesTitle = new Label("OUT OF LIVES", game.skin);
+        noLivesTitle.setFontScale(1.50f);
+        noLivesTitle.setColor(1f, 0.28f, 0.28f, 1f);
+        livesBlockTable.add(noLivesTitle).padBottom(10f).row();
+
+        Label noLivesSub = new Label("Lives refill 1 per hour.", game.skin);
+        noLivesSub.setFontScale(0.65f);
+        noLivesSub.setColor(0.65f, 0.65f, 0.70f, 1f);
+        livesBlockTable.add(noLivesSub).padBottom(6f).row();
+
+        lifeTimerLabel = new Label("Next life in 0:00", game.skin);
+        lifeTimerLabel.setFontScale(0.90f);
+        lifeTimerLabel.setColor(0.90f, 0.90f, 0.90f, 1f);
+        livesBlockTable.add(lifeTimerLabel).padBottom(28f).row();
+
+        TextButton btnAdHalve = new TextButton("WATCH AD — HALVE WAIT", tileStyleBuy);
+        btnAdHalve.getLabel().setFontScale(0.72f);
+        btnAdHalve.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent e, Actor a) {
+                // TODO: show rewarded ad; on completion halve wait
+                showNotif("COMING SOON", "Rewarded ads not yet implemented.");
+            }
+        });
+        livesBlockTable.add(btnAdHalve).width(300f).height(56f).padBottom(12f).row();
+
+        TextButton btnBuyLife = new TextButton("BUY 1 LIFE — 30 GEMS", tileStyleGo);
+        btnBuyLife.getLabel().setFontScale(0.72f);
+        btnBuyLife.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent e, Actor a) {
+                ShipData sdL = ShipData.get();
+                if (sdL.diamonds >= 30) {
+                    sdL.diamonds -= 30;
+                    sdL.lives = Math.min(sdL.lives + 1, sdL.maxLives);
+                    if (sdL.lives >= sdL.maxLives) sdL.nextLifeAtMs = 0L;
+                    livesBlockTable.setVisible(false);
+                } else {
+                    showNotif("NOT ENOUGH GEMS", "Open the SHOP to get more Gems.");
+                }
+            }
+        });
+        livesBlockTable.add(btnBuyLife).width(300f).height(56f).padBottom(18f).row();
+
+        livesBlockGemsLabel = new Label("Gems: 0", game.skin);
+        livesBlockGemsLabel.setFontScale(0.70f);
+        livesBlockGemsLabel.setColor(0.30f, 0.82f, 1.00f, 0.90f);
+        livesBlockTable.add(livesBlockGemsLabel).padBottom(22f).row();
+
+        TextButton btnDismissLives = new TextButton("OK — I'LL WAIT", tileStyleNorm);
+        btnDismissLives.getLabel().setFontScale(0.72f);
+        btnDismissLives.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent e, Actor a) {
+                livesBlockTable.setVisible(false);
+            }
+        });
+        livesBlockTable.add(btnDismissLives).width(300f).height(52f).row();
+
+        ui.addActor(livesBlockTable);
+
+        // ---- Shop overlay (placeholder — 3 tabs coming soon) ----
+        shopTable = new Table();
+        shopTable.setFillParent(true);
+        shopTable.setVisible(false);
+        shopTable.setTouchable(Touchable.enabled);
+        shopTable.background(game.skin.newDrawable("white", new Color(0f, 0.02f, 0.08f, 0.93f)));
+        shopTable.center();
+
+        Label shopTitle = new Label("SHOP", game.skin);
+        shopTitle.setFontScale(1.60f);
+        shopTitle.setColor(1f, 0.82f, 0.20f, 1f);
+        shopTable.add(shopTitle).padBottom(12f).row();
+
+        Label shopSoonLabel = new Label("Full shop coming soon!\n\nTabs:\n  Ads — watch for rewards\n  Gems — buy hard currency\n  Permanents — lifetime boosts", game.skin);
+        shopSoonLabel.setFontScale(0.65f);
+        shopSoonLabel.setColor(0.70f, 0.78f, 0.88f, 1f);
+        shopSoonLabel.setAlignment(com.badlogic.gdx.utils.Align.center);
+        shopTable.add(shopSoonLabel).padBottom(36f).row();
+
+        TextButton btnCloseShop = new TextButton("CLOSE", tileStyleNorm);
+        btnCloseShop.getLabel().setFontScale(0.80f);
+        btnCloseShop.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent e, Actor a) {
+                shopTable.setVisible(false);
+            }
+        });
+        shopTable.add(btnCloseShop).width(240f).height(58f).row();
+
+        ui.addActor(shopTable);
         decisionTable = new Table();
         decisionTable.setFillParent(true);
         decisionTable.setVisible(false);
@@ -3307,8 +3441,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         if (balls.size == 0) {
             ShipData sdInit = ShipData.get();
-            int saved = sdInit.internsLeftOnPlanet[sdInit.currentPlanetIndex];
-            int needed = saved > 0 ? saved : (sdInit.arrivalsCompleted > 0 ? 2 : 1);
+            int needed = sdInit.arrivalsCompleted > 0 ? 2 : 1;
             needed = Math.max(0, needed - sdInit.pendingNewRecruits);
             float[][] initSpots = {
                 {CENTRIFUGE_CX - 0.6f, CENTRIFUGE_CY + 0.4f},
@@ -3328,9 +3461,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
         restorePortalsAndRelays();
         restoreStructures();
         applySectorPerks();
-        claimOfflineFarming();
+        claimGemFarming();
         claimPendingRecruits();
-        checkOfflineHarvestProgress();
     }
 
     private void savePortalState(ShipData sd) {
@@ -3498,11 +3630,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
         }
     }
 
-    private void claimOfflineFarming() {
-        float earned = ShipData.get().claimOfflineFarming();
-        if (earned > 0f) {
-            ShipData.get().addCrystals(earned);
-            showNotif("FARMING INCOME", "+" + (int)earned + " SP from deployed interns");
+    private void claimGemFarming() {
+        int earned = ShipData.get().claimGemFarming();
+        if (earned > 0) {
+            showNotif("GEM FARMS", "+" + earned + " gems from planetary farms");
         }
     }
 
@@ -3715,6 +3846,19 @@ public class EngineeringLabScreen extends ScreenAdapter {
         joulesLabel.setText(""); // energy now shown in top panel
         crystalsLabel.setText((int) sd.crystals + " " + sparkSym);
         jpsLabel.setText("");
+
+        // ---- Lives / Gems HUD tick ----
+        sd.tickLives();
+        livesLabel.setText("Lives: " + sd.lives + "/" + sd.maxLives);
+        livesLabel.setColor(sd.lives > 0 ? new Color(1f, 0.32f, 0.32f, 0.92f)
+                                         : new Color(1f, 0.20f, 0.20f, 1.00f));
+        diamondsLabel.setText("Gems: " + sd.diamonds);
+        if (livesBlockTable.isVisible()) {
+            long secs = sd.secondsToNextLife();
+            lifeTimerLabel.setText(secs <= 0 ? "Life ready soon..."
+                : String.format("Next life in %d:%02d", secs / 60, secs % 60));
+            livesBlockGemsLabel.setText("Gems: " + sd.diamonds);
+        }
 
         SoundManager.get().update(delta);
 
@@ -7135,93 +7279,6 @@ public class EngineeringLabScreen extends ScreenAdapter {
     }
 
     // ---- Offline Harvest (Objective 4) --------------------------------------------
-
-    private void checkOfflineHarvestProgress() {
-        ShipData sd = ShipData.get();
-        if (sd.lastFarmingTimestamp == 0L) return;
-
-        long  now        = System.currentTimeMillis();
-        float elapsedSec = (now - sd.lastFarmingTimestamp) / 1000f;
-        if (elapsedSec < 60f) return;   // ignore brief re-entries (< 1 minute)
-
-        // Sum SP yield across all planets with stationed interns
-        float rawYield = 0f;
-        for (int p = 0; p < ShipData.PLANETS.length; p++) {
-            int stationed = sd.internsLeftOnPlanet[p];
-            if (stationed <= 0) continue;
-            float ratePerIntern = 5f;   // SP/s per intern while ship is in flight
-            float cap           = ShipData.PLANETS[p].maxFarmingStorage;
-            rawYield += Math.min(stationed * ratePerIntern * elapsedSec, cap);
-        }
-
-        sd.lastFarmingTimestamp = 0L;   // clear so we don't double-count
-        if (rawYield > 0f) showHarvestModal(rawYield, elapsedSec);
-    }
-
-    private void showHarvestModal(final float rawYield, float elapsedSec) {
-        int hrs = (int)(elapsedSec / 3600f);
-        int min = (int)((elapsedSec % 3600f) / 60f);
-        String elapsedStr = hrs > 0
-            ? String.format("%dh %dm away", hrs, min)
-            : String.format("%dm away",     min);
-
-        final float energyGain  = rawYield * 1.5f;
-        final float crystalGain = rawYield * 2.0f;
-
-        TextButton.TextButtonStyle tileStyle = new TextButton.TextButtonStyle();
-        tileStyle.font      = game.skin.getFont("font");
-        tileStyle.up        = game.skin.newDrawable("white", OdysseyTheme.PANEL_BG);
-        tileStyle.down      = game.skin.newDrawable("white", OdysseyTheme.BTN_ACTIVE);
-        tileStyle.over      = tileStyle.down;
-        tileStyle.fontColor = OdysseyTheme.TEXT_PRI;
-
-        final Table modal = new Table();
-        modal.setFillParent(true);
-        modal.setTouchable(Touchable.enabled);
-        modal.background(game.skin.newDrawable("white", new Color(0f, 0.03f, 0.10f, 0.92f)));
-        modal.center();
-
-        Label title = new Label("SECTOR HARVEST REPORT", game.skin);
-        title.setFontScale(1.2f);
-        title.setColor(1f, 0.82f, 0.20f, 1f);
-        modal.add(title).padBottom(8f).row();
-
-        Label sub = new Label("Deployed interns worked while you flew\n" + elapsedStr, game.skin);
-        sub.setFontScale(0.62f);
-        sub.setColor(0.62f, 0.72f, 0.85f, 1f);
-        modal.add(sub).padBottom(20f).row();
-
-        Label rawLabel = new Label("Raw Harvest: " + formatNumber(rawYield) + " SP", game.skin);
-        rawLabel.setFontScale(0.82f);
-        rawLabel.setColor(0.78f, 0.88f, 1f, 1f);
-        modal.add(rawLabel).padBottom(24f).row();
-
-        TextButton btnRefine = new TextButton(
-            "REFINE TO ENERGY\n+" + formatNumber(energyGain) + " E\n(x1.5 multiplier)", tileStyle);
-        btnRefine.getLabel().setFontScale(0.68f);
-        btnRefine.setColor(0.25f, 0.95f, 1f, 1f);
-        btnRefine.addListener(new ChangeListener() {
-            @Override public void changed(ChangeEvent e, Actor a) {
-                ShipData.get().addJoules(energyGain);
-                modal.remove();
-            }
-        });
-        modal.add(btnRefine).width(280f).height(72f).padBottom(14f).row();
-
-        TextButton btnMelt = new TextButton(
-            "MELT TO SHARDS\n+" + formatNumber(crystalGain) + " SP\n(x2.0 multiplier)", tileStyle);
-        btnMelt.getLabel().setFontScale(0.68f);
-        btnMelt.setColor(1f, 0.72f, 0.15f, 1f);
-        btnMelt.addListener(new ChangeListener() {
-            @Override public void changed(ChangeEvent e, Actor a) {
-                ShipData.get().addCrystals(crystalGain);
-                modal.remove();
-            }
-        });
-        modal.add(btnMelt).width(280f).height(72f).row();
-
-        ui.addActor(modal);
-    }
 
     private void applyBumperWideUpgrade() {
         // Recreate all bumper fixtures with the new bumperCoreR radius
