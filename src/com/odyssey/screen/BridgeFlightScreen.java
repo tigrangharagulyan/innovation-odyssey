@@ -198,7 +198,7 @@ public class BridgeFlightScreen extends ScreenAdapter {
         return LINE_X1;
     }
 
-    private static final float[] FROSTHEIM_CHECKPOINT_ENERGIES = {6_000f, 24_000f, 120_000f, 150_000f};
+    private static final float[] FROSTHEIM_CHECKPOINT_ENERGIES = {4_000f, 24_000f, 120_000f, 150_000f};
     private static final float[] EMBER_CHECKPOINT_ENERGIES     = {5_000f, 60_000f, 300_000f, 250_000f};
     public static float[] buildSectorDistances(float ignored) {
         int pidx = ShipData.get().currentPlanetIndex;

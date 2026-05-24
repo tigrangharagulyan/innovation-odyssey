@@ -4,7 +4,10 @@ public final class ShipData {
 
     /** Mutable state stored in each standard bumper body's userData for per-bumper hit animation. */
     public static final class BumperHitData {
-        public long lastHitMs = 0L;
+
+        public boolean isArmBumper   = false;
+        public boolean isValleyBlade = false;
+        public long    lastHitMs     = 0L;
     }
 
     /** Mutable state stored in each gravity-well (attractor) body's userData for per-hit animation. */
@@ -76,6 +79,7 @@ public final class ShipData {
     public float bumperSparkValue       = 20f;
     public float bumperMult            = 1.0f;
     public float gravityMult           = 1.0f;
+    public boolean gravityEnabled       = true;
 
     // EmberIV perk persistence — survives screen rebuild across checkpoints
     public boolean[] emberPerksEarned  = new boolean[5];
@@ -91,7 +95,7 @@ public final class ShipData {
     // Placed-structure positions — flat [x, y, x, y, ...] per type
     public float[] savedBumpers    = new float[0];
     public float[] savedAttractors = new float[0];
-    public float[] savedCryoVents  = new float[0];
+    public float[] savedIcicleNodes = new float[0];
     public float[] savedTeslaCoils = new float[0];
     public float[] savedSpringPads = new float[0];
 
@@ -100,7 +104,7 @@ public final class ShipData {
     public boolean   savedFrostheimCpI            = false;
     public boolean   savedFrostheimCpII           = false;
     public boolean   savedFrostheimCpIII          = false;
-    public boolean   savedFrostheimCryoUnlocked   = false;
+    public boolean   savedFrostheimIcicleUnlocked  = false;
     public boolean   savedEmberHeavyChassis       = false;
     public boolean   savedEmberMagneticRim        = false;
     public int       savedHubUpgradeTier          = 0;
@@ -113,6 +117,7 @@ public final class ShipData {
     public int       savedGravShiftStep                = 0;
     public boolean   savedEmberThirdInternUnlocked     = false;
     public boolean   savedFrostheimThirdInternUnlocked = false;
+    public boolean   savedFrostheimArmBumpersActive    = false;
 
     // Offline farming
     public int[]  internsLeftOnPlanet  = new int[PLANETS.length];
@@ -160,6 +165,7 @@ public final class ShipData {
         bumperSparkValue        = 20f;
         bumperMult              = 1.0f;
         gravityMult             = 1.0f;
+        gravityEnabled          = true;
         lastFarmingTimestamp    = 0L;
         pendingNewRecruits      = 0;
         for (int i = 0; i < internsLeftOnPlanet.length; i++) internsLeftOnPlanet[i] = 0;
@@ -168,14 +174,14 @@ public final class ShipData {
         savedRelayNodes  = new float[0];
         savedBumpers     = new float[0];
         savedAttractors  = new float[0];
-        savedCryoVents   = new float[0];
+        savedIcicleNodes = new float[0];
         savedTeslaCoils  = new float[0];
         savedSpringPads  = new float[0];
         for (int i = 0; i < savedMilestoneAchieved.length; i++) savedMilestoneAchieved[i] = false;
         savedFrostheimCpI          = false;
         savedFrostheimCpII         = false;
         savedFrostheimCpIII        = false;
-        savedFrostheimCryoUnlocked = false;
+        savedFrostheimIcicleUnlocked = false;
         savedEmberHeavyChassis     = false;
         savedEmberMagneticRim      = false;
         savedHubUpgradeTier        = 0;
@@ -263,7 +269,7 @@ public final class ShipData {
         p.putString("savedRelayNodes",  floatsToString(savedRelayNodes));
         p.putString("savedBumpers",     floatsToString(savedBumpers));
         p.putString("savedAttractors",  floatsToString(savedAttractors));
-        p.putString("savedCryoVents",   floatsToString(savedCryoVents));
+        p.putString("savedIcicleNodes", floatsToString(savedIcicleNodes));
         p.putString("savedTeslaCoils",  floatsToString(savedTeslaCoils));
         p.putString("savedSpringPads",  floatsToString(savedSpringPads));
         for (int i = 0; i < savedMilestoneAchieved.length; i++)
@@ -271,7 +277,7 @@ public final class ShipData {
         p.putBoolean("fhCpI",   savedFrostheimCpI);
         p.putBoolean("fhCpII",  savedFrostheimCpII);
         p.putBoolean("fhCpIII", savedFrostheimCpIII);
-        p.putBoolean("fhCryo",  savedFrostheimCryoUnlocked);
+        p.putBoolean("fhIcicle", savedFrostheimIcicleUnlocked);
         p.putBoolean("emHeavy", savedEmberHeavyChassis);
         p.putBoolean("emMag",   savedEmberMagneticRim);
         p.putInteger("hubTier", savedHubUpgradeTier);
@@ -284,6 +290,8 @@ public final class ShipData {
         p.putInteger("gravShiftStep",      savedGravShiftStep);
         p.putBoolean("emThirdIntern",      savedEmberThirdInternUnlocked);
         p.putBoolean("fhThirdIntern",      savedFrostheimThirdInternUnlocked);
+        p.putBoolean("fhArmBumpers",       savedFrostheimArmBumpersActive);
+        p.putBoolean("gravityEnabled",  gravityEnabled);
         p.putBoolean("hasSave", true);
         p.flush();
     }
@@ -320,13 +328,14 @@ public final class ShipData {
         pendingNewRecruits      = p.getInteger("pendingNewRecruits",  0);
         for (int i = 0; i < PLANETS.length; i++)
             internsLeftOnPlanet[i] = p.getInteger("internsLeft_" + i, 0);
+        gravityEnabled          = p.getBoolean("gravityEnabled",  true);
         for (int i = 0; i < emberPerksEarned.length; i++)
             emberPerksEarned[i] = p.getBoolean("emberPerk_" + i, false);
         savedPortalPairs = stringToFloats(p.getString("savedPortalPairs", ""));
         savedRelayNodes  = stringToFloats(p.getString("savedRelayNodes",  ""));
         savedBumpers     = stringToFloats(p.getString("savedBumpers",     ""));
         savedAttractors  = stringToFloats(p.getString("savedAttractors",  ""));
-        savedCryoVents   = stringToFloats(p.getString("savedCryoVents",   ""));
+        savedIcicleNodes = stringToFloats(p.getString("savedIcicleNodes",  ""));
         savedTeslaCoils  = stringToFloats(p.getString("savedTeslaCoils",  ""));
         savedSpringPads  = stringToFloats(p.getString("savedSpringPads",  ""));
         for (int i = 0; i < savedMilestoneAchieved.length; i++)
@@ -334,7 +343,7 @@ public final class ShipData {
         savedFrostheimCpI          = p.getBoolean("fhCpI",   false);
         savedFrostheimCpII         = p.getBoolean("fhCpII",  false);
         savedFrostheimCpIII        = p.getBoolean("fhCpIII", false);
-        savedFrostheimCryoUnlocked = p.getBoolean("fhCryo",  false);
+        savedFrostheimIcicleUnlocked = p.getBoolean("fhIcicle", false);
         savedEmberHeavyChassis     = p.getBoolean("emHeavy", false);
         savedEmberMagneticRim      = p.getBoolean("emMag",   false);
         savedHubUpgradeTier        = p.getInteger("hubTier", 0);
@@ -347,6 +356,7 @@ public final class ShipData {
         savedGravShiftStep               = p.getInteger("gravShiftStep",      0);
         savedEmberThirdInternUnlocked    = p.getBoolean("emThirdIntern",      false);
         savedFrostheimThirdInternUnlocked = p.getBoolean("fhThirdIntern",    false);
+        savedFrostheimArmBumpersActive    = p.getBoolean("fhArmBumpers",     false);
         return true;
     }
 
@@ -401,10 +411,39 @@ public final class ShipData {
 
     public void claimArrivalReward() {
         arrivalReady          = false;
+        totalJoules           = 0f;
+        crystals              = 0f;
         bumperEnergyMult     += 0.5f;
         collisionEnergyMult  += 0.25f;
         wallEnergyMult       += 0.15f;
         internBoostStrength  += 0.15f;
-        totalJoules          += 150f + arrivalsCompleted * 50f;
+
+        // Clear all saved lab state so the new planet starts fresh with 2 interns
+        savedBallCount             = 0;
+        internsLeftOnPlanet[currentPlanetIndex] = 0;  // clear stale intern count for this planet
+        savedBumpers               = new float[0];
+        savedAttractors            = new float[0];
+        savedIcicleNodes           = new float[0];
+        savedTeslaCoils            = new float[0];
+        savedSpringPads            = new float[0];
+        savedPortalPairs           = new float[0];
+        savedRelayNodes            = new float[0];
+        savedKineticBladeCount     = 0;
+        savedFrostheimDecision     = 0;
+        savedTeslaHarvestRate      = 15f;
+        savedHubUpgradeTier        = 0;
+        savedEmberHeavyChassis     = false;
+        savedEmberMagneticRim      = false;
+        savedPortalBidirectional   = false;
+        savedEmberSpinReversed     = false;
+        savedGravShiftStep         = 0;
+        savedEmberThirdInternUnlocked    = false;
+        savedFrostheimThirdInternUnlocked = false;
+        savedFrostheimCpI          = false;
+        savedFrostheimCpII         = false;
+        savedFrostheimCpIII        = false;
+        savedFrostheimIcicleUnlocked = false;
+        for (int i = 0; i < savedMilestoneAchieved.length; i++) savedMilestoneAchieved[i] = false;
+        sectorReached              = -1;
     }
 }
