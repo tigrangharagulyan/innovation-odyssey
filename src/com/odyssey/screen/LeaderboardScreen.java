@@ -86,7 +86,7 @@ public class LeaderboardScreen extends ScreenAdapter {
 
         // ── Board table inside a scroll pane ──────────────────────────────────
         boardTable = new Table();
-        scrollPane = new ScrollPane(boardTable, game.skin);
+        scrollPane = new ScrollPane(boardTable);
         scrollPane.setFadeScrollBars(false);
         scrollPane.setScrollingDisabled(true, false);
 
