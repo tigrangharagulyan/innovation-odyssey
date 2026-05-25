@@ -119,6 +119,53 @@ public final class ShipData {
     public boolean   savedFrostheimThirdInternUnlocked = false;
     public boolean   savedFrostheimArmBumpersActive    = false;
 
+    // ── Replay mode ───────────────────────────────────────────────────────────
+    public boolean isReplayMode      = false;
+    public int     replayPlanetIndex = 0;
+
+    // Pending result for MainMenuScreen to display after a replay run
+    public boolean pendingReplayResult      = false;
+    public boolean pendingReplayIsNewRecord = false;
+    public float   pendingReplayTime        = 0f;
+    public int     pendingReplayPlanetIdx   = 0;
+
+    // Backup of main-progress state snapshotted before a replay starts.
+    // Persisted so app-kill mid-replay can be recovered on next launch.
+    public float   rb_totalJoules            = 0f;
+    public float   rb_powerGenerated         = 0f;
+    public float   rb_energyAtLastLaunch     = 0f;
+    public float   rb_accumulatedDist        = 0f;
+    public int     rb_sectorReached          = -1;
+    public long    rb_flightStartTimeMs      = 0L;
+    public float   rb_planetGravityMultiplier = 1.0f;
+    // Saved lab arrays
+    public float[] rb_savedBumpers           = new float[0];
+    public float[] rb_savedAttractors        = new float[0];
+    public float[] rb_savedIcicleNodes       = new float[0];
+    public float[] rb_savedTeslaCoils        = new float[0];
+    public float[] rb_savedSpringPads        = new float[0];
+    public float[] rb_savedPortalPairs       = new float[0];
+    public float[] rb_savedRelayNodes        = new float[0];
+    public boolean[] rb_savedMilestoneAchieved = new boolean[6];
+    // Saved lab scalars
+    public int     rb_savedBallCount                      = 0;
+    public int     rb_savedKineticBladeCount              = 0;
+    public int     rb_savedHubUpgradeTier                 = 0;
+    public int     rb_savedFrostheimDecision              = 0;
+    public int     rb_savedGravShiftStep                  = 0;
+    public float   rb_savedTeslaHarvestRate               = 15f;
+    public boolean rb_savedFrostheimCpI                   = false;
+    public boolean rb_savedFrostheimCpII                  = false;
+    public boolean rb_savedFrostheimCpIII                 = false;
+    public boolean rb_savedFrostheimIcicleUnlocked        = false;
+    public boolean rb_savedEmberHeavyChassis              = false;
+    public boolean rb_savedEmberMagneticRim               = false;
+    public boolean rb_savedPortalBidirectional            = false;
+    public boolean rb_savedEmberSpinReversed              = false;
+    public boolean rb_savedEmberThirdInternUnlocked       = false;
+    public boolean rb_savedFrostheimThirdInternUnlocked   = false;
+    public boolean rb_savedFrostheimArmBumpersActive      = false;
+
     // Lives & monetisation
     public int     lives           = 5;
     public int     maxLives        = 5;
@@ -251,10 +298,164 @@ public final class ShipData {
         }
     }
 
+    /**
+     * Enter replay mode for a previously-visited planet.
+     * Snapshots all mutable lab/flight state into rb_* fields,
+     * clears them for a fresh run, sets replay planet gravity,
+     * and deducts diamond cost (50 × (planetIdx+1)).
+     */
+    public void startReplay(int planetIdx) {
+        // --- snapshot scalars ---
+        rb_totalJoules             = totalJoules;
+        rb_powerGenerated          = powerGenerated;
+        rb_energyAtLastLaunch      = energyAtLastLaunch;
+        rb_accumulatedDist         = accumulatedDist;
+        rb_sectorReached           = sectorReached;
+        rb_flightStartTimeMs       = flightStartTimeMs;
+        rb_planetGravityMultiplier = planetGravityMultiplier;
+        // --- snapshot arrays ---
+        rb_savedBumpers             = savedBumpers.clone();
+        rb_savedAttractors          = savedAttractors.clone();
+        rb_savedIcicleNodes         = savedIcicleNodes.clone();
+        rb_savedTeslaCoils          = savedTeslaCoils.clone();
+        rb_savedSpringPads          = savedSpringPads.clone();
+        rb_savedPortalPairs         = savedPortalPairs.clone();
+        rb_savedRelayNodes          = savedRelayNodes.clone();
+        rb_savedMilestoneAchieved   = savedMilestoneAchieved.clone();
+        // --- snapshot lab scalars ---
+        rb_savedBallCount                   = savedBallCount;
+        rb_savedKineticBladeCount           = savedKineticBladeCount;
+        rb_savedHubUpgradeTier              = savedHubUpgradeTier;
+        rb_savedFrostheimDecision           = savedFrostheimDecision;
+        rb_savedGravShiftStep               = savedGravShiftStep;
+        rb_savedTeslaHarvestRate            = savedTeslaHarvestRate;
+        rb_savedFrostheimCpI                = savedFrostheimCpI;
+        rb_savedFrostheimCpII               = savedFrostheimCpII;
+        rb_savedFrostheimCpIII              = savedFrostheimCpIII;
+        rb_savedFrostheimIcicleUnlocked     = savedFrostheimIcicleUnlocked;
+        rb_savedEmberHeavyChassis           = savedEmberHeavyChassis;
+        rb_savedEmberMagneticRim            = savedEmberMagneticRim;
+        rb_savedPortalBidirectional         = savedPortalBidirectional;
+        rb_savedEmberSpinReversed           = savedEmberSpinReversed;
+        rb_savedEmberThirdInternUnlocked    = savedEmberThirdInternUnlocked;
+        rb_savedFrostheimThirdInternUnlocked = savedFrostheimThirdInternUnlocked;
+        rb_savedFrostheimArmBumpersActive   = savedFrostheimArmBumpersActive;
+
+        // --- clear lab/flight state for fresh replay ---
+        savedBumpers             = new float[0];
+        savedAttractors          = new float[0];
+        savedIcicleNodes         = new float[0];
+        savedTeslaCoils          = new float[0];
+        savedSpringPads          = new float[0];
+        savedPortalPairs         = new float[0];
+        savedRelayNodes          = new float[0];
+        savedMilestoneAchieved   = new boolean[6];
+        savedBallCount           = 0;
+        savedKineticBladeCount   = 0;
+        savedHubUpgradeTier      = 0;
+        savedFrostheimDecision   = 0;
+        savedGravShiftStep       = 0;
+        savedTeslaHarvestRate    = 15f;
+        savedFrostheimCpI        = false;
+        savedFrostheimCpII       = false;
+        savedFrostheimCpIII      = false;
+        savedFrostheimIcicleUnlocked  = false;
+        savedEmberHeavyChassis   = false;
+        savedEmberMagneticRim    = false;
+        savedPortalBidirectional = false;
+        savedEmberSpinReversed   = false;
+        savedEmberThirdInternUnlocked    = false;
+        savedFrostheimThirdInternUnlocked = false;
+        savedFrostheimArmBumpersActive   = false;
+        totalJoules          = 0f;
+        energyAtLastLaunch   = powerGenerated; // delta starts at 0 for replay launch
+        accumulatedDist      = 0f;
+        sectorReached        = -1;
+        flightStartTimeMs    = 0L;
+        planetGravityMultiplier = PLANETS[planetIdx].gravity;
+
+        // --- deduct diamond cost ---
+        diamonds -= 50 * (planetIdx + 1);
+
+        // --- enter replay mode ---
+        isReplayMode      = true;
+        replayPlanetIndex = planetIdx;
+    }
+
+    /**
+     * Exit replay mode after a successful arrival.
+     * Records the time if it beats the current best, sets pendingReplay* for display,
+     * and fully restores main-progress state from rb_* snapshot.
+     */
+    public void endReplay(float elapsedSeconds) {
+        // record time
+        boolean isNew = elapsedSeconds < bestArrivalTimes[replayPlanetIndex];
+        if (isNew) bestArrivalTimes[replayPlanetIndex] = elapsedSeconds;
+
+        // set result for MainMenuScreen
+        pendingReplayResult      = true;
+        pendingReplayIsNewRecord = isNew;
+        pendingReplayTime        = elapsedSeconds;
+        pendingReplayPlanetIdx   = replayPlanetIndex;
+
+        // restore all fields
+        _restoreReplayBackup();
+        isReplayMode = false;
+    }
+
+    /**
+     * Abandon replay (e.g., app killed mid-replay and restarted).
+     * Restores main-progress state without recording any result.
+     */
+    public void abandonReplay() {
+        _restoreReplayBackup();
+        isReplayMode = false;
+    }
+
+    private void _restoreReplayBackup() {
+        totalJoules             = rb_totalJoules;
+        powerGenerated          = rb_powerGenerated;
+        energyAtLastLaunch      = rb_energyAtLastLaunch;
+        accumulatedDist         = rb_accumulatedDist;
+        sectorReached           = rb_sectorReached;
+        flightStartTimeMs       = rb_flightStartTimeMs;
+        planetGravityMultiplier = rb_planetGravityMultiplier;
+        savedBumpers            = rb_savedBumpers;
+        savedAttractors         = rb_savedAttractors;
+        savedIcicleNodes        = rb_savedIcicleNodes;
+        savedTeslaCoils         = rb_savedTeslaCoils;
+        savedSpringPads         = rb_savedSpringPads;
+        savedPortalPairs        = rb_savedPortalPairs;
+        savedRelayNodes         = rb_savedRelayNodes;
+        savedMilestoneAchieved  = rb_savedMilestoneAchieved;
+        savedBallCount                    = rb_savedBallCount;
+        savedKineticBladeCount            = rb_savedKineticBladeCount;
+        savedHubUpgradeTier               = rb_savedHubUpgradeTier;
+        savedFrostheimDecision            = rb_savedFrostheimDecision;
+        savedGravShiftStep                = rb_savedGravShiftStep;
+        savedTeslaHarvestRate             = rb_savedTeslaHarvestRate;
+        savedFrostheimCpI                 = rb_savedFrostheimCpI;
+        savedFrostheimCpII                = rb_savedFrostheimCpII;
+        savedFrostheimCpIII               = rb_savedFrostheimCpIII;
+        savedFrostheimIcicleUnlocked      = rb_savedFrostheimIcicleUnlocked;
+        savedEmberHeavyChassis            = rb_savedEmberHeavyChassis;
+        savedEmberMagneticRim             = rb_savedEmberMagneticRim;
+        savedPortalBidirectional          = rb_savedPortalBidirectional;
+        savedEmberSpinReversed            = rb_savedEmberSpinReversed;
+        savedEmberThirdInternUnlocked     = rb_savedEmberThirdInternUnlocked;
+        savedFrostheimThirdInternUnlocked = rb_savedFrostheimThirdInternUnlocked;
+        savedFrostheimArmBumpersActive    = rb_savedFrostheimArmBumpersActive;
+    }
+
     /** Call every frame — refills lives from the real-time clock. */
     public void tickLives() {
         if (unlimitedLives || lives >= maxLives) { nextLifeAtMs = 0L; return; }
         long now = System.currentTimeMillis();
+        // Auto-start timer if lives are short but the timer was never set
+        // (e.g. old save had maxLives=3 full; now maxLives=5, timer was cleared)
+        if (nextLifeAtMs == 0L) {
+            nextLifeAtMs = now + 3_600_000L;
+        }
         while (lives < maxLives && nextLifeAtMs > 0L && now >= nextLifeAtMs) {
             lives++;
             nextLifeAtMs = (lives < maxLives) ? nextLifeAtMs + 3_600_000L : 0L;
@@ -372,6 +573,48 @@ public final class ShipData {
         for (int i = 0; i < bestArrivalTimes.length; i++)
             p.putFloat("bestArrivalTime_" + i, bestArrivalTimes[i]);
         p.putBoolean("hasSave", true);
+        p.putBoolean("isReplayMode",    isReplayMode);
+        p.putInteger("replayPlanetIdx", replayPlanetIndex);
+        if (isReplayMode) {
+            p.putFloat("rb_totalJoules",            rb_totalJoules);
+            p.putFloat("rb_powerGenerated",         rb_powerGenerated);
+            p.putFloat("rb_energyAtLastLaunch",     rb_energyAtLastLaunch);
+            p.putFloat("rb_accumulatedDist",        rb_accumulatedDist);
+            p.putInteger("rb_sectorReached",        rb_sectorReached);
+            p.putLong("rb_flightStartTimeMs",       rb_flightStartTimeMs);
+            p.putFloat("rb_planetGravityMult",      rb_planetGravityMultiplier);
+            p.putString("rb_bumpers",   floatsToString(rb_savedBumpers));
+            p.putString("rb_attractors",floatsToString(rb_savedAttractors));
+            p.putString("rb_icicles",   floatsToString(rb_savedIcicleNodes));
+            p.putString("rb_tesla",     floatsToString(rb_savedTeslaCoils));
+            p.putString("rb_springs",   floatsToString(rb_savedSpringPads));
+            p.putString("rb_portals",   floatsToString(rb_savedPortalPairs));
+            p.putString("rb_relays",    floatsToString(rb_savedRelayNodes));
+            p.putInteger("rb_ballCount",            rb_savedBallCount);
+            p.putInteger("rb_kineticBladeCount",    rb_savedKineticBladeCount);
+            p.putInteger("rb_hubTier",              rb_savedHubUpgradeTier);
+            p.putInteger("rb_fhDecision",           rb_savedFrostheimDecision);
+            p.putInteger("rb_gravShiftStep",        rb_savedGravShiftStep);
+            p.putFloat("rb_teslaRate",              rb_savedTeslaHarvestRate);
+            p.putBoolean("rb_fhCpI",   rb_savedFrostheimCpI);
+            p.putBoolean("rb_fhCpII",  rb_savedFrostheimCpII);
+            p.putBoolean("rb_fhCpIII", rb_savedFrostheimCpIII);
+            p.putBoolean("rb_fhIcicle",rb_savedFrostheimIcicleUnlocked);
+            p.putBoolean("rb_emHeavy", rb_savedEmberHeavyChassis);
+            p.putBoolean("rb_emMagnet",rb_savedEmberMagneticRim);
+            p.putBoolean("rb_portalBidir",   rb_savedPortalBidirectional);
+            p.putBoolean("rb_emSpinRev",     rb_savedEmberSpinReversed);
+            p.putBoolean("rb_emThirdIntern", rb_savedEmberThirdInternUnlocked);
+            p.putBoolean("rb_fhThirdIntern", rb_savedFrostheimThirdInternUnlocked);
+            p.putBoolean("rb_fhArmBumpers",  rb_savedFrostheimArmBumpersActive);
+            // milestone array: store as comma-separated ints
+            StringBuilder msb = new StringBuilder();
+            for (int i = 0; i < rb_savedMilestoneAchieved.length; i++) {
+                if (i > 0) msb.append(',');
+                msb.append(rb_savedMilestoneAchieved[i] ? 1 : 0);
+            }
+            p.putString("rb_milestones", msb.toString());
+        }
         p.flush();
     }
 
@@ -435,12 +678,55 @@ public final class ShipData {
         savedFrostheimThirdInternUnlocked = p.getBoolean("fhThirdIntern",    false);
         savedFrostheimArmBumpersActive    = p.getBoolean("fhArmBumpers",     false);
         lives          = p.getInteger("lives",          5);
-        maxLives       = p.getInteger("maxLives",       5);
+        maxLives       = 5; // always 5; not persisted so upgrades don't carry over
         nextLifeAtMs   = p.getLong("nextLifeAtMs",      0L);
         diamonds       = p.getInteger("diamonds",       0);
         unlimitedLives = p.getBoolean("unlimitedLives", false);
         for (int i = 0; i < bestArrivalTimes.length; i++)
             bestArrivalTimes[i] = p.getFloat("bestArrivalTime_" + i, Float.MAX_VALUE);
+        isReplayMode      = p.getBoolean("isReplayMode",    false);
+        replayPlanetIndex = p.getInteger("replayPlanetIdx", 0);
+        if (isReplayMode) {
+            rb_totalJoules            = p.getFloat("rb_totalJoules",        0f);
+            rb_powerGenerated         = p.getFloat("rb_powerGenerated",     0f);
+            rb_energyAtLastLaunch     = p.getFloat("rb_energyAtLastLaunch", 0f);
+            rb_accumulatedDist        = p.getFloat("rb_accumulatedDist",    0f);
+            rb_sectorReached          = p.getInteger("rb_sectorReached",   -1);
+            rb_flightStartTimeMs      = p.getLong("rb_flightStartTimeMs",  0L);
+            rb_planetGravityMultiplier = p.getFloat("rb_planetGravityMult", 1.0f);
+            rb_savedBumpers           = stringToFloats(p.getString("rb_bumpers",    ""));
+            rb_savedAttractors        = stringToFloats(p.getString("rb_attractors", ""));
+            rb_savedIcicleNodes       = stringToFloats(p.getString("rb_icicles",    ""));
+            rb_savedTeslaCoils        = stringToFloats(p.getString("rb_tesla",      ""));
+            rb_savedSpringPads        = stringToFloats(p.getString("rb_springs",    ""));
+            rb_savedPortalPairs       = stringToFloats(p.getString("rb_portals",    ""));
+            rb_savedRelayNodes        = stringToFloats(p.getString("rb_relays",     ""));
+            rb_savedBallCount                   = p.getInteger("rb_ballCount",         0);
+            rb_savedKineticBladeCount           = p.getInteger("rb_kineticBladeCount", 0);
+            rb_savedHubUpgradeTier              = p.getInteger("rb_hubTier",           0);
+            rb_savedFrostheimDecision           = p.getInteger("rb_fhDecision",        0);
+            rb_savedGravShiftStep               = p.getInteger("rb_gravShiftStep",     0);
+            rb_savedTeslaHarvestRate            = p.getFloat("rb_teslaRate",          15f);
+            rb_savedFrostheimCpI                = p.getBoolean("rb_fhCpI",   false);
+            rb_savedFrostheimCpII               = p.getBoolean("rb_fhCpII",  false);
+            rb_savedFrostheimCpIII              = p.getBoolean("rb_fhCpIII", false);
+            rb_savedFrostheimIcicleUnlocked     = p.getBoolean("rb_fhIcicle",false);
+            rb_savedEmberHeavyChassis           = p.getBoolean("rb_emHeavy", false);
+            rb_savedEmberMagneticRim            = p.getBoolean("rb_emMagnet",false);
+            rb_savedPortalBidirectional         = p.getBoolean("rb_portalBidir",   false);
+            rb_savedEmberSpinReversed           = p.getBoolean("rb_emSpinRev",     false);
+            rb_savedEmberThirdInternUnlocked    = p.getBoolean("rb_emThirdIntern", false);
+            rb_savedFrostheimThirdInternUnlocked = p.getBoolean("rb_fhThirdIntern",false);
+            rb_savedFrostheimArmBumpersActive   = p.getBoolean("rb_fhArmBumpers",  false);
+            String msStr = p.getString("rb_milestones", "");
+            if (!msStr.isEmpty()) {
+                String[] parts = msStr.split(",");
+                for (int i = 0; i < parts.length && i < rb_savedMilestoneAchieved.length; i++)
+                    rb_savedMilestoneAchieved[i] = parts[i].equals("1");
+            }
+            // App was killed mid-replay — silently abandon and restore main progress
+            abandonReplay();
+        }
         return true;
     }
 
