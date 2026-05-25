@@ -9,7 +9,7 @@ import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.utils.Align;
-import com.badlogic.gdx.utils.viewport.ScreenViewport;
+import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import com.odyssey.FakeLeaderboard;
 import com.odyssey.FakeLeaderboard.Entry;
 import com.odyssey.GameState;
@@ -39,7 +39,7 @@ public class LeaderboardScreen extends ScreenAdapter {
 
     public LeaderboardScreen(OdysseyGame game) {
         this.game  = game;
-        this.stage = new Stage(new ScreenViewport());
+        this.stage = new Stage(new ExtendViewport(480f, 854f));
         buildUi();
     }
 
@@ -80,7 +80,7 @@ public class LeaderboardScreen extends ScreenAdapter {
                 }
             });
 
-            tabs.add(tab).width(84f).height(48f).pad(0f, 2f, 0f, 2f);
+            tabs.add(tab).width(86f).height(52f).pad(0f, 2f, 0f, 2f);
         }
         root.add(tabs).center().padBottom(10f).row();
 
@@ -99,7 +99,7 @@ public class LeaderboardScreen extends ScreenAdapter {
                 game.transitionTo(GameState.MAIN_MENU);
             }
         });
-        root.add(backBtn).width(260f).height(64f).row();
+        root.add(backBtn).width(320f).height(72f).row();
 
         stage.addActor(root);
         refreshBoard();
@@ -141,7 +141,7 @@ public class LeaderboardScreen extends ScreenAdapter {
 
     private void addBoardRow(Table t, String rank, String name, String time,
                               Color color, boolean isHeader) {
-        float fontScale = isHeader ? 0.75f : 0.85f;
+        float fontScale = isHeader ? 0.85f : 0.95f;
 
         Label rankLbl = new Label(rank, game.skin);
         Label nameLbl = new Label(name, game.skin);
@@ -154,9 +154,9 @@ public class LeaderboardScreen extends ScreenAdapter {
         rankLbl.setAlignment(Align.center);
         timeLbl.setAlignment(Align.right);
 
-        t.add(rankLbl).width(40f).padLeft(8f).padRight(4f);
+        t.add(rankLbl).width(48f).padLeft(8f).padRight(4f);
         t.add(nameLbl).expandX().left().padLeft(4f);
-        t.add(timeLbl).width(80f).padRight(8f).row();
+        t.add(timeLbl).width(96f).padRight(8f).row();
     }
 
     @Override public void show() {
