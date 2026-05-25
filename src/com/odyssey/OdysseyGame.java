@@ -28,6 +28,7 @@ public class OdysseyGame extends Game {
     private InternDeployScreen     deployScreen;
     private GalacticMapScreen      galacticScreen;
     private NovaTerraArrivalScreen arrivalScreen;
+    private LeaderboardScreen      leaderboardScreen;
 
     private GameState currentState;
 
@@ -125,7 +126,9 @@ public class OdysseyGame extends Game {
                      + "→"   // → right arrow
                      + "▶"   // ▶ right-pointing triangle
                      + "▲"   // ▲ up-pointing triangle
-                     + "✓";  // ✓ check mark
+                     + "✓"   // ✓ check mark
+                     + "♥"   // ♥ heart (lives HUD)
+                     + "◆";  // ◆ diamond (gems HUD)
 
         p.size = 17; BitmapFont font   = gen.generateFont(p);
         p.size = 24; BitmapFont medium = gen.generateFont(p);
@@ -357,6 +360,10 @@ public class OdysseyGame extends Game {
                 if (arrivalScreen == null) arrivalScreen = new NovaTerraArrivalScreen(this);
                 setScreen(arrivalScreen);
                 break;
+            case LEADERBOARD:
+                if (leaderboardScreen == null) leaderboardScreen = new LeaderboardScreen(this);
+                setScreen(leaderboardScreen);
+                break;
         }
     }
 
@@ -378,6 +385,7 @@ public class OdysseyGame extends Game {
         if (deployScreen   != null) deployScreen.dispose();
         if (galacticScreen != null) galacticScreen.dispose();
         if (arrivalScreen  != null) arrivalScreen.dispose();
+        if (leaderboardScreen != null) leaderboardScreen.dispose();
         if (fadeBatch      != null) fadeBatch.dispose();
         if (fadePixel      != null) fadePixel.dispose();
         skin.dispose();
