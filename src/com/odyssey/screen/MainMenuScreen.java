@@ -1116,22 +1116,22 @@ public class MainMenuScreen extends ScreenAdapter {
         float[] v = new float[total * 2];
         int vi = 0;
         for (int i = 0; i < segs; i++) {
-            float a = (float) Math.toRadians(180.0 + i * 90.0 / (segs - 1));
+            float a = (float) Math.toRadians(180.0 + i * 90.0 / segs);
             v[vi++] = x + r + r * MathUtils.cos(a);
             v[vi++] = y + r + r * MathUtils.sin(a);
         }
         for (int i = 0; i < segs; i++) {
-            float a = (float) Math.toRadians(270.0 + i * 90.0 / (segs - 1));
+            float a = (float) Math.toRadians(270.0 + i * 90.0 / segs);
             v[vi++] = x + w - r + r * MathUtils.cos(a);
             v[vi++] = y + r + r * MathUtils.sin(a);
         }
         for (int i = 0; i < segs; i++) {
-            float a = (float) Math.toRadians(0.0 + i * 90.0 / (segs - 1));
+            float a = (float) Math.toRadians(0.0 + i * 90.0 / segs);
             v[vi++] = x + w - r + r * MathUtils.cos(a);
             v[vi++] = y + h - r + r * MathUtils.sin(a);
         }
         for (int i = 0; i < segs; i++) {
-            float a = (float) Math.toRadians(90.0 + i * 90.0 / (segs - 1));
+            float a = (float) Math.toRadians(90.0 + i * 90.0 / segs);
             v[vi++] = x + r + r * MathUtils.cos(a);
             v[vi++] = y + h - r + r * MathUtils.sin(a);
         }
