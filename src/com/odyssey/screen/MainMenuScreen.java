@@ -65,6 +65,11 @@ public class MainMenuScreen extends ScreenAdapter {
 
     private float shopY() { return statsY() - 62f - 8f - SH_H; }
 
+    // LEADERBOARD button — left of shop, same visual row
+    private static final float LB_W = 120f, LB_H = 36f;
+    private static final float LB_X = 16f;
+    private float lbY() { return statsY() - 62f - 8f - LB_H; }
+
     private final OdysseyGame   game;
     private final ExtendViewport viewport;
     private final ShapeRenderer sr;
@@ -136,6 +141,11 @@ public class MainMenuScreen extends ScreenAdapter {
                 // SHOP button — show shop overlay
                 if (tv.x >= SH_X && tv.x <= SH_X + SH_W && tv.y >= shopY() && tv.y <= shopY() + SH_H) {
                     if (shopOverlay != null) shopOverlay.setVisible(true);
+                    return true;
+                }
+                // LEADERBOARD button
+                if (tv.x >= LB_X && tv.x <= LB_X + LB_W && tv.y >= lbY() && tv.y <= lbY() + LB_H) {
+                    game.transitionTo(GameState.LEADERBOARD);
                     return true;
                 }
                 return false;
@@ -295,6 +305,7 @@ public class MainMenuScreen extends ScreenAdapter {
 
         drawNewGameButton();
         drawShopButton();
+        drawLeaderboardButton();
         drawTopStatsBg();
 
         batch.setProjectionMatrix(viewport.getCamera().combined);
@@ -305,6 +316,7 @@ public class MainMenuScreen extends ScreenAdapter {
         drawBottomBar();
         drawNewGameLabel();
         drawShopLabel();
+        drawLeaderboardLabel();
         batch.end();
 
         // Tutorial overlay drawn last — on top of all planet labels
@@ -968,6 +980,40 @@ public class MainMenuScreen extends ScreenAdapter {
         smallFont.getData().setScale(1.35f);
         smallFont.setColor(1.00f, 0.88f, 0.30f, 0.88f + 0.12f * pulse);
         smallFont.draw(batch, "SHOP", SH_X + 30f, sy + SH_H - 9f, SH_W - 32f, Align.center, false);
+        smallFont.getData().setScale(1.00f);
+    }
+
+    private void drawLeaderboardButton() {
+        float pulse = 0.5f + 0.5f * MathUtils.sin(animTime * 1.9f + 0.4f);
+        float ly    = lbY();
+        sr.setProjectionMatrix(viewport.getCamera().combined);
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        for (int g = 6; g > 0; g--) {
+            float ex = g * 2.8f;
+            sr.setColor(0.22f, 0.72f, 1.00f, 0.016f * g * pulse);
+            sr.rect(LB_X - ex, ly - ex, LB_W + ex * 2f, LB_H + ex * 2f);
+        }
+        sr.setColor(0.02f, 0.07f, 0.18f, 0.92f);
+        sr.rect(LB_X, ly, LB_W, LB_H);
+        sr.setColor(0.22f, 0.72f, 1.00f, 0.10f + 0.06f * pulse);
+        sr.rect(LB_X + 2f, ly + LB_H - 6f, LB_W - 4f, 4f);
+        sr.end();
+
+        sr.begin(ShapeRenderer.ShapeType.Line);
+        sr.setColor(0.22f, 0.72f, 1.00f, 0.65f + 0.28f * pulse);
+        sr.rect(LB_X, ly, LB_W, LB_H);
+        sr.end();
+    }
+
+    private void drawLeaderboardLabel() {
+        float ly    = lbY();
+        float pulse = 0.5f + 0.5f * MathUtils.sin(animTime * 1.9f + 0.4f);
+        smallFont.getData().setScale(1.15f);
+        smallFont.setColor(0.55f, 0.88f, 1.00f, 0.88f + 0.12f * pulse);
+        smallFont.draw(batch, "RANKS", LB_X + 4f, ly + LB_H - 10f, LB_W - 8f, Align.center, false);
         smallFont.getData().setScale(1.00f);
     }
 
