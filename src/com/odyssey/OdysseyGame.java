@@ -166,10 +166,9 @@ public class OdysseyGame extends Game {
         s.add("heading", heading);
         s.add("accent",  accent);
 
-        // ── TextButton default — dark panel, white text, state driven by setColor() ──
-        // The drawable is a solid white pixel; each button calls setColor() each frame
-        // to apply BTN_LOCKED / BTN_BUYABLE / BTN_GO etc. from OdysseyTheme.
-        // White rounded NinePatch — setColor() per frame still drives visual state
+        // ── TextButton default — white rounded NinePatch, state driven by setColor() ──
+        // The drawable is a white rounded rectangle (r=22); each button calls setColor()
+        // each frame to apply BTN_LOCKED / BTN_BUYABLE / BTN_GO etc. from OdysseyTheme.
         Color wBorder = new Color(0.55f, 0.55f, 0.55f, 1f);
         NinePatchDrawable roundedWhite = makeRoundedBtn(Color.WHITE, wBorder, 22);
         TextButton.TextButtonStyle btn = new TextButton.TextButtonStyle();
@@ -189,7 +188,7 @@ public class OdysseyGame extends Game {
         tog.up               = roundedWhite;
         tog.over             = roundedWhite;
         tog.down             = roundedWhite;
-        tog.checked          = roundedWhite;
+        tog.checked          = makeRoundedBtn(Color.WHITE, new Color(0.35f, 0.55f, 1f, 1f), 22);
         tog.fontColor        = OdysseyTheme.TEXT_PRI;
         tog.checkedFontColor = OdysseyTheme.TEXT_PRI;
         s.add("toggle", tog);
