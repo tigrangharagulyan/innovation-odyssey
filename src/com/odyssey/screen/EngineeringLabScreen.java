@@ -385,6 +385,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private Label      livesLabel;
     private Label      diamondsLabel;
     private Label      lifeTimerLabel;
+    private Label      greyHeartsLabel;   // invisible spacer; used as position anchor for ShapeRenderer hearts
     private Label      livesBlockGemsLabel;
 
     private final boolean[] milestoneAchieved = new boolean[6];
@@ -2376,11 +2377,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
         milestoneStatusLabel.setColor(1f, 0.78f, 0.25f, 0.88f);
 
         // Lives + gems HUD labels — shown under Solara status in left column
-        livesLabel    = new Label("♥ 5/5", game.skin);
+        livesLabel    = new Label("  5/5", game.skin);
         livesLabel.setFontScale(1.00f);
         livesLabel.setColor(1f, 0.28f, 0.40f, 0.95f);
 
-        diamondsLabel = new Label("◆ 0", game.skin);
+        diamondsLabel = new Label("  0", game.skin);
         diamondsLabel.setFontScale(1.00f);
         diamondsLabel.setColor(0.35f, 0.90f, 1.00f, 1f);
 
@@ -3214,10 +3215,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
         noLivesTitle.setFontScale(1.50f);
         noLivesTitle.setColor(1f, 0.28f, 0.28f, 1f);
 
-        // 5 grey hearts to show all lives are empty
-        Label greyHeartsLabel = new Label("♥  ♥  ♥  ♥  ♥", game.skin);
+        // Invisible spacer label — real hearts are drawn by drawTopBarIcons() via ShapeRenderer
+        greyHeartsLabel = new Label("· · · · ·", game.skin);
         greyHeartsLabel.setFontScale(1.30f);
-        greyHeartsLabel.setColor(0.35f, 0.35f, 0.38f, 0.80f);
+        greyHeartsLabel.setColor(0f, 0f, 0f, 0f); // fully transparent spacer
         livesBlockTable.add(greyHeartsLabel).padBottom(10f).row();
 
         livesBlockTable.add(noLivesTitle).padBottom(10f).row();
@@ -3242,7 +3243,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         });
         livesBlockTable.add(btnAdHalve).width(300f).height(56f).padBottom(12f).row();
 
-        TextButton btnBuyLife = new TextButton("♥  BUY 1 LIFE  ◆ 30", tileStyleGo);
+        TextButton btnBuyLife = new TextButton("BUY 1 LIFE  ·  30 GEM", tileStyleGo);
         btnBuyLife.getLabel().setFontScale(0.72f);
         btnBuyLife.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
@@ -3843,10 +3844,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // ---- Lives / Gems HUD tick ----
         sd.tickLives();
-        livesLabel.setText("♥ " + sd.lives + "/" + sd.maxLives);
+        livesLabel.setText("  " + sd.lives + "/" + sd.maxLives);
         livesLabel.setColor(sd.lives > 0 ? new Color(1f, 0.35f, 0.35f, 1f)
                                          : new Color(1f, 0.20f, 0.20f, 1.00f));
-        diamondsLabel.setText("◆ " + sd.diamonds);
+        diamondsLabel.setText("  " + sd.diamonds);
         if (livesBlockTable.isVisible()) {
             long secs = sd.secondsToNextLife();
             lifeTimerLabel.setText(secs <= 0 ? "Life ready soon..."
@@ -4143,6 +4144,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         }
 
         ui.draw();
+        drawTopBarIcons();
 
         // Draw launch rocket when ready (replaces transparent button)
         boolean launchReadyNow = launchWasReady; // already computed above in updateLabels
@@ -4972,6 +4974,63 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private void drawFontCentered(String text, float cx, float y) {
         floatLayout.setText(floatFont, text);
         floatFont.draw(batch, text, cx - floatLayout.width * 0.5f, y);
+    }
+
+    /** Draws ShapeRenderer heart and diamond icons next to the lives/gems labels in the top bar.
+     *  Also draws 5 greyed hearts in the livesBlockTable overlay when it is visible.
+     *  Called after ui.draw() so that Table layout has been fully resolved. */
+    private void drawTopBarIcons() {
+        if (livesLabel == null || diamondsLabel == null) return;
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeR.setProjectionMatrix(ui.getViewport().getCamera().combined);
+
+        // ── Heart icon (lives label) ──────────────────────────────────────────
+        Vector2 lp = livesLabel.localToStageCoordinates(new Vector2(0f, livesLabel.getHeight() * 0.5f));
+        float hx = lp.x + 7f, hy = lp.y, hhr = 5.5f;
+        ShipData sdI = ShipData.get();
+        shapeR.begin(ShapeRenderer.ShapeType.Filled);
+        shapeR.setColor(sdI.lives > 0 ? new Color(1f, 0.28f, 0.40f, 0.95f)
+                                      : new Color(1f, 0.20f, 0.20f, 0.75f));
+        shapeR.circle(hx - hhr * 0.65f, hy + hhr * 0.25f, hhr * 0.72f, 10);
+        shapeR.circle(hx + hhr * 0.65f, hy + hhr * 0.25f, hhr * 0.72f, 10);
+        shapeR.triangle(hx - hhr * 1.30f, hy + hhr * 0.25f,
+                        hx + hhr * 1.30f, hy + hhr * 0.25f,
+                        hx,               hy - hhr * 1.20f);
+        shapeR.end();
+
+        // ── Diamond icon (gems label) ─────────────────────────────────────────
+        Vector2 dp = diamondsLabel.localToStageCoordinates(new Vector2(0f, diamondsLabel.getHeight() * 0.5f));
+        float gx = dp.x + 7f, gy = dp.y, gs = 5.5f;
+        shapeR.begin(ShapeRenderer.ShapeType.Filled);
+        shapeR.setColor(0.38f, 0.92f, 1.00f, 0.92f);
+        shapeR.triangle(gx, gy + gs, gx + gs, gy, gx, gy - gs);
+        shapeR.triangle(gx, gy + gs, gx - gs, gy, gx, gy - gs);
+        shapeR.end();
+        shapeR.begin(ShapeRenderer.ShapeType.Line);
+        shapeR.setColor(0.72f, 1.00f, 1.00f, 0.78f);
+        shapeR.triangle(gx, gy + gs, gx + gs, gy, gx, gy - gs);
+        shapeR.triangle(gx, gy + gs, gx - gs, gy, gx, gy - gs);
+        shapeR.end();
+
+        // ── 5 grey hearts in lives-out overlay ───────────────────────────────
+        if (livesBlockTable != null && livesBlockTable.isVisible() && greyHeartsLabel != null) {
+            Vector2 ghp = greyHeartsLabel.localToStageCoordinates(
+                    new Vector2(greyHeartsLabel.getWidth() * 0.5f, greyHeartsLabel.getHeight() * 0.5f));
+            float ghhr = 8f, spacing = 26f;
+            float startX = ghp.x - spacing * 2f;
+            shapeR.begin(ShapeRenderer.ShapeType.Filled);
+            shapeR.setColor(0.35f, 0.35f, 0.38f, 0.80f);
+            for (int i = 0; i < 5; i++) {
+                float cx = startX + i * spacing, cy = ghp.y;
+                shapeR.circle(cx - ghhr * 0.65f, cy + ghhr * 0.25f, ghhr * 0.72f, 10);
+                shapeR.circle(cx + ghhr * 0.65f, cy + ghhr * 0.25f, ghhr * 0.72f, 10);
+                shapeR.triangle(cx - ghhr * 1.30f, cy + ghhr * 0.25f,
+                                cx + ghhr * 1.30f, cy + ghhr * 0.25f,
+                                cx,                cy - ghhr * 1.20f);
+            }
+            shapeR.end();
+        }
     }
 
     private void drawHudBar() {
