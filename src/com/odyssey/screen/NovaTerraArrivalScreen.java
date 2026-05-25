@@ -193,21 +193,16 @@ public class NovaTerraArrivalScreen extends ScreenAdapter {
         showLbPopup();
     }
 
-    /** Records the player's arrival time and computes their rank. Call once per arrival. */
+    /** Reads pending rank data from ShipData (recorded earlier in BridgeFlightScreen). */
     private void recordArrivalTime() {
         ShipData sd = ShipData.get();
-        if (sd.flightStartTimeMs == 0L) return; // timer was never started
-
-        float elapsed = (System.currentTimeMillis() - sd.flightStartTimeMs) / 1000f;
-        int pIdx = sd.currentPlanetIndex;
-
-        if (elapsed < sd.bestArrivalTimes[pIdx]) {
-            sd.bestArrivalTimes[pIdx] = elapsed;
+        // Primary recording happens in BridgeFlightScreen.finish() before claimArrivalReward.
+        // This method just reads back those results if available.
+        if (sd.pendingRankResult >= 0) {
+            recordedRank   = sd.pendingRankResult;
+            recordedPlanet = sd.pendingRankPlanet;
+            // Don't clear pending here — MainMenuScreen will clear it on return
         }
-        sd.flightStartTimeMs = 0L; // clear so the next planet gets a fresh timer
-        sd.save();
-        recordedRank   = FakeLeaderboard.getRank(pIdx, sd.bestArrivalTimes[pIdx]);
-        recordedPlanet = pIdx;
     }
 
     private void buildLbPopup() {

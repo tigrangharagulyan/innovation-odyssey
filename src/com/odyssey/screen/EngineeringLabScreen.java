@@ -2338,8 +2338,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private void buildUI() {
         ui = new Stage(new ExtendViewport(RENDER_W, RENDER_H));
 
-        Color panelBg     = new Color(0.04f, 0.06f, 0.16f, 0.92f);
-        Color panelBgSolid = new Color(0.04f, 0.06f, 0.18f, 0.97f);
+        Color panelBg     = new Color(0.04f, 0.06f, 0.16f, 0.97f);
+        Color panelBgSolid = new Color(0.04f, 0.06f, 0.18f, 1.00f);
 
         // ---- Single full-screen layout table ----
         Table root = new Table();
@@ -2356,12 +2356,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
         topLeft.top().left();
 
         topPlanetLabel = new Label("SOLARA", game.skin);
-        topPlanetLabel.setFontScale(0.85f);
-        topPlanetLabel.setColor(0.20f, 0.85f, 1f, 1f);
+        topPlanetLabel.setFontScale(0.92f);
+        topPlanetLabel.setColor(0.20f, 0.92f, 1f, 1f);
 
         topCheckpointLabel = new Label("Status: Pre-Checkpoint", game.skin);
-        topCheckpointLabel.setFontScale(0.65f);
-        topCheckpointLabel.setColor(0.80f, 0.82f, 0.96f, 1f);
+        topCheckpointLabel.setFontScale(0.72f);
+        topCheckpointLabel.setColor(0.88f, 0.90f, 1f, 1f);
 
         topGravLabel = new Label("Gravity: 1.0G Standard", game.skin);
         topGravLabel.setFontScale(0.54f);
@@ -2411,12 +2411,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
         topCenter.top();
 
         topSpRateHeaderLabel = new Label("ENERGY", game.skin);
-        topSpRateHeaderLabel.setFontScale(0.68f);
-        topSpRateHeaderLabel.setColor(0.25f, 1.00f, 0.45f, 0.90f);
+        topSpRateHeaderLabel.setFontScale(0.78f);
+        topSpRateHeaderLabel.setColor(0.20f, 1.00f, 0.50f, 1f);
 
         topSpValueLabel = new Label("0 / 0", game.skin);
         topSpValueLabel.setFontScale(1.40f);
-        topSpValueLabel.setColor(0.20f, 1.00f, 0.50f, 1f);
+        topSpValueLabel.setColor(0.30f, 1.00f, 0.55f, 1f);
 
         outputLabel = new Label("", game.skin); // hidden — kept to avoid null refs
 
@@ -2476,22 +2476,26 @@ public class EngineeringLabScreen extends ScreenAdapter {
         });
 
         // Lives + gems HUD labels
-        livesLabel    = new Label("Lives: 3/3", game.skin);
-        livesLabel.setFontScale(0.58f);
-        livesLabel.setColor(1f, 0.32f, 0.32f, 0.92f);
+        livesLabel    = new Label("♥ 5/5", game.skin);
+        livesLabel.setFontScale(0.76f);
+        livesLabel.setColor(1f, 0.35f, 0.35f, 1f);
 
-        diamondsLabel = new Label("Gems: 0", game.skin);
-        diamondsLabel.setFontScale(0.55f);
-        diamondsLabel.setColor(0.30f, 0.82f, 1.00f, 0.90f);
+        diamondsLabel = new Label("◆ 0", game.skin);
+        diamondsLabel.setFontScale(0.76f);
+        diamondsLabel.setColor(0.35f, 0.90f, 1.00f, 1f);
 
         // Button row: menu + shop side by side
         Table topRightBtns = new Table();
         topRightBtns.add(btnMenu).width(32f).height(26f).padRight(4f);
         topRightBtns.add(btnShop).width(50f).height(26f);
 
+        // Lives + gems in one row to maximise text size without increasing bar height
+        Table livesGemsRow = new Table();
+        livesGemsRow.add(livesLabel).right().padRight(8f);
+        livesGemsRow.add(diamondsLabel).right();
+
         topRight.add(topRightBtns).right().padTop(6f).row();
-        topRight.add(livesLabel).right().padTop(3f).row();
-        topRight.add(diamondsLabel).right().padTop(2f).row();
+        topRight.add(livesGemsRow).right().padTop(5f).row();
 
         // Assemble: left col fixed, center expands to fill, right col fixed
         topPanel.add(topLeft).width(168f).top().left().padRight(4f);
@@ -3287,7 +3291,17 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 livesBlockTable.setVisible(false);
             }
         });
-        livesBlockTable.add(btnDismissLives).width(300f).height(52f).row();
+        livesBlockTable.add(btnDismissLives).width(300f).height(52f).padBottom(10f).row();
+
+        TextButton btnLivesMainMenu = new TextButton("MAIN MENU", tileStyleNorm);
+        btnLivesMainMenu.getLabel().setFontScale(0.72f);
+        btnLivesMainMenu.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent e, Actor a) {
+                livesBlockTable.setVisible(false);
+                game.transitionTo(GameState.MAIN_MENU);
+            }
+        });
+        livesBlockTable.add(btnLivesMainMenu).width(300f).height(52f).row();
 
         ui.addActor(livesBlockTable);
 
@@ -3849,10 +3863,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // ---- Lives / Gems HUD tick ----
         sd.tickLives();
-        livesLabel.setText("Lives: " + sd.lives + "/" + sd.maxLives);
-        livesLabel.setColor(sd.lives > 0 ? new Color(1f, 0.32f, 0.32f, 0.92f)
+        livesLabel.setText("♥ " + sd.lives + "/" + sd.maxLives);
+        livesLabel.setColor(sd.lives > 0 ? new Color(1f, 0.35f, 0.35f, 1f)
                                          : new Color(1f, 0.20f, 0.20f, 1.00f));
-        diamondsLabel.setText("Gems: " + sd.diamonds);
+        diamondsLabel.setText("◆ " + sd.diamonds);
         if (livesBlockTable.isVisible()) {
             long secs = sd.secondsToNextLife();
             lifeTimerLabel.setText(secs <= 0 ? "Life ready soon..."

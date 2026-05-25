@@ -521,6 +521,17 @@ public class BridgeFlightScreen extends ScreenAdapter {
         ShipData sd = ShipData.get();
         if (arrived) {
             sd.markArrival(totalRoute, totalRoute / ENERGY_AU_SCALE);
+            // Record leaderboard arrival time before claimArrivalReward resets the timer
+            if (sd.flightStartTimeMs != 0L) {
+                float elapsed = (System.currentTimeMillis() - sd.flightStartTimeMs) / 1000f;
+                int pIdx = sd.currentPlanetIndex;
+                if (elapsed < sd.bestArrivalTimes[pIdx]) {
+                    sd.bestArrivalTimes[pIdx] = elapsed;
+                }
+                sd.pendingRankResult = com.odyssey.FakeLeaderboard.getRank(pIdx, sd.bestArrivalTimes[pIdx]);
+                sd.pendingRankPlanet = pIdx;
+                sd.save();
+            }
             sd.claimArrivalReward();
             SoundManager.get().playMilestone();
             game.transitionTo(GameState.INTERN_DEPLOY);

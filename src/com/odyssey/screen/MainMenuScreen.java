@@ -79,6 +79,10 @@ public class MainMenuScreen extends ScreenAdapter {
     private Stage stage;
     private Table shopOverlay;
 
+    // Leaderboard rank popup (Scene2D, shown after arrival)
+    private Table   rankPopup;
+    private boolean rankPopupPending = false;
+
     // Pre-baked starfield
     private final float[] starX, starY, starA;
 
@@ -156,6 +160,7 @@ public class MainMenuScreen extends ScreenAdapter {
         if (stage != null) stage.dispose();
         stage = new Stage(new ExtendViewport(W, H));
         buildShopOverlay();
+        buildRankPopup();
         Gdx.input.setInputProcessor(new InputMultiplexer(stage,
             Gdx.input.getInputProcessor()));
     }
@@ -211,6 +216,73 @@ public class MainMenuScreen extends ScreenAdapter {
         shopOverlay.add(btnClose).width(260f).height(64f).padTop(28f).row();
 
         stage.addActor(shopOverlay);
+    }
+
+    private void buildRankPopup() {
+        final ShipData sd = ShipData.get();
+        if (sd.pendingRankResult < 0) return; // nothing to show
+
+        rankPopup = new Table();
+        rankPopup.setFillParent(true);
+        rankPopup.setBackground(game.skin.newDrawable("white", new Color(0f, 0.02f, 0.08f, 0.92f)));
+        rankPopup.center();
+
+        Label title = new Label("LEADERBOARD", game.skin);
+        rankPopup.add(title).center().padBottom(8f).row();
+
+        String planetName = ShipData.PLANETS[sd.pendingRankPlanet].name;
+        Label rankLabel = new Label("Rank #" + sd.pendingRankResult + "  on  " + planetName, game.skin);
+        rankLabel.setAlignment(Align.center);
+        rankLabel.setColor(sd.pendingRankResult <= 3
+            ? new Color(1f, 0.82f, 0.20f, 1f)
+            : new Color(0.22f, 1.00f, 0.52f, 1f));
+        rankPopup.add(rankLabel).center().padBottom(14f).row();
+
+        // Context snippet: up to 5 rows around player rank
+        float bestTime = sd.bestArrivalTimes[sd.pendingRankPlanet];
+        java.util.List<com.odyssey.FakeLeaderboard.Entry> board =
+            com.odyssey.FakeLeaderboard.getBoard(sd.pendingRankPlanet, bestTime);
+        int playerIdx = sd.pendingRankResult - 1;
+        int start = Math.max(0, playerIdx - 2);
+        int end   = Math.min(board.size(), start + 5);
+        start     = Math.max(0, end - 5);
+        StringBuilder sb = new StringBuilder();
+        for (int i = start; i < end; i++) {
+            com.odyssey.FakeLeaderboard.Entry e = board.get(i);
+            if (e.isPlayer) sb.append("[#").append(i+1).append("]  > YOU <  ")
+                              .append(com.odyssey.FakeLeaderboard.formatTime(e.timeSeconds)).append("\n");
+            else            sb.append("  #").append(i+1).append("   ").append(e.name)
+                              .append("   ").append(com.odyssey.FakeLeaderboard.formatTime(e.timeSeconds)).append("\n");
+        }
+        Label ctx = new Label(sb.toString().trim(), game.skin);
+        ctx.setFontScale(0.72f);
+        ctx.setColor(0.75f, 0.85f, 1.00f, 0.90f);
+        ctx.setAlignment(Align.center);
+        ctx.setWrap(true);
+        rankPopup.add(ctx).width(380f).center().padBottom(20f).row();
+
+        TextButton viewFull = new TextButton("VIEW FULL BOARD", game.skin);
+        viewFull.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent event, Actor actor) {
+                sd.pendingRankResult = -1;
+                sd.pendingRankPlanet = -1;
+                game.transitionTo(GameState.LEADERBOARD);
+            }
+        });
+
+        TextButton cont = new TextButton("CONTINUE", game.skin);
+        cont.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent event, Actor actor) {
+                sd.pendingRankResult = -1;
+                sd.pendingRankPlanet = -1;
+                rankPopup.setVisible(false);
+            }
+        });
+
+        rankPopup.add(viewFull).width(320f).height(64f).padBottom(10f).row();
+        rankPopup.add(cont).width(320f).height(60f).row();
+
+        stage.addActor(rankPopup);
     }
 
     /** Adds one shop category card row to the parent table. */

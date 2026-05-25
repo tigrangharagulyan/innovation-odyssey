@@ -139,6 +139,10 @@ public final class ShipData {
         Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE
     };
 
+    // Transient — pending post-arrival rank notification (not persisted, cleared after shown)
+    public int  pendingRankResult = -1;   // 1-based rank, or -1 if none
+    public int  pendingRankPlanet = -1;   // planet index of the pending rank
+
     public final com.badlogic.gdx.utils.Array<float[]> pendingContactEvents = new com.badlogic.gdx.utils.Array<>();
     public int pendingBumperSounds    = 0;
     public int pendingCollisionSounds = 0;
@@ -211,6 +215,8 @@ public final class ShipData {
         pendingCollisionSounds = 0;
         flightStartTimeMs = 0L;
         for (int i = 0; i < bestArrivalTimes.length; i++) bestArrivalTimes[i] = Float.MAX_VALUE;
+        pendingRankResult = -1;
+        pendingRankPlanet = -1;
     }
 
     public void addJoules(float joules) {
