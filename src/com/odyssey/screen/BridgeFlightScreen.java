@@ -205,7 +205,8 @@ public class BridgeFlightScreen extends ScreenAdapter {
     private static final float[] FROSTHEIM_CHECKPOINT_ENERGIES = {4_000f, 24_000f, 120_000f, 150_000f};
     private static final float[] EMBER_CHECKPOINT_ENERGIES     = {5_000f, 60_000f, 300_000f, 250_000f};
     public static float[] buildSectorDistances(float ignored) {
-        int pidx = ShipData.get().currentPlanetIndex;
+        ShipData _sd = ShipData.get();
+        int pidx = _sd.isReplayMode ? _sd.replayPlanetIndex : _sd.currentPlanetIndex;
         float[] e;
         if (pidx >= 2)      e = FROSTHEIM_CHECKPOINT_ENERGIES;  // Frostheim+
         else if (pidx >= 1) e = EMBER_CHECKPOINT_ENERGIES;      // Nova Terra
@@ -520,6 +521,17 @@ public class BridgeFlightScreen extends ScreenAdapter {
     private void finish() {
         ShipData sd = ShipData.get();
         if (arrived) {
+            if (sd.isReplayMode) {
+                // Replay: record time, restore main state, return to main menu
+                float elapsed = sd.flightStartTimeMs != 0L
+                    ? (System.currentTimeMillis() - sd.flightStartTimeMs) / 1000f
+                    : 0f;
+                sd.endReplay(elapsed);
+                sd.save();
+                SoundManager.get().playMilestone();
+                game.transitionTo(GameState.MAIN_MENU);
+                return;
+            }
             sd.markArrival(totalRoute, totalRoute / ENERGY_AU_SCALE);
             // Record leaderboard arrival time before claimArrivalReward resets the timer
             if (sd.flightStartTimeMs != 0L) {
