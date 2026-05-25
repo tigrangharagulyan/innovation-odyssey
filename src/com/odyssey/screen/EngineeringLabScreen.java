@@ -2375,36 +2375,22 @@ public class EngineeringLabScreen extends ScreenAdapter {
         milestoneStatusLabel.setFontScale(0.50f);
         milestoneStatusLabel.setColor(1f, 0.78f, 0.25f, 0.88f);
 
-        // Info toggle button — shows/hides the dense secondary stats
-        TextButton.TextButtonStyle infoStyle = new TextButton.TextButtonStyle();
-        infoStyle.font      = game.skin.getFont("font");
-        infoStyle.up        = game.skin.newDrawable("white", new Color(0.08f, 0.12f, 0.28f, 0.80f));
-        infoStyle.down      = game.skin.newDrawable("white", new Color(0.15f, 0.22f, 0.45f, 1.00f));
-        infoStyle.over      = infoStyle.down;
-        infoStyle.fontColor = new Color(0.50f, 0.78f, 1f, 1f);
-        TextButton btnInfo = new TextButton("i", infoStyle);
-        btnInfo.getLabel().setFontScale(0.75f);
+        // Lives + gems HUD labels — shown under Solara status in left column
+        livesLabel    = new Label("♥ 5/5", game.skin);
+        livesLabel.setFontScale(1.00f);
+        livesLabel.setColor(1f, 0.28f, 0.40f, 0.95f);
 
-        Table infoDetails = new Table();
-        infoDetails.left();
-        infoDetails.add(topGravLabel).left().row();
-        infoDetails.add(topYieldsLabel).left().padTop(1f).row();
-        infoDetails.add(milestoneStatusLabel).left().padTop(1f).row();
-        infoDetails.setVisible(false);
+        diamondsLabel = new Label("◆ 0", game.skin);
+        diamondsLabel.setFontScale(1.00f);
+        diamondsLabel.setColor(0.35f, 0.90f, 1.00f, 1f);
 
-        btnInfo.addListener(new ChangeListener() {
-            @Override public void changed(ChangeEvent e, Actor a) {
-                infoDetails.setVisible(!infoDetails.isVisible());
-            }
-        });
+        Table livesGemsRow = new Table();
+        livesGemsRow.add(livesLabel).left().padRight(10f);
+        livesGemsRow.add(diamondsLabel).left();
 
-        Table planetRow = new Table();
-        planetRow.add(topPlanetLabel).left().expandX();
-        planetRow.add(btnInfo).right().size(22f, 20f);
-
-        topLeft.add(planetRow).growX().row();
+        topLeft.add(topPlanetLabel).left().row();
         topLeft.add(topCheckpointLabel).left().padTop(2f).row();
-        topLeft.add(infoDetails).left().padTop(1f).row();
+        topLeft.add(livesGemsRow).left().padTop(4f).row();
 
         // ---- Center column: Energy current/needed ----
         Table topCenter = new Table();
@@ -2468,34 +2454,19 @@ public class EngineeringLabScreen extends ScreenAdapter {
         shopBtnStyle.over      = shopBtnStyle.down;
         shopBtnStyle.fontColor = new Color(1f, 0.82f, 0.20f, 1f);
         TextButton btnShop = new TextButton("SHOP", shopBtnStyle);
-        btnShop.getLabel().setFontScale(0.60f);
+        btnShop.getLabel().setFontScale(0.80f);
         btnShop.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
                 if (shopTable != null) shopTable.setVisible(true);
             }
         });
 
-        // Lives + gems HUD labels
-        livesLabel    = new Label("♥ 5/5", game.skin);
-        livesLabel.setFontScale(0.76f);
-        livesLabel.setColor(1f, 0.35f, 0.35f, 1f);
-
-        diamondsLabel = new Label("◆ 0", game.skin);
-        diamondsLabel.setFontScale(0.76f);
-        diamondsLabel.setColor(0.35f, 0.90f, 1.00f, 1f);
-
         // Button row: menu + shop side by side
         Table topRightBtns = new Table();
-        topRightBtns.add(btnMenu).width(32f).height(26f).padRight(4f);
-        topRightBtns.add(btnShop).width(50f).height(26f);
-
-        // Lives + gems in one row to maximise text size without increasing bar height
-        Table livesGemsRow = new Table();
-        livesGemsRow.add(livesLabel).right().padRight(8f);
-        livesGemsRow.add(diamondsLabel).right();
+        topRightBtns.add(btnMenu).width(44f).height(34f).padRight(6f);
+        topRightBtns.add(btnShop).width(68f).height(34f);
 
         topRight.add(topRightBtns).right().padTop(6f).row();
-        topRight.add(livesGemsRow).right().padTop(5f).row();
 
         // Assemble: left col fixed, center expands to fill, right col fixed
         topPanel.add(topLeft).width(168f).top().left().padRight(4f);
@@ -3242,6 +3213,13 @@ public class EngineeringLabScreen extends ScreenAdapter {
         Label noLivesTitle = new Label("OUT OF LIVES", game.skin);
         noLivesTitle.setFontScale(1.50f);
         noLivesTitle.setColor(1f, 0.28f, 0.28f, 1f);
+
+        // 5 grey hearts to show all lives are empty
+        Label greyHeartsLabel = new Label("♥  ♥  ♥  ♥  ♥", game.skin);
+        greyHeartsLabel.setFontScale(1.30f);
+        greyHeartsLabel.setColor(0.35f, 0.35f, 0.38f, 0.80f);
+        livesBlockTable.add(greyHeartsLabel).padBottom(10f).row();
+
         livesBlockTable.add(noLivesTitle).padBottom(10f).row();
 
         Label noLivesSub = new Label("Lives refill 1 per hour.", game.skin);
@@ -3264,7 +3242,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         });
         livesBlockTable.add(btnAdHalve).width(300f).height(56f).padBottom(12f).row();
 
-        TextButton btnBuyLife = new TextButton("BUY 1 LIFE — 30 GEMS", tileStyleGo);
+        TextButton btnBuyLife = new TextButton("♥  BUY 1 LIFE  ◆ 30", tileStyleGo);
         btnBuyLife.getLabel().setFontScale(0.72f);
         btnBuyLife.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
