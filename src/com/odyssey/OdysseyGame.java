@@ -281,6 +281,24 @@ public class OdysseyGame extends Game {
         return new NinePatchDrawable(new NinePatch(tex, R + 10, R + 10, R + 10, R + 10));
     }
 
+    /** Generates a rounded-rectangle NinePatch drawable for TextButton styles.
+     *  fill  – interior colour (use Color.WHITE for styles that rely on setColor() tinting)
+     *  border – 2-pixel outer ring colour
+     *  r     – corner radius in Pixmap pixels */
+    private static NinePatchDrawable makeRoundedBtn(Color fill, Color border, int r) {
+        int SIZE = 64;
+        Pixmap pm = new Pixmap(SIZE, SIZE, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        pm.setColor(0, 0, 0, 0);
+        pm.fill();
+        fillRoundedRect(pm, 0,     0,     SIZE,     SIZE,     r,     border);
+        fillRoundedRect(pm, 2,     2,     SIZE - 4, SIZE - 4, r - 2, fill);
+        Texture tex = new Texture(pm);
+        pm.dispose();
+        int m = r + 2; // NinePatch margin: preserves corners, stretches flat centre
+        return new NinePatchDrawable(new NinePatch(tex, m, m, m, m));
+    }
+
     private static NinePatch makeRoundedPanel(Color col, int r) {
         int SZ = 64;
         Pixmap pm = new Pixmap(SZ, SZ, Pixmap.Format.RGBA8888);
