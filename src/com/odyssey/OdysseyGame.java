@@ -200,27 +200,43 @@ public class OdysseyGame extends Game {
         pb.knobBefore  = s.newDrawable("white", new Color(0.1f, 0.8f, 0.3f, 1f));
         s.add("default-horizontal", pb);
 
-        // Sci-fi tile buttons — loaded from generated PNG assets
-        int M = 40; // NinePatch corner margin (matches 32px corner radius + some padding)
-        NinePatch npLocked   = new NinePatch(new Texture("ui/btn_locked.png"),    M,M,M,M);
-        NinePatch npAvail    = new NinePatch(new Texture("ui/btn_available.png"), M,M,M,M);
-        NinePatch npBuyable  = new NinePatch(new Texture("ui/btn_buyable.png"),   M,M,M,M);
-        NinePatch npActive   = new NinePatch(new Texture("ui/btn_active.png"),    M,M,M,M);
-        NinePatch npGo       = new NinePatch(new Texture("ui/btn_go.png"),        M,M,M,M);
-        NinePatch npGoLocked = new NinePatch(new Texture("ui/btn_golocked.png"),  M,M,M,M);
-        s.add("tile_locked",       new NinePatchDrawable(npLocked));
-        s.add("tile_available",    new NinePatchDrawable(npAvail));
-        s.add("tile_buyable",      new NinePatchDrawable(npBuyable));
-        s.add("tile_active",       new NinePatchDrawable(npActive));
-        s.add("tile_go",           new NinePatchDrawable(npGo));
-        s.add("tile_golocked",     new NinePatchDrawable(npGoLocked));
-        // Pressed variants — slightly brightened via color tint in makeTileStyle
-        s.add("tile_locked_dn",    new NinePatchDrawable(npLocked));
-        s.add("tile_available_dn", new NinePatchDrawable(npAvail));
-        s.add("tile_buyable_dn",   new NinePatchDrawable(npBuyable));
-        s.add("tile_active_dn",    new NinePatchDrawable(npActive));
-        s.add("tile_go_dn",        new NinePatchDrawable(npGo));
-        s.add("tile_golocked_dn",  new NinePatchDrawable(npGoLocked));
+        // Sci-fi tile buttons — programmatic rounded NinePatches (r=22)
+        // Each state has a fill colour from OdysseyTheme + a slightly lighter border.
+        // _dn (pressed) variants darken the fill by 25%.
+        Color bLocked   = new Color(0.14f, 0.14f, 0.24f, 1f);
+        Color bAvail    = new Color(0.32f, 0.36f, 0.58f, 1f);
+        Color bBuyable  = OdysseyTheme.ACCENT_E;
+        Color bActive   = new Color(0.45f, 0.65f, 1.00f, 1f);
+        Color bGo       = OdysseyTheme.ACCENT_GO;
+        Color bGoLocked = new Color(0.12f, 0.30f, 0.14f, 1f);
+
+        NinePatchDrawable npLocked   = makeRoundedBtn(OdysseyTheme.BTN_LOCKED,    bLocked,   22);
+        NinePatchDrawable npAvail    = makeRoundedBtn(OdysseyTheme.BTN_AVAILABLE, bAvail,    22);
+        NinePatchDrawable npBuyable  = makeRoundedBtn(OdysseyTheme.BTN_BUYABLE,   bBuyable,  22);
+        NinePatchDrawable npActive   = makeRoundedBtn(OdysseyTheme.BTN_ACTIVE,    bActive,   22);
+        NinePatchDrawable npGo       = makeRoundedBtn(OdysseyTheme.BTN_GO,        bGo,       22);
+        NinePatchDrawable npGoLocked = makeRoundedBtn(OdysseyTheme.BTN_GO_LOCKED, bGoLocked, 22);
+
+        // Pressed variants: darken fill by 25%
+        Color lockedDn   = darken(OdysseyTheme.BTN_LOCKED,    0.75f);
+        Color availDn    = darken(OdysseyTheme.BTN_AVAILABLE,  0.75f);
+        Color buyableDn  = darken(OdysseyTheme.BTN_BUYABLE,    0.75f);
+        Color activeDn   = darken(OdysseyTheme.BTN_ACTIVE,     0.75f);
+        Color goDn       = darken(OdysseyTheme.BTN_GO,         0.75f);
+        Color goLockedDn = darken(OdysseyTheme.BTN_GO_LOCKED,  0.75f);
+
+        s.add("tile_locked",       npLocked);
+        s.add("tile_available",    npAvail);
+        s.add("tile_buyable",      npBuyable);
+        s.add("tile_active",       npActive);
+        s.add("tile_go",           npGo);
+        s.add("tile_golocked",     npGoLocked);
+        s.add("tile_locked_dn",    makeRoundedBtn(lockedDn,   bLocked,   22));
+        s.add("tile_available_dn", makeRoundedBtn(availDn,    bAvail,    22));
+        s.add("tile_buyable_dn",   makeRoundedBtn(buyableDn,  bBuyable,  22));
+        s.add("tile_active_dn",    makeRoundedBtn(activeDn,   bActive,   22));
+        s.add("tile_go_dn",        makeRoundedBtn(goDn,       bGo,       22));
+        s.add("tile_golocked_dn",  makeRoundedBtn(goLockedDn, bGoLocked, 22));
         // Green "can afford" variant — used for action tile buttons when purchase is possible
         Color gcBorder = new Color(0.07f, 0.52f, 0.20f, 1f);
         Color gcGlow   = new Color(0.18f, 0.92f, 0.40f, 1f);
@@ -299,6 +315,11 @@ public class OdysseyGame extends Game {
         pm.dispose();
         int m = r + 2; // NinePatch margin: preserves corners, stretches flat centre
         return new NinePatchDrawable(new NinePatch(tex, m, m, m, m));
+    }
+
+    /** Returns a new Color with r/g/b multiplied by factor (alpha unchanged). */
+    private static Color darken(Color c, float factor) {
+        return new Color(c.r * factor, c.g * factor, c.b * factor, c.a);
     }
 
     private static NinePatch makeRoundedPanel(Color col, int r) {
