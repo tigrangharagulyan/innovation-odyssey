@@ -17,10 +17,13 @@ import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Scaling;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
+import com.odyssey.FakeLeaderboard;
+import com.odyssey.FakeLeaderboard.Entry;
 import com.odyssey.GameState;
 import com.odyssey.OdysseyGame;
 import com.odyssey.ShipData;
 import com.odyssey.OdysseyTheme;
+import java.util.List;
 
 public class NovaTerraArrivalScreen extends ScreenAdapter {
 
@@ -40,6 +43,13 @@ public class NovaTerraArrivalScreen extends ScreenAdapter {
     private Label energyLabel;
     private Label rewardLabel;
     private Label buildingsLabel;
+
+    // Leaderboard popup
+    private Table   lbPopup;
+    private Label   lbRankLabel;
+    private Label   lbContextLabel;
+    private int     recordedRank   = -1;
+    private int     recordedPlanet = -1;
 
     private static String gravityDescriptor(float g) {
         if (g <= 0.3f) return "Microgravity";
@@ -173,11 +183,105 @@ public class NovaTerraArrivalScreen extends ScreenAdapter {
 
         root.add(card).width(460f).bottom();
         stage.addActor(root);
+        buildLbPopup();
     }
 
     @Override public void show() {
         Gdx.input.setInputProcessor(stage);
+        recordArrivalTime();
         refresh();
+        showLbPopup();
+    }
+
+    /** Records the player's arrival time and computes their rank. Call once per arrival. */
+    private void recordArrivalTime() {
+        ShipData sd = ShipData.get();
+        if (sd.flightStartTimeMs == 0L) return; // timer was never started
+
+        float elapsed = (System.currentTimeMillis() - sd.flightStartTimeMs) / 1000f;
+        int pIdx = sd.currentPlanetIndex;
+
+        if (elapsed < sd.bestArrivalTimes[pIdx]) {
+            sd.bestArrivalTimes[pIdx] = elapsed;
+        }
+        sd.flightStartTimeMs = 0L; // clear so the next planet gets a fresh timer
+        sd.save();
+        recordedRank   = FakeLeaderboard.getRank(pIdx, sd.bestArrivalTimes[pIdx]);
+        recordedPlanet = pIdx;
+    }
+
+    private void buildLbPopup() {
+        lbPopup = new Table();
+        lbPopup.setFillParent(true);
+        lbPopup.setVisible(false);
+        lbPopup.setBackground(game.skin.newDrawable("white", new Color(0f, 0.02f, 0.08f, 0.92f)));
+        lbPopup.center();
+
+        Label title = new Label("LEADERBOARD", game.skin);
+        lbPopup.add(title).center().padBottom(8f).row();
+
+        lbRankLabel = new Label("", game.skin);
+        lbRankLabel.setAlignment(com.badlogic.gdx.utils.Align.center);
+        lbPopup.add(lbRankLabel).center().padBottom(14f).row();
+
+        lbContextLabel = new Label("", game.skin);
+        lbContextLabel.setFontScale(0.80f);
+        lbContextLabel.setColor(0.75f, 0.85f, 1.00f, 0.90f);
+        lbContextLabel.setAlignment(com.badlogic.gdx.utils.Align.center);
+        lbContextLabel.setWrap(true);
+        lbPopup.add(lbContextLabel).width(380f).center().padBottom(20f).row();
+
+        TextButton viewFull = new TextButton("VIEW FULL BOARD", game.skin);
+        viewFull.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent event, Actor actor) {
+                game.transitionTo(GameState.LEADERBOARD);
+            }
+        });
+
+        TextButton cont = new TextButton("CONTINUE", game.skin);
+        cont.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent event, Actor actor) {
+                lbPopup.setVisible(false);
+            }
+        });
+
+        lbPopup.add(viewFull).width(320f).height(64f).padBottom(10f).row();
+        lbPopup.add(cont).width(320f).height(60f).row();
+
+        stage.addActor(lbPopup);
+    }
+
+    private void showLbPopup() {
+        if (recordedRank < 0 || recordedPlanet < 0) return;
+
+        ShipData sd = ShipData.get();
+        String planetName = ShipData.PLANETS[recordedPlanet].name;
+        float bestTime    = sd.bestArrivalTimes[recordedPlanet];
+
+        lbRankLabel.setText("Rank #" + recordedRank + "  on  " + planetName);
+        lbRankLabel.setColor(recordedRank <= 3
+            ? new Color(1f, 0.82f, 0.20f, 1f)
+            : new Color(0.22f, 1.00f, 0.52f, 1f));
+
+        // Build context: up to 5 rows around the player's rank
+        List<Entry> board = FakeLeaderboard.getBoard(recordedPlanet, bestTime);
+        int playerIdx = recordedRank - 1; // 0-based
+        int start = Math.max(0, playerIdx - 2);
+        int end   = Math.min(board.size(), start + 5);
+        start     = Math.max(0, end - 5);
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = start; i < end; i++) {
+            Entry e = board.get(i);
+            if (e.isPlayer) sb.append("[#").append(i + 1).append("]  > YOU <  ")
+                              .append(FakeLeaderboard.formatTime(e.timeSeconds)).append("\n");
+            else            sb.append("  #").append(i + 1).append("   ").append(e.name)
+                              .append("   ").append(FakeLeaderboard.formatTime(e.timeSeconds))
+                              .append("\n");
+        }
+        lbContextLabel.setText(sb.toString().trim());
+
+        lbPopup.setVisible(true);
     }
 
     private void refresh() {
