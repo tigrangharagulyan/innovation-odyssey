@@ -1013,11 +1013,11 @@ public class MainMenuScreen extends ScreenAdapter {
         for (int g = 8; g > 0; g--) {
             float ex = g * 3.8f;
             sr.setColor(1.00f, 0.70f, 0.08f, 0.018f * g * pulse);
-            sr.rect(SH_X - ex, sy - ex, SH_W + ex*2f, SH_H + ex*2f);
+            drawShapeRoundedRect(sr, SH_X - ex, sy - ex, SH_W + ex*2f, SH_H + ex*2f, 14f + ex, 8);
         }
         // Dark fill with warm amber tint
         sr.setColor(0.14f, 0.08f, 0.02f, 0.92f);
-        sr.rect(SH_X, sy, SH_W, SH_H);
+        drawShapeRoundedRect(sr, SH_X, sy, SH_W, SH_H, 14f, 8);
         // Inner amber gradient band (top highlight)
         sr.setColor(1.00f, 0.75f, 0.15f, 0.10f + 0.08f * pulse);
         sr.rect(SH_X + 2f, sy + SH_H - 7f, SH_W - 4f, 5f);
@@ -1037,9 +1037,9 @@ public class MainMenuScreen extends ScreenAdapter {
         // Bright animated border
         sr.begin(ShapeRenderer.ShapeType.Line);
         sr.setColor(1.00f, 0.82f, 0.20f, 0.70f + 0.28f * pulse);
-        sr.rect(SH_X, sy, SH_W, SH_H);
+        drawShapeRoundedRect(sr, SH_X, sy, SH_W, SH_H, 14f, 8);
         sr.setColor(1.00f, 0.62f, 0.08f, 0.22f + 0.15f * pulse2);
-        sr.rect(SH_X + 1f, sy + 1f, SH_W - 2f, SH_H - 2f);
+        drawShapeRoundedRect(sr, SH_X + 1f, sy + 1f, SH_W - 2f, SH_H - 2f, 13f, 8);
         // Coin rim
         sr.setColor(1.00f, 0.95f, 0.55f, 0.60f);
         sr.circle(cx, cy, cr, 20);
@@ -1066,17 +1066,17 @@ public class MainMenuScreen extends ScreenAdapter {
         for (int g = 6; g > 0; g--) {
             float ex = g * 2.8f;
             sr.setColor(0.22f, 0.72f, 1.00f, 0.016f * g * pulse);
-            sr.rect(LB_X - ex, ly - ex, LB_W + ex * 2f, LB_H + ex * 2f);
+            drawShapeRoundedRect(sr, LB_X - ex, ly - ex, LB_W + ex*2f, LB_H + ex*2f, 14f + ex, 8);
         }
         sr.setColor(0.02f, 0.07f, 0.18f, 0.92f);
-        sr.rect(LB_X, ly, LB_W, LB_H);
+        drawShapeRoundedRect(sr, LB_X, ly, LB_W, LB_H, 14f, 8);
         sr.setColor(0.22f, 0.72f, 1.00f, 0.10f + 0.06f * pulse);
         sr.rect(LB_X + 2f, ly + LB_H - 6f, LB_W - 4f, 4f);
         sr.end();
 
         sr.begin(ShapeRenderer.ShapeType.Line);
         sr.setColor(0.22f, 0.72f, 1.00f, 0.65f + 0.28f * pulse);
-        sr.rect(LB_X, ly, LB_W, LB_H);
+        drawShapeRoundedRect(sr, LB_X, ly, LB_W, LB_H, 14f, 8);
         sr.end();
     }
 
@@ -1089,15 +1089,54 @@ public class MainMenuScreen extends ScreenAdapter {
         smallFont.getData().setScale(1.00f);
     }
 
+    /**
+     * Draws a filled or outlined rounded rectangle using the active ShapeRenderer begin/end block.
+     * Call inside a begin(Filled) or begin(Line) block.
+     * r    – corner radius in virtual units
+     * segs – segments per corner arc (8 is smooth enough at these sizes)
+     */
+    private static void drawShapeRoundedRect(ShapeRenderer sr,
+                                              float x, float y, float w, float h,
+                                              float r, int segs) {
+        int total = segs * 4;
+        float[] v = new float[total * 2];
+        int vi = 0;
+        // bottom-left arc: 180° → 270°
+        for (int i = 0; i < segs; i++) {
+            float a = (float) Math.toRadians(180.0 + i * 90.0 / (segs - 1));
+            v[vi++] = x + r + r * MathUtils.cos(a);
+            v[vi++] = y + r + r * MathUtils.sin(a);
+        }
+        // bottom-right arc: 270° → 360°
+        for (int i = 0; i < segs; i++) {
+            float a = (float) Math.toRadians(270.0 + i * 90.0 / (segs - 1));
+            v[vi++] = x + w - r + r * MathUtils.cos(a);
+            v[vi++] = y + r + r * MathUtils.sin(a);
+        }
+        // top-right arc: 0° → 90°
+        for (int i = 0; i < segs; i++) {
+            float a = (float) Math.toRadians(0.0 + i * 90.0 / (segs - 1));
+            v[vi++] = x + w - r + r * MathUtils.cos(a);
+            v[vi++] = y + h - r + r * MathUtils.sin(a);
+        }
+        // top-left arc: 90° → 180°
+        for (int i = 0; i < segs; i++) {
+            float a = (float) Math.toRadians(90.0 + i * 90.0 / (segs - 1));
+            v[vi++] = x + r + r * MathUtils.cos(a);
+            v[vi++] = y + h - r + r * MathUtils.sin(a);
+        }
+        sr.polygon(v);
+    }
+
     private void drawNewGameButton() {
         sr.setProjectionMatrix(viewport.getCamera().combined);
         sr.begin(ShapeRenderer.ShapeType.Filled);
         sr.setColor(0.70f, 0.10f, 0.10f, 0.88f);
-        sr.rect(NG_X, NG_Y, NG_W, NG_H);
+        drawShapeRoundedRect(sr, NG_X, NG_Y, NG_W, NG_H, 14f, 8);
         sr.end();
         sr.begin(ShapeRenderer.ShapeType.Line);
         sr.setColor(1f, 0.35f, 0.35f, 0.90f);
-        sr.rect(NG_X, NG_Y, NG_W, NG_H);
+        drawShapeRoundedRect(sr, NG_X, NG_Y, NG_W, NG_H, 14f, 8);
         sr.end();
     }
 
