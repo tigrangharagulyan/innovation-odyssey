@@ -120,8 +120,8 @@ public final class ShipData {
     public boolean   savedFrostheimArmBumpersActive    = false;
 
     // Lives & monetisation
-    public int     lives           = 3;
-    public int     maxLives        = 3;
+    public int     lives           = 5;
+    public int     maxLives        = 5;
     public long    nextLifeAtMs    = 0L;   // wall-clock ms when next life auto-refills; 0 = full
     public int     diamonds        = 0;
     public boolean unlimitedLives  = false;
@@ -132,6 +132,12 @@ public final class ShipData {
     // Gem farming — fixed gems/hr per planet index (Solara=1 … Helios Forge=5)
     public static final int[] GEM_FARM_RATES = {1, 2, 3, 4, 5};
     public long lastGemFarmTimestamp = 0L;   // ms epoch; 0 = uninitialised
+
+    // Leaderboard — flight timer and per-planet personal bests
+    public long    flightStartTimeMs  = 0L;          // epoch ms when current flight began; 0 = not started
+    public float[] bestArrivalTimes   = new float[]{  // seconds; Float.MAX_VALUE = no time yet
+        Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE
+    };
 
     public final com.badlogic.gdx.utils.Array<float[]> pendingContactEvents = new com.badlogic.gdx.utils.Array<>();
     public int pendingBumperSounds    = 0;
@@ -203,6 +209,8 @@ public final class ShipData {
         pendingContactEvents.clear();
         pendingBumperSounds    = 0;
         pendingCollisionSounds = 0;
+        flightStartTimeMs = 0L;
+        for (int i = 0; i < bestArrivalTimes.length; i++) bestArrivalTimes[i] = Float.MAX_VALUE;
     }
 
     public void addJoules(float joules) {
@@ -355,6 +363,8 @@ public final class ShipData {
         p.putLong("nextLifeAtMs",      nextLifeAtMs);
         p.putInteger("diamonds",       diamonds);
         p.putBoolean("unlimitedLives", unlimitedLives);
+        for (int i = 0; i < bestArrivalTimes.length; i++)
+            p.putFloat("bestArrivalTime_" + i, bestArrivalTimes[i]);
         p.putBoolean("hasSave", true);
         p.flush();
     }
@@ -418,11 +428,13 @@ public final class ShipData {
         savedEmberThirdInternUnlocked    = p.getBoolean("emThirdIntern",      false);
         savedFrostheimThirdInternUnlocked = p.getBoolean("fhThirdIntern",    false);
         savedFrostheimArmBumpersActive    = p.getBoolean("fhArmBumpers",     false);
-        lives          = p.getInteger("lives",          3);
-        maxLives       = p.getInteger("maxLives",       3);
+        lives          = p.getInteger("lives",          5);
+        maxLives       = p.getInteger("maxLives",       5);
         nextLifeAtMs   = p.getLong("nextLifeAtMs",      0L);
         diamonds       = p.getInteger("diamonds",       0);
         unlimitedLives = p.getBoolean("unlimitedLives", false);
+        for (int i = 0; i < bestArrivalTimes.length; i++)
+            bestArrivalTimes[i] = p.getFloat("bestArrivalTime_" + i, Float.MAX_VALUE);
         return true;
     }
 
@@ -510,5 +522,6 @@ public final class ShipData {
         savedFrostheimIcicleUnlocked = false;
         for (int i = 0; i < savedMilestoneAchieved.length; i++) savedMilestoneAchieved[i] = false;
         sectorReached              = -1;
+        flightStartTimeMs = 0L;  // next planet gets a fresh timer
     }
 }
