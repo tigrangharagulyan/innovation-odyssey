@@ -6,5 +6,6 @@ public enum GameState {
     BRIDGE_FLIGHT,
     INTERN_DEPLOY,
     GALACTIC_MAP,
-    NOVA_TERRA_ARRIVAL
+    NOVA_TERRA_ARRIVAL,
+    LEADERBOARD
 }
