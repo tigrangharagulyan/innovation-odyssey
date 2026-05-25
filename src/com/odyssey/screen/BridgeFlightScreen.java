@@ -145,6 +145,10 @@ public class BridgeFlightScreen extends ScreenAdapter {
 
     public void resetFlight() {
         ShipData sd = ShipData.get();
+        // Start the leaderboard timer on first flight toward this destination
+        if (sd.flightStartTimeMs == 0L) {
+            sd.flightStartTimeMs = System.currentTimeMillis();
+        }
         animDone     = false;
         animTime     = 0f;
         cpFlashTimer = 0f;
