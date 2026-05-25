@@ -134,7 +134,7 @@ public final class ShipData {
     public long lastGemFarmTimestamp = 0L;   // ms epoch; 0 = uninitialised
 
     // Leaderboard — flight timer and per-planet personal bests
-    public long    flightStartTimeMs  = 0L;          // epoch ms when current flight began; 0 = not started
+    public long    flightStartTimeMs  = 0L;          // epoch ms when current flight began; 0 = not started  // transient – not persisted
     public float[] bestArrivalTimes   = new float[]{  // seconds; Float.MAX_VALUE = no time yet
         Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE
     };
