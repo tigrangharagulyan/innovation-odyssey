@@ -7,6 +7,7 @@ import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
@@ -91,7 +92,8 @@ public class MainMenuScreen extends ScreenAdapter {
     private final float[] starX, starY, starA;
 
     private float rocketX, rocketY, rocketAngle;
-    private int   currentIdx;
+    private int   currentIdx;   // rocket position — replay planet during replay
+    private int   displayIdx;   // planet unlock display — always real progress
     private float animTime = 0f;
     private final Vector3 tv = new Vector3();
     private boolean showRocketTutorial = false;
@@ -125,8 +127,28 @@ public class MainMenuScreen extends ScreenAdapter {
             @Override public boolean touchDown(int sx, int sy, int ptr, int btn) {
                 tv.set(sx, sy, 0);
                 viewport.unproject(tv);
+
+                // Replay mode: tap the player's real saved planet to abandon and restore progress
+                if (ShipData.get().isReplayMode) {
+                    int mySaveIdx = Math.min(ShipData.get().rb_currentPlanetIndex, NX.length - 1);
+                    float pcx = NX[mySaveIdx], pcy = NY[mySaveIdx], pr = NR[mySaveIdx] + 22f;
+                    float pdx = tv.x - pcx, pdy = tv.y - pcy;
+                    if (pdx*pdx + pdy*pdy < pr*pr) {
+                        ShipData sd3 = ShipData.get();
+                        sd3.abandonReplay();
+                        sd3.save();
+                        game.resetLabScreen();
+                        game.transitionTo(GameState.ENGINEERING_LAB);
+                        return true;
+                    }
+                }
+
                 float dx = tv.x - rocketX, dy = tv.y - rocketY;
-                if (dx*dx + dy*dy < ROCKET_HIT * ROCKET_HIT) {
+                float badgeTapX = rocketX - 61f, badgeTapY = rocketY + ROCKET_HIT + 20f;
+                boolean inRocket = dx*dx + dy*dy < ROCKET_HIT * ROCKET_HIT;
+                boolean inBadge  = tv.x >= badgeTapX && tv.x <= badgeTapX + 122f
+                                && tv.y >= badgeTapY && tv.y <= badgeTapY + 38f;
+                if (inRocket || inBadge) {
                     game.resetLabScreen();
                     game.transitionTo(GameState.ENGINEERING_LAB);
                     return true;
@@ -465,7 +487,9 @@ public class MainMenuScreen extends ScreenAdapter {
 
     private void refresh() {
         ShipData sd = ShipData.get();
-        currentIdx = Math.min(sd.currentPlanetIndex, NX.length - 1);
+        currentIdx  = Math.min(sd.currentPlanetIndex, NX.length - 1);
+        int realPlanetIdx = sd.isReplayMode ? sd.rb_currentPlanetIndex : sd.currentPlanetIndex;
+        displayIdx  = Math.min(realPlanetIdx, NX.length - 1);
         int next   = Math.min(currentIdx + 1, NX.length - 1);
 
         // Map sectorReached (-1..2) to a position along the current edge.
@@ -635,17 +659,16 @@ public class MainMenuScreen extends ScreenAdapter {
         for (int i = 0; i < NX.length; i++) {
             float cx = NX[i], cy = NY[i], r = NR[i];
             if (i < COL.length) {
-                float[] c   = COL[i];
-                float   dim = (i > currentIdx) ? 0.42f : 1f;
+                float[] c = COL[i];
                 for (int g = 5; g > 0; g--) {
-                    sr.setColor(c[0], c[1], c[2], 0.028f * g * dim);
+                    sr.setColor(c[0], c[1], c[2], 0.028f * g);
                     sr.circle(cx, cy, r + g * 8f, 24);
                 }
-                sr.setColor(c[3] * dim * 0.45f, c[4] * dim * 0.45f, c[5] * dim * 0.45f, 1f);
+                sr.setColor(c[3] * 0.45f, c[4] * 0.45f, c[5] * 0.45f, 1f);
                 sr.circle(cx, cy, r, 32);
-                sr.setColor(c[0] * dim * 0.38f, c[1] * dim * 0.38f, c[2] * dim * 0.38f, 1f);
+                sr.setColor(c[0] * 0.38f, c[1] * 0.38f, c[2] * 0.38f, 1f);
                 sr.circle(cx, cy, r * 0.66f, 32);
-                sr.setColor(1f, 1f, 1f, 0.06f * dim);
+                sr.setColor(1f, 1f, 1f, 0.06f);
                 sr.circle(cx - r * 0.22f, cy + r * 0.22f, r * 0.35f, 18);
             } else {
                 sr.setColor(0.07f, 0.08f, 0.12f, 1f);
@@ -661,7 +684,7 @@ public class MainMenuScreen extends ScreenAdapter {
         for (int i = 0; i < NX.length; i++) {
             float cx = NX[i], cy = NY[i], r = NR[i];
             if (i >= COL.length) {
-                sr.setColor(0.70f, 0.13f, 0.13f, 1f);
+                sr.setColor(0.38f, 0.10f, 0.10f, 0.70f);
                 sr.circle(cx, cy, r, 32);
                 sr.circle(cx, cy, r + 2.5f, 32);
                 sr.setColor(0.42f, 0.42f, 0.48f, 0.78f);
@@ -712,7 +735,43 @@ public class MainMenuScreen extends ScreenAdapter {
             sr.end();
         }
 
+        // Replay mode: amber pulsing glow on the player's REAL saved planet
+        if (ShipData.get().isReplayMode) {
+            int mySaveIdx = Math.min(ShipData.get().rb_currentPlanetIndex, NX.length - 1);
+            float cx = NX[mySaveIdx], cy = NY[mySaveIdx], r = NR[mySaveIdx];
+            float pulse = 0.70f + 0.30f * com.badlogic.gdx.math.MathUtils.sin(animTime * 3.2f);
+            sr.begin(ShapeRenderer.ShapeType.Line);
+            sr.setColor(1.00f, 0.72f, 0.12f, 0.90f * pulse);
+            sr.circle(cx, cy, r + 8f,  36);
+            sr.circle(cx, cy, r + 13f, 36);
+            sr.circle(cx, cy, r + 18f, 36);
+            sr.end();
+            sr.begin(ShapeRenderer.ShapeType.Filled);
+            sr.setColor(1.00f, 0.65f, 0.08f, 0.18f * pulse);
+            sr.circle(cx, cy, r + 22f, 36);
+            sr.end();
+        }
+
         drawPlanetSymbols();
+
+        // Replay mode: "YOUR SAVE · TAP TO RETURN" label drawn in batch after symbols
+        if (ShipData.get().isReplayMode) {
+            int mySaveIdx = Math.min(ShipData.get().rb_currentPlanetIndex, NX.length - 1);
+            float cx = NX[mySaveIdx], cy = NY[mySaveIdx], r = NR[mySaveIdx];
+            GlyphLayout gl = new GlyphLayout();
+            batch.setProjectionMatrix(viewport.getCamera().combined);
+            batch.begin();
+            bodyFont.getData().setScale(0.72f);
+            bodyFont.setColor(1.00f, 0.80f, 0.20f, 0.95f);
+            gl.setText(bodyFont, "YOUR SAVE");
+            bodyFont.draw(batch, "YOUR SAVE", cx - gl.width * 0.5f, cy + r + 30f);
+            bodyFont.getData().setScale(0.58f);
+            bodyFont.setColor(0.88f, 0.65f, 0.12f, 0.80f);
+            gl.setText(bodyFont, "TAP TO RETURN");
+            bodyFont.draw(batch, "TAP TO RETURN", cx - gl.width * 0.5f, cy + r + 15f);
+            bodyFont.getData().setScale(1f);
+            batch.end();
+        }
     }
 
     /** Per-planet icon drawn inside the planet circle. */
@@ -726,7 +785,7 @@ public class MainMenuScreen extends ScreenAdapter {
         sr.begin(ShapeRenderer.ShapeType.Filled);
         for (int i = 0; i < Math.min(NX.length, COL.length); i++) {
             float cx = NX[i], cy = NY[i], r = NR[i];
-            if (i > currentIdx) continue;
+            if (i >= COL.length) continue;
             float p = pulse[i];
             float[] c = COL[i];
             sr.setColor(c[0] * 0.5f, c[1] * 0.5f, c[2] * 0.5f, 0.09f * p);
@@ -737,8 +796,9 @@ public class MainMenuScreen extends ScreenAdapter {
 
         // ── Filled symbols: heart (Cryon Reach) + flame (Helios Forge) ────────
         for (int i = 0; i < Math.min(NX.length, COL.length); i++) {
+            if (i >= COL.length) continue;
             float cx = NX[i], cy = NY[i], r = NR[i];
-            float dim = (i > currentIdx) ? 0.30f : 1.00f;
+            float dim = 1.00f;
             float p = pulse[i];
             switch (i) {
                 case 3: { // Cryon Reach — heart
@@ -780,8 +840,9 @@ public class MainMenuScreen extends ScreenAdapter {
         for (int pass = 0; pass < 2; pass++) {
             sr.begin(ShapeRenderer.ShapeType.Line);
             for (int i = 0; i < Math.min(NX.length, COL.length); i++) {
+                if (i >= COL.length) continue;
                 float cx = NX[i], cy = NY[i], r = NR[i];
-                float dim = (i > currentIdx) ? 0.30f : 1.00f;
+                float dim = 1.00f;
                 float p = pulse[i];
                 float sc = (pass == 0) ? 1.10f : 1.00f;
                 switch (i) {
@@ -1038,14 +1099,27 @@ public class MainMenuScreen extends ScreenAdapter {
         for (int i = 0; i < NX.length; i++) {
             float cx = NX[i], cy = NY[i], r = NR[i];
             if (i < ShipData.PLANETS.length) {
-                String name   = ShipData.PLANETS[i].name;
-                boolean dimmed = (i > currentIdx);
-                bodyFont.setColor(dimmed ? DIM : Color.WHITE);
+                String name = ShipData.PLANETS[i].name;
+                bodyFont.setColor(Color.WHITE);
                 float tw = name.length() * 7.2f;
                 bodyFont.draw(batch, name, cx - tw * 0.5f, cy - r - 7f);
 
-                // Show gem farm rate for each planet once farming is active (arrivalsCompleted >= 1)
-                if (ShipData.get().arrivalsCompleted >= 1 && i < ShipData.GEM_FARM_RATES.length && i <= currentIdx) {
+                // Time: completed planets show duration, current shows elapsed
+                smallFont.getData().setScale(0.72f);
+                if (i < displayIdx && sd.planetCompletionMs[i] > 0L) {
+                    smallFont.setColor(0.50f, 0.75f, 1.00f, 0.85f);
+                    String t = ShipData.formatDuration(sd.planetCompletionMs[i]);
+                    smallFont.draw(batch, t, cx - 48f, cy - r - 19f, 96f, Align.center, false);
+                } else if (i == displayIdx && sd.planetStartTimestampMs > 0L) {
+                    long elapsed = System.currentTimeMillis() - sd.planetStartTimestampMs;
+                    smallFont.setColor(0.28f, 0.92f, 1.00f, 0.90f);
+                    String t = ShipData.formatDuration(elapsed);
+                    smallFont.draw(batch, t, cx - 48f, cy - r - 19f, 96f, Align.center, false);
+                }
+                smallFont.getData().setScale(1.00f);
+
+                // Gem farm rate
+                if (sd.arrivalsCompleted >= 1 && i < ShipData.GEM_FARM_RATES.length) {
                     int rate = ShipData.GEM_FARM_RATES[i];
                     String rateStr = "+" + rate + " gem/hr";
                     smallFont.getData().setScale(0.85f);
@@ -1053,10 +1127,6 @@ public class MainMenuScreen extends ScreenAdapter {
                     smallFont.draw(batch, rateStr, cx - 64f, cy + r + 28f, 128f, Align.center, false);
                     smallFont.getData().setScale(1.00f);
                 }
-            } else {
-                smallFont.setColor(0.40f, 0.40f, 0.46f, 0.70f);
-                smallFont.draw(batch, "COMING", cx - 20f, cy - r -  6f);
-                smallFont.draw(batch, " SOON",  cx - 14f, cy - r - 18f);
             }
         }
         // ── ENTER BAY glowing badge ───────────────────────────────────────────

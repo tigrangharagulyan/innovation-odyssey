@@ -120,7 +120,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     };
     // Frostheim intern costs (3× base rates — no price() multiplier)
     private static final float[] FROSTHEIM_INTERN_COSTS = {
-        240, 6_000, 10_000, 22_500, 22_500,   // entry – CP I   (interns 3–7)
+        150, 6_000, 10_000, 22_500, 22_500,   // entry – CP I   (interns 3–7)
         90_000, 120_000,                     // CP II          (interns 8–9)
         150_000, 450_000, 600_000            // CP III         (interns 10–12)
     };
@@ -276,6 +276,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private Label topYieldsLabel;
     private Label topSpRateHeaderLabel;
     private Label topSpValueLabel;
+    private Label planetTimerLabel;
     private Label topPerksHeaderLabel;
     private Label topPerksListLabel;
 
@@ -2377,17 +2378,18 @@ public class EngineeringLabScreen extends ScreenAdapter {
         milestoneStatusLabel.setColor(1f, 0.78f, 0.25f, 0.88f);
 
         // Lives + gems HUD labels — shown under Solara status in left column
-        livesLabel    = new Label("  5/5", game.skin);
+        livesLabel    = new Label("5/5", game.skin);
         livesLabel.setFontScale(1.00f);
         livesLabel.setColor(1f, 0.28f, 0.40f, 0.95f);
 
-        diamondsLabel = new Label("  0", game.skin);
+        diamondsLabel = new Label("0", game.skin);
         diamondsLabel.setFontScale(1.00f);
         diamondsLabel.setColor(0.35f, 0.90f, 1.00f, 1f);
 
         Table livesGemsRow = new Table();
-        livesGemsRow.add(livesLabel).left().padRight(10f);
-        livesGemsRow.add(diamondsLabel).left();
+        // padLeft: icon center ≈ 7px, icon right edge ≈ 13px; extra space gives gap before text
+        livesGemsRow.add(livesLabel).left().padLeft(24f).padRight(14f);
+        livesGemsRow.add(diamondsLabel).left().padLeft(24f);
 
         topLeft.add(topPlanetLabel).left().row();
         topLeft.add(topCheckpointLabel).left().padTop(2f).row();
@@ -2398,11 +2400,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
         topCenter.top();
 
         topSpRateHeaderLabel = new Label("ENERGY", game.skin);
-        topSpRateHeaderLabel.setFontScale(0.78f);
+        topSpRateHeaderLabel.setFontScale(0.72f);
         topSpRateHeaderLabel.setColor(0.20f, 1.00f, 0.50f, 1f);
 
         topSpValueLabel = new Label("0 / 0", game.skin);
-        topSpValueLabel.setFontScale(1.40f);
+        topSpValueLabel.setFontScale(1.00f);
         topSpValueLabel.setColor(0.30f, 1.00f, 0.55f, 1f);
 
         outputLabel = new Label("", game.skin); // hidden — kept to avoid null refs
@@ -2411,12 +2413,17 @@ public class EngineeringLabScreen extends ScreenAdapter {
             new TextureRegionDrawable(new TextureRegion(texIconEnergy)));
         uiIconEnergy.setColor(0.25f, 1.00f, 0.45f, 0.90f);
 
-        Table energyHeader = new Table();
-        energyHeader.add(uiIconEnergy).size(12f, 18f).padRight(3f);
-        energyHeader.add(topSpRateHeaderLabel);
+        // Planet timer in top center
+        Label timerCaption = new Label("TIME ON PLANET", game.skin);
+        timerCaption.setFontScale(0.58f);
+        timerCaption.setColor(0.45f, 0.70f, 1.00f, 0.80f);
 
-        topCenter.add(energyHeader).center().row();
-        topCenter.add(topSpValueLabel).center().padTop(3f).row();
+        planetTimerLabel = new Label("0s", game.skin);
+        planetTimerLabel.setFontScale(1.60f);
+        planetTimerLabel.setColor(0.28f, 0.92f, 1.00f, 1f);
+
+        topCenter.add(timerCaption).center().row();
+        topCenter.add(planetTimerLabel).center().padTop(2f).row();
 
         // ---- Right column: active perks list + menu button ----
         Table topRight = new Table();
@@ -2493,6 +2500,13 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // ── Perk multiplier strip ──
         // perkStrip built later — inserted into bottom panel above stats row
+
+        // Energy label row above bar: [icon] ENERGY  value
+        Table energyAboveBar = new Table();
+        energyAboveBar.add(uiIconEnergy).size(11f, 16f).padRight(4f);
+        energyAboveBar.add(topSpRateHeaderLabel).padRight(10f);
+        energyAboveBar.add(topSpValueLabel);
+        root.add(energyAboveBar).center().padTop(2f).padBottom(2f).row();
 
         // -- ENERGY BAR: rainbow fill + status label --
         com.badlogic.gdx.scenes.scene2d.Actor energyBarActor = new com.badlogic.gdx.scenes.scene2d.Actor() {
@@ -4122,6 +4136,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // Column 2 — Money Engine: SPACE POINTS RATE header + live SP/s value
         topSpRateHeaderLabel.setText("ENERGY");
+        // Planet timer
+        if (planetTimerLabel != null) {
+            long elapsed = sd.planetStartTimestampMs > 0L
+                ? System.currentTimeMillis() - sd.planetStartTimestampMs : 0L;
+            planetTimerLabel.setText(ShipData.formatDuration(elapsed));
+        }
         float _eDelta = energyDeltaSinceLaunch();
         float _eCost  = nextCheckpointEnergyCost();
         String _eDeltaStr = _eDelta >= 1_000f ? String.format("%.1fK", _eDelta / 1000f) : String.format("%.0f", _eDelta);

@@ -260,6 +260,20 @@ public class BridgeFlightScreen extends ScreenAdapter {
             }
         }
 
+        // Replay mode: tap the "MY SAVE" marker at any time to abandon
+        if (ShipData.get().isReplayMode && Gdx.input.justTouched()) {
+            touchVec.set(Gdx.input.getX(), Gdx.input.getY(), 0);
+            viewport.unproject(touchVec);
+            float msx = getMySaveX();
+            if (Math.abs(touchVec.x - msx) < 38f && Math.abs(touchVec.y - LINE_Y) < 38f) {
+                ShipData sd2 = ShipData.get();
+                sd2.abandonReplay();
+                sd2.save();
+                game.transitionTo(GameState.ENGINEERING_LAB);
+                return;
+            }
+        }
+
         // Clear to deep space
         Gdx.gl.glClearColor(0.02f, 0.03f, 0.08f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
@@ -377,6 +391,30 @@ public class BridgeFlightScreen extends ScreenAdapter {
             }
         }
         font.getData().setScale(1f);
+
+        // === Replay: "MY SAVE" amber marker — tap to abandon ===
+        if (ShipData.get().isReplayMode) {
+            float msx   = getMySaveX();
+            float pulse = 0.72f + 0.28f * MathUtils.sin(animTime * 3.0f);
+            // halo
+            float gs = 56f * pulse;
+            batch.setColor(1.00f, 0.65f, 0.08f, 0.40f * pulse);
+            batch.draw(texGlow, msx - gs * 0.5f, LINE_Y - gs * 0.5f, gs, gs);
+            // dot
+            float nd = 20f * pulse;
+            batch.setColor(1.00f, 0.78f, 0.12f, 1f);
+            batch.draw(texGlow, msx - nd * 0.5f, LINE_Y - nd * 0.5f, nd, nd);
+            // label below line
+            font.getData().setScale(0.68f);
+            font.setColor(1.00f, 0.80f, 0.20f, 0.95f);
+            layout.setText(font, "MY SAVE");
+            font.draw(batch, "MY SAVE", msx - layout.width * 0.5f, LINE_Y - 38f);
+            font.getData().setScale(0.58f);
+            font.setColor(0.90f, 0.68f, 0.12f, 0.75f);
+            layout.setText(font, "TAP TO EXIT REPLAY");
+            font.draw(batch, "TAP TO EXIT REPLAY", msx - layout.width * 0.5f, LINE_Y - 54f);
+            font.getData().setScale(1f);
+        }
 
         // === Speed trails behind rocket while moving ===
         if (!animDone) {
@@ -516,6 +554,15 @@ public class BridgeFlightScreen extends ScreenAdapter {
     private void drawCentered(String text, float y) {
         layout.setText(font, text);
         font.draw(batch, text, (W - layout.width) * 0.5f, y);
+    }
+
+    /** X position of the player's real saved checkpoint on the replay route line. */
+    private float getMySaveX() {
+        ShipData sd = ShipData.get();
+        int sector = sd.rb_sectorReached;
+        if (sector < 0 || sectorDists == null) return LINE_X0;
+        int idx = Math.min(sector, sectorDists.length - 1);
+        return distToX(sectorDists[idx]);
     }
 
     private void finish() {

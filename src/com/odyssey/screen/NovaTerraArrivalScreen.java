@@ -314,9 +314,12 @@ public class NovaTerraArrivalScreen extends ScreenAdapter {
         gravityDescLabel.setColor(gColor);
         ((ProgressBarStyle)gravityBar.getStyle()).knobBefore = game.skin.newDrawable("white", gColor);
 
+        int completedIdx = Math.max(0, sd.currentPlanetIndex - 1);
+        long completedMs = sd.planetCompletionMs[completedIdx];
+        String planetTimeStr = completedMs > 0L ? ShipData.formatDuration(completedMs) : "N/A";
         energyLabel.setText(String.format(
-            "Journey time: %.0f days\nTotal energy used: %.0f joules",
-            sd.lastArrivalJourneyDays, sd.lastArrivalEnergyUsed));
+            "Journey time: %.0f days\nTotal energy used: %.0f joules\nTime on planet: %s",
+            sd.lastArrivalJourneyDays, sd.lastArrivalEnergyUsed, planetTimeStr));
         rewardLabel.setText("Prestige unlock: " + planet.rewardLabel);
         buildingsLabel.setText(String.format(
             "New available buildings: %s and %s.\nClaiming this reward also improves the next Engineering Bay run.",

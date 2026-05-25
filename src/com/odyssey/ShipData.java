@@ -165,6 +165,8 @@ public final class ShipData {
     public boolean rb_savedEmberThirdInternUnlocked       = false;
     public boolean rb_savedFrostheimThirdInternUnlocked   = false;
     public boolean rb_savedFrostheimArmBumpersActive      = false;
+    public int     rb_currentPlanetIndex                  = 0;
+    public float   rb_crystals                            = 0f;
 
     // Lives & monetisation
     public int     lives           = 5;
@@ -184,6 +186,12 @@ public final class ShipData {
     public long    flightStartTimeMs  = 0L;          // epoch ms when current flight began; 0 = not started  // transient – not persisted
     public float[] bestArrivalTimes   = new float[]{  // seconds; Float.MAX_VALUE = no time yet
         Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE
+    };
+
+    // Per-planet time tracking
+    public long   planetStartTimestampMs = 0L;         // epoch ms when player started working on current planet
+    public long[] planetCompletionMs     = new long[]{ // ms taken to complete each planet; 0 = not completed
+        0L, 0L, 0L, 0L, 0L
     };
 
     // Transient — pending post-arrival rank notification (not persisted, cleared after shown)
@@ -226,6 +234,7 @@ public final class ShipData {
         lastArrivalEnergyUsed   = 0f;
         lastArrivalJourneyDays  = 0f;
         crystals                = 5f;
+        diamonds                = 5000;
         bumperSparkValue        = 20f;
         bumperMult              = 1.0f;
         gravityMult             = 1.0f;
@@ -262,6 +271,8 @@ public final class ShipData {
         pendingCollisionSounds = 0;
         flightStartTimeMs = 0L;
         for (int i = 0; i < bestArrivalTimes.length; i++) bestArrivalTimes[i] = Float.MAX_VALUE;
+        planetStartTimestampMs = System.currentTimeMillis();
+        for (int i = 0; i < planetCompletionMs.length; i++) planetCompletionMs[i] = 0L;
         pendingRankResult = -1;
         pendingRankPlanet = -1;
     }
@@ -367,12 +378,16 @@ public final class ShipData {
         savedEmberThirdInternUnlocked    = false;
         savedFrostheimThirdInternUnlocked = false;
         savedFrostheimArmBumpersActive   = false;
+        rb_currentPlanetIndex = currentPlanetIndex;
+        rb_crystals           = crystals;
         totalJoules          = 0f;
+        crystals             = 0f;
         energyAtLastLaunch   = powerGenerated; // delta starts at 0 for replay launch
         accumulatedDist      = 0f;
         sectorReached        = -1;
         flightStartTimeMs    = 0L;
         planetGravityMultiplier = PLANETS[planetIdx].gravity;
+        currentPlanetIndex   = planetIdx;
 
         // --- deduct diamond cost ---
         diamonds -= 50 * (planetIdx + 1);
@@ -445,6 +460,8 @@ public final class ShipData {
         savedEmberThirdInternUnlocked     = rb_savedEmberThirdInternUnlocked;
         savedFrostheimThirdInternUnlocked = rb_savedFrostheimThirdInternUnlocked;
         savedFrostheimArmBumpersActive    = rb_savedFrostheimArmBumpersActive;
+        currentPlanetIndex                = rb_currentPlanetIndex;
+        crystals                          = rb_crystals;
     }
 
     /** Call every frame — refills lives from the real-time clock. */
@@ -535,6 +552,9 @@ public final class ShipData {
         p.putBoolean("arrivalReady",        arrivalReady);
         p.putString("lastArrivalPlanetName",lastArrivalPlanetName);
         p.putLong("lastGemFarmTimestamp", lastGemFarmTimestamp);
+        p.putLong("planetStartTimestampMs", planetStartTimestampMs);
+        for (int i = 0; i < planetCompletionMs.length; i++)
+            p.putLong("planetCompletionMs_" + i, planetCompletionMs[i]);
         p.putInteger("pendingNewRecruits",  pendingNewRecruits);
         for (int i = 0; i < emberPerksEarned.length; i++)
             p.putBoolean("emberPerk_" + i, emberPerksEarned[i]);
@@ -614,6 +634,8 @@ public final class ShipData {
                 msb.append(rb_savedMilestoneAchieved[i] ? 1 : 0);
             }
             p.putString("rb_milestones", msb.toString());
+            p.putInteger("rb_currentPlanetIndex", rb_currentPlanetIndex);
+            p.putFloat("rb_crystals",             rb_crystals);
         }
         p.flush();
     }
@@ -647,6 +669,9 @@ public final class ShipData {
         arrivalReady            = p.getBoolean("arrivalReady",        false);
         lastArrivalPlanetName   = p.getString("lastArrivalPlanetName","");
         lastGemFarmTimestamp = p.getLong("lastGemFarmTimestamp", 0L);
+        planetStartTimestampMs = System.currentTimeMillis(); // always fresh — don't accumulate offline time
+        for (int i = 0; i < planetCompletionMs.length; i++)
+            planetCompletionMs[i] = p.getLong("planetCompletionMs_" + i, 0L);
         pendingNewRecruits      = p.getInteger("pendingNewRecruits",  0);
         gravityEnabled          = p.getBoolean("gravityEnabled",  true);
         for (int i = 0; i < emberPerksEarned.length; i++)
@@ -680,7 +705,8 @@ public final class ShipData {
         lives          = p.getInteger("lives",          5);
         maxLives       = 5; // always 5; not persisted so upgrades don't carry over
         nextLifeAtMs   = p.getLong("nextLifeAtMs",      0L);
-        diamonds       = p.getInteger("diamonds",       0);
+        diamonds       = p.getInteger("diamonds",       5000);
+        if (diamonds < 5000) diamonds = 5000;
         unlimitedLives = p.getBoolean("unlimitedLives", false);
         for (int i = 0; i < bestArrivalTimes.length; i++)
             bestArrivalTimes[i] = p.getFloat("bestArrivalTime_" + i, Float.MAX_VALUE);
@@ -724,10 +750,22 @@ public final class ShipData {
                 for (int i = 0; i < parts.length && i < rb_savedMilestoneAchieved.length; i++)
                     rb_savedMilestoneAchieved[i] = parts[i].equals("1");
             }
+            rb_currentPlanetIndex = p.getInteger("rb_currentPlanetIndex", 0);
+            rb_crystals           = p.getFloat("rb_crystals",             0f);
             // App was killed mid-replay — silently abandon and restore main progress
             abandonReplay();
         }
         return true;
+    }
+
+    /** Format milliseconds as "Xh Ym" (>= 1h), "Xm Ys" (>= 1m), or "Xs". */
+    public static String formatDuration(long ms) {
+        long s = ms / 1000;
+        long m = s / 60;
+        long h = m / 60;
+        if (h > 0)  return h + "h " + (m % 60) + "m";
+        if (m > 0)  return m + "m " + (s % 60) + "s";
+        return s + "s";
     }
 
     private static String floatsToString(float[] arr) {
@@ -765,6 +803,10 @@ public final class ShipData {
     }
 
     public void markArrival(float routeDistance, float energySpent) {
+        // Record how long the player spent on the planet they just completed
+        if (currentPlanetIndex < planetCompletionMs.length && planetStartTimestampMs > 0L)
+            planetCompletionMs[currentPlanetIndex] = System.currentTimeMillis() - planetStartTimestampMs;
+        planetStartTimestampMs = System.currentTimeMillis(); // start timer for next planet
         PlanetProfile p = getSelectedPlanet();
         currentPlanetIndex      = selectedPlanetIndex;
         targetPlanetDistance    = p.distance;

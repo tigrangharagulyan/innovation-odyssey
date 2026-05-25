@@ -54,9 +54,7 @@ public class OdysseyGame extends Game {
         fadePixel = new Texture(fp);
         fp.dispose();
 
-        if (!ShipData.get().load()) {
-            ShipData.get().reset();
-        }
+        ShipData.get().reset();
         switchScreenImmediate(GameState.MAIN_MENU);
     }
 
