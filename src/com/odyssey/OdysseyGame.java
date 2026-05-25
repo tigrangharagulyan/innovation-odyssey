@@ -169,12 +169,15 @@ public class OdysseyGame extends Game {
         // ── TextButton default — dark panel, white text, state driven by setColor() ──
         // The drawable is a solid white pixel; each button calls setColor() each frame
         // to apply BTN_LOCKED / BTN_BUYABLE / BTN_GO etc. from OdysseyTheme.
+        // White rounded NinePatch — setColor() per frame still drives visual state
+        Color wBorder = new Color(0.55f, 0.55f, 0.55f, 1f);
+        NinePatchDrawable roundedWhite = makeRoundedBtn(Color.WHITE, wBorder, 22);
         TextButton.TextButtonStyle btn = new TextButton.TextButtonStyle();
         btn.font              = font;
-        btn.up                = s.newDrawable("white", OdysseyTheme.PANEL_BG);
-        btn.over              = s.newDrawable("white", OdysseyTheme.BTN_AVAILABLE);
-        btn.down              = s.newDrawable("white", OdysseyTheme.BTN_ACTIVE);
-        btn.disabled          = s.newDrawable("white", OdysseyTheme.BTN_LOCKED);
+        btn.up                = roundedWhite;
+        btn.over              = roundedWhite;
+        btn.down              = roundedWhite;
+        btn.disabled          = makeRoundedBtn(Color.WHITE, new Color(0.30f, 0.30f, 0.30f, 1f), 22);
         btn.fontColor         = OdysseyTheme.TEXT_PRI;
         btn.downFontColor     = OdysseyTheme.TEXT_PRI;
         btn.disabledFontColor = OdysseyTheme.TEXT_DIM;
@@ -183,10 +186,10 @@ public class OdysseyGame extends Game {
         // Toggle (planet selection in GalacticMap) — unchanged behavior, new colors
         TextButton.TextButtonStyle tog = new TextButton.TextButtonStyle();
         tog.font             = font;
-        tog.up               = s.newDrawable("white", OdysseyTheme.PANEL_BG);
-        tog.over             = s.newDrawable("white", OdysseyTheme.BTN_AVAILABLE);
-        tog.down             = s.newDrawable("white", OdysseyTheme.BTN_ACTIVE);
-        tog.checked          = s.newDrawable("white", OdysseyTheme.BTN_BUYABLE);
+        tog.up               = roundedWhite;
+        tog.over             = roundedWhite;
+        tog.down             = roundedWhite;
+        tog.checked          = roundedWhite;
         tog.fontColor        = OdysseyTheme.TEXT_PRI;
         tog.checkedFontColor = OdysseyTheme.TEXT_PRI;
         s.add("toggle", tog);
