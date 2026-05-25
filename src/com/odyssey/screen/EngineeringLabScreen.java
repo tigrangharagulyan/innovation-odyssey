@@ -3095,12 +3095,14 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 }
                 if (!isJumpReady()) return;
                 ShipData sd2 = ShipData.get();
-                // Lives gate
-                if (!sd2.canPlay()) {
-                    if (livesBlockTable != null) livesBlockTable.setVisible(true);
-                    return;
+                if (!sd2.isReplayMode) {
+                    // Lives gate — skipped during replay (diamonds already paid as entry fee)
+                    if (!sd2.canPlay()) {
+                        if (livesBlockTable != null) livesBlockTable.setVisible(true);
+                        return;
+                    }
+                    sd2.consumeLife();
                 }
-                sd2.consumeLife();
                 commitNextPlanetDestination(sd2);
                 sd2.savedFlightJPS = sd2.currentJPS;
                 SoundManager.get().playLaunch();
