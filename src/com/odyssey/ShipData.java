@@ -1,5 +1,7 @@
 package com.odyssey;
 
+import com.odyssey.analytics.AnalyticsService;
+
 public final class ShipData {
 
     /** Mutable state stored in each standard bumper body's userData for per-bumper hit animation. */
@@ -805,7 +807,7 @@ public final class ShipData {
     public void markArrival(float routeDistance, float energySpent) {
         // Record how long the player spent on the planet they just completed
         if (currentPlanetIndex < planetCompletionMs.length && planetStartTimestampMs > 0L)
-            planetCompletionMs[currentPlanetIndex] = System.currentTimeMillis() - planetStartTimestampMs;
+            planetCompletionMs[currentPlanetIndex] = Math.max(0L, System.currentTimeMillis() - planetStartTimestampMs);
         planetStartTimestampMs = System.currentTimeMillis(); // start timer for next planet
         PlanetProfile p = getSelectedPlanet();
         currentPlanetIndex      = selectedPlanetIndex;
@@ -813,6 +815,7 @@ public final class ShipData {
         planetGravityMultiplier = p.gravity;
         arrivalReady            = true;
         arrivalsCompleted++;
+        AnalyticsService.getInstance().logMilestone("planet", p.name.toLowerCase().replace(" ", "_") + "_arrived", arrivalsCompleted);
         lastArrivalPlanetName   = p.name;
         lastArrivalEnergyUsed   = energySpent;
         lastArrivalJourneyDays  = Math.max(3f, routeDistance / 300f);

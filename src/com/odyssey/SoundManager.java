@@ -28,7 +28,7 @@ public final class SoundManager {
         try {
             if (Gdx.files.internal(path).exists())
                 return Gdx.audio.newSound(Gdx.files.internal(path));
-        } catch (Exception ignored) {}
+        } catch (com.badlogic.gdx.utils.GdxRuntimeException ignored) {}
         return null;
     }
 

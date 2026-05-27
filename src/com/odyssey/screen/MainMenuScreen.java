@@ -489,7 +489,7 @@ public class MainMenuScreen extends ScreenAdapter {
         ShipData sd = ShipData.get();
         currentIdx  = Math.min(sd.currentPlanetIndex, NX.length - 1);
         int realPlanetIdx = sd.isReplayMode ? sd.rb_currentPlanetIndex : sd.currentPlanetIndex;
-        displayIdx  = Math.min(realPlanetIdx, NX.length - 1);
+        displayIdx  = Math.min(realPlanetIdx, ShipData.PLANETS.length - 1);
         int next   = Math.min(currentIdx + 1, NX.length - 1);
 
         // Map sectorReached (-1..2) to a position along the current edge.

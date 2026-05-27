@@ -39,3 +39,7 @@ build/
 ### Android ###
 local.properties
 android/src/main/jniLibs/
+
+### Analytics (secrets + generated) ###
+.env
+src/com/odyssey/analytics/AnalyticsConfig.java

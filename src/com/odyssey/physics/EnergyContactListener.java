@@ -102,6 +102,7 @@ public class EnergyContactListener implements ContactListener {
                 Body bladeBody = aIsValleyBlade ? bodyA : bodyB;
                 ShipData.BumperHitData vhd = (ShipData.BumperHitData) bladeBody.getUserData();
                 long now = System.currentTimeMillis();
+                if (now < vhd.lastHitMs) vhd.lastHitMs = now; // NTP clock rollback guard
                 if (now - vhd.lastHitMs >= 280) {
                     ShipData sdVb = ShipData.get();
                     sdVb.addCrystals(8f);

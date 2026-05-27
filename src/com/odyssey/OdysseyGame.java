@@ -16,6 +16,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.Label.LabelStyle;
 import com.badlogic.gdx.scenes.scene2d.ui.ProgressBar.ProgressBarStyle;
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
+import com.odyssey.analytics.AnalyticsService;
 import com.odyssey.screen.*;
 
 public class OdysseyGame extends Game {
@@ -46,6 +47,9 @@ public class OdysseyGame extends Game {
     public void create() {
         skin = buildSkin();
 
+        AnalyticsService.getInstance().init();
+        AnalyticsService.getInstance().sessionStart();
+
         // Fade overlay resources
         fadeBatch = new SpriteBatch();
         Pixmap fp = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
@@ -63,6 +67,7 @@ public class OdysseyGame extends Game {
         super.render();   // delegates to the active Screen's render()
 
         float delta = Gdx.graphics.getDeltaTime();
+        AnalyticsService.getInstance().tick(delta);
 
         if (fadingOut) {
             fadeTimer += delta;
@@ -412,12 +417,20 @@ public class OdysseyGame extends Game {
     public void pause() {
         if (labScreen != null) labScreen.snapshotState();
         ShipData.get().save();
+        AnalyticsService.getInstance().appBackgrounded();
+    }
+
+    @Override
+    public void resume() {
+        super.resume();
+        AnalyticsService.getInstance().appForegrounded();
     }
 
     @Override
     public void dispose() {
         if (labScreen != null) labScreen.snapshotState();
         ShipData.get().save();
+        AnalyticsService.getInstance().sessionEnd();
         if (mainMenuScreen != null) mainMenuScreen.dispose();
         if (labScreen      != null) labScreen.dispose();
         if (flightScreen   != null) flightScreen.dispose();
