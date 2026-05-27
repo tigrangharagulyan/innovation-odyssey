@@ -14,6 +14,7 @@ public final class PlanetState {
         Object v = data.get(key);
         return (v instanceof Boolean) ? (Boolean) v : def;
     }
+    public int getInt(String key)          { return getInt(key, 0); }
     public int getInt(String key, int def) {
         Object v = data.get(key);
         return (v instanceof Integer) ? (Integer) v : def;
