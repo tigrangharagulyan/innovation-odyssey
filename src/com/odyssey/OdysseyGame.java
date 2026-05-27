@@ -16,17 +16,20 @@ import com.badlogic.gdx.scenes.scene2d.ui.Label.LabelStyle;
 import com.badlogic.gdx.scenes.scene2d.ui.ProgressBar.ProgressBarStyle;
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
+import com.odyssey.analytics.AnalyticsService;
 import com.odyssey.screen.*;
 
 public class OdysseyGame extends Game {
 
     public Skin skin;
 
-    private MainMenuScreen        mainMenuScreen;
-    private EngineeringLabScreen  labScreen;
-    private BridgeFlightScreen    flightScreen;
-    private GalacticMapScreen     galacticScreen;
+    private MainMenuScreen         mainMenuScreen;
+    private EngineeringLabScreen   labScreen;
+    private BridgeFlightScreen     flightScreen;
+    private InternDeployScreen     deployScreen;
+    private GalacticMapScreen      galacticScreen;
     private NovaTerraArrivalScreen arrivalScreen;
+    private LeaderboardScreen      leaderboardScreen;
 
     private GameState currentState;
 
@@ -43,6 +46,9 @@ public class OdysseyGame extends Game {
     @Override
     public void create() {
         skin = buildSkin();
+
+        AnalyticsService.getInstance().init();
+        AnalyticsService.getInstance().sessionStart();
 
         // Fade overlay resources
         fadeBatch = new SpriteBatch();
@@ -61,6 +67,7 @@ public class OdysseyGame extends Game {
         super.render();   // delegates to the active Screen's render()
 
         float delta = Gdx.graphics.getDeltaTime();
+        AnalyticsService.getInstance().tick(delta);
 
         if (fadingOut) {
             fadeTimer += delta;
@@ -122,7 +129,9 @@ public class OdysseyGame extends Game {
                      + "→"   // → right arrow
                      + "▶"   // ▶ right-pointing triangle
                      + "▲"   // ▲ up-pointing triangle
-                     + "✓";  // ✓ check mark
+                     + "✓"   // ✓ check mark
+                     + "♥"   // ♥ heart (lives HUD)
+                     + "◆";  // ◆ diamond (gems HUD)
 
         p.size = 17; BitmapFont font   = gen.generateFont(p);
         p.size = 24; BitmapFont medium = gen.generateFont(p);
@@ -160,15 +169,17 @@ public class OdysseyGame extends Game {
         s.add("heading", heading);
         s.add("accent",  accent);
 
-        // ── TextButton default — dark panel, white text, state driven by setColor() ──
-        // The drawable is a solid white pixel; each button calls setColor() each frame
-        // to apply BTN_LOCKED / BTN_BUYABLE / BTN_GO etc. from OdysseyTheme.
+        // ── TextButton default — white rounded NinePatch, state driven by setColor() ──
+        // The drawable is a white rounded rectangle (r=22); each button calls setColor()
+        // each frame to apply BTN_LOCKED / BTN_BUYABLE / BTN_GO etc. from OdysseyTheme.
+        Color wBorder = new Color(0.55f, 0.55f, 0.55f, 1f);
+        NinePatchDrawable roundedWhite = makeRoundedBtn(Color.WHITE, wBorder, 22);
         TextButton.TextButtonStyle btn = new TextButton.TextButtonStyle();
         btn.font              = font;
-        btn.up                = s.newDrawable("white", OdysseyTheme.PANEL_BG);
-        btn.over              = s.newDrawable("white", OdysseyTheme.BTN_AVAILABLE);
-        btn.down              = s.newDrawable("white", OdysseyTheme.BTN_ACTIVE);
-        btn.disabled          = s.newDrawable("white", OdysseyTheme.BTN_LOCKED);
+        btn.up                = roundedWhite;
+        btn.over              = roundedWhite;
+        btn.down              = roundedWhite;
+        btn.disabled          = makeRoundedBtn(Color.WHITE, new Color(0.30f, 0.30f, 0.30f, 1f), 22);
         btn.fontColor         = OdysseyTheme.TEXT_PRI;
         btn.downFontColor     = OdysseyTheme.TEXT_PRI;
         btn.disabledFontColor = OdysseyTheme.TEXT_DIM;
@@ -177,10 +188,10 @@ public class OdysseyGame extends Game {
         // Toggle (planet selection in GalacticMap) — unchanged behavior, new colors
         TextButton.TextButtonStyle tog = new TextButton.TextButtonStyle();
         tog.font             = font;
-        tog.up               = s.newDrawable("white", OdysseyTheme.PANEL_BG);
-        tog.over             = s.newDrawable("white", OdysseyTheme.BTN_AVAILABLE);
-        tog.down             = s.newDrawable("white", OdysseyTheme.BTN_ACTIVE);
-        tog.checked          = s.newDrawable("white", OdysseyTheme.BTN_BUYABLE);
+        tog.up               = roundedWhite;
+        tog.over             = roundedWhite;
+        tog.down             = roundedWhite;
+        tog.checked          = makeRoundedBtn(Color.WHITE, new Color(0.35f, 0.55f, 1f, 1f), 22);
         tog.fontColor        = OdysseyTheme.TEXT_PRI;
         tog.checkedFontColor = OdysseyTheme.TEXT_PRI;
         s.add("toggle", tog);
@@ -192,27 +203,43 @@ public class OdysseyGame extends Game {
         pb.knobBefore  = s.newDrawable("white", new Color(0.1f, 0.8f, 0.3f, 1f));
         s.add("default-horizontal", pb);
 
-        // Sci-fi tile buttons — loaded from generated PNG assets
-        int M = 40; // NinePatch corner margin (matches 32px corner radius + some padding)
-        NinePatch npLocked   = new NinePatch(new Texture("ui/btn_locked.png"),    M,M,M,M);
-        NinePatch npAvail    = new NinePatch(new Texture("ui/btn_available.png"), M,M,M,M);
-        NinePatch npBuyable  = new NinePatch(new Texture("ui/btn_buyable.png"),   M,M,M,M);
-        NinePatch npActive   = new NinePatch(new Texture("ui/btn_active.png"),    M,M,M,M);
-        NinePatch npGo       = new NinePatch(new Texture("ui/btn_go.png"),        M,M,M,M);
-        NinePatch npGoLocked = new NinePatch(new Texture("ui/btn_golocked.png"),  M,M,M,M);
-        s.add("tile_locked",       new NinePatchDrawable(npLocked));
-        s.add("tile_available",    new NinePatchDrawable(npAvail));
-        s.add("tile_buyable",      new NinePatchDrawable(npBuyable));
-        s.add("tile_active",       new NinePatchDrawable(npActive));
-        s.add("tile_go",           new NinePatchDrawable(npGo));
-        s.add("tile_golocked",     new NinePatchDrawable(npGoLocked));
-        // Pressed variants — slightly brightened via color tint in makeTileStyle
-        s.add("tile_locked_dn",    new NinePatchDrawable(npLocked));
-        s.add("tile_available_dn", new NinePatchDrawable(npAvail));
-        s.add("tile_buyable_dn",   new NinePatchDrawable(npBuyable));
-        s.add("tile_active_dn",    new NinePatchDrawable(npActive));
-        s.add("tile_go_dn",        new NinePatchDrawable(npGo));
-        s.add("tile_golocked_dn",  new NinePatchDrawable(npGoLocked));
+        // Sci-fi tile buttons — programmatic rounded NinePatches (r=22)
+        // Each state has a fill colour from OdysseyTheme + a slightly lighter border.
+        // _dn (pressed) variants darken the fill by 25%.
+        Color bLocked   = new Color(0.14f, 0.14f, 0.24f, 1f);
+        Color bAvail    = new Color(0.32f, 0.36f, 0.58f, 1f);
+        Color bBuyable  = OdysseyTheme.ACCENT_E;
+        Color bActive   = new Color(0.45f, 0.65f, 1.00f, 1f);
+        Color bGo       = OdysseyTheme.ACCENT_GO;
+        Color bGoLocked = new Color(0.12f, 0.30f, 0.14f, 1f);
+
+        NinePatchDrawable npLocked   = makeRoundedBtn(OdysseyTheme.BTN_LOCKED,    bLocked,   22);
+        NinePatchDrawable npAvail    = makeRoundedBtn(OdysseyTheme.BTN_AVAILABLE, bAvail,    22);
+        NinePatchDrawable npBuyable  = makeRoundedBtn(OdysseyTheme.BTN_BUYABLE,   bBuyable,  22);
+        NinePatchDrawable npActive   = makeRoundedBtn(OdysseyTheme.BTN_ACTIVE,    bActive,   22);
+        NinePatchDrawable npGo       = makeRoundedBtn(OdysseyTheme.BTN_GO,        bGo,       22);
+        NinePatchDrawable npGoLocked = makeRoundedBtn(OdysseyTheme.BTN_GO_LOCKED, bGoLocked, 22);
+
+        // Pressed variants: darken fill by 25%
+        Color lockedDn   = darken(OdysseyTheme.BTN_LOCKED,    0.75f);
+        Color availDn    = darken(OdysseyTheme.BTN_AVAILABLE,  0.75f);
+        Color buyableDn  = darken(OdysseyTheme.BTN_BUYABLE,    0.75f);
+        Color activeDn   = darken(OdysseyTheme.BTN_ACTIVE,     0.75f);
+        Color goDn       = darken(OdysseyTheme.BTN_GO,         0.75f);
+        Color goLockedDn = darken(OdysseyTheme.BTN_GO_LOCKED,  0.75f);
+
+        s.add("tile_locked",       npLocked);
+        s.add("tile_available",    npAvail);
+        s.add("tile_buyable",      npBuyable);
+        s.add("tile_active",       npActive);
+        s.add("tile_go",           npGo);
+        s.add("tile_golocked",     npGoLocked);
+        s.add("tile_locked_dn",    makeRoundedBtn(lockedDn,   bLocked,   22));
+        s.add("tile_available_dn", makeRoundedBtn(availDn,    bAvail,    22));
+        s.add("tile_buyable_dn",   makeRoundedBtn(buyableDn,  bBuyable,  22));
+        s.add("tile_active_dn",    makeRoundedBtn(activeDn,   bActive,   22));
+        s.add("tile_go_dn",        makeRoundedBtn(goDn,       bGo,       22));
+        s.add("tile_golocked_dn",  makeRoundedBtn(goLockedDn, bGoLocked, 22));
         // Green "can afford" variant — used for action tile buttons when purchase is possible
         Color gcBorder = new Color(0.07f, 0.52f, 0.20f, 1f);
         Color gcGlow   = new Color(0.18f, 0.92f, 0.40f, 1f);
@@ -275,6 +302,29 @@ public class OdysseyGame extends Game {
         return new NinePatchDrawable(new NinePatch(tex, R + 10, R + 10, R + 10, R + 10));
     }
 
+    /** Generates a rounded-rectangle NinePatch drawable for TextButton styles.
+     *  fill  – interior colour (use Color.WHITE for styles that rely on setColor() tinting)
+     *  border – 2-pixel outer ring colour
+     *  r     – corner radius in Pixmap pixels */
+    private static NinePatchDrawable makeRoundedBtn(Color fill, Color border, int r) {
+        int SIZE = 64;
+        Pixmap pm = new Pixmap(SIZE, SIZE, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        pm.setColor(0, 0, 0, 0);
+        pm.fill();
+        fillRoundedRect(pm, 0,     0,     SIZE,     SIZE,     r,     border);
+        fillRoundedRect(pm, 2,     2,     SIZE - 4, SIZE - 4, r - 2, fill);
+        Texture tex = new Texture(pm);
+        pm.dispose();
+        int m = r + 2; // NinePatch margin: preserves corners, stretches flat centre
+        return new NinePatchDrawable(new NinePatch(tex, m, m, m, m));
+    }
+
+    /** Returns a new Color with r/g/b multiplied by factor (alpha unchanged). */
+    private static Color darken(Color c, float factor) {
+        return new Color(c.r * factor, c.g * factor, c.b * factor, c.a);
+    }
+
     private static NinePatch makeRoundedPanel(Color col, int r) {
         int SZ = 64;
         Pixmap pm = new Pixmap(SZ, SZ, Pixmap.Format.RGBA8888);
@@ -307,6 +357,14 @@ public class OdysseyGame extends Game {
         if (labScreen != null) { labScreen.dispose(); labScreen = null; }
     }
 
+    /** Dispose and rebuild EngineeringLabScreen immediately, bypassing fade/state guards. */
+    public void forceRebuildLab() {
+        if (labScreen != null) { labScreen.dispose(); labScreen = null; }
+        labScreen = new EngineeringLabScreen(this);
+        currentState = GameState.ENGINEERING_LAB;
+        setScreen(labScreen);
+    }
+
     public void transitionTo(GameState next) {
         if (fadingOut || fadingIn) return;   // already mid-transition
         if (next == currentState) return;
@@ -333,6 +391,11 @@ public class OdysseyGame extends Game {
                 flightScreen.resetFlight();
                 setScreen(flightScreen);
                 break;
+            case INTERN_DEPLOY:
+                if (deployScreen == null) deployScreen = new InternDeployScreen(this);
+                deployScreen.show();
+                setScreen(deployScreen);
+                break;
             case GALACTIC_MAP:
                 if (galacticScreen == null) galacticScreen = new GalacticMapScreen(this);
                 setScreen(galacticScreen);
@@ -341,18 +404,40 @@ public class OdysseyGame extends Game {
                 if (arrivalScreen == null) arrivalScreen = new NovaTerraArrivalScreen(this);
                 setScreen(arrivalScreen);
                 break;
+            case LEADERBOARD:
+                if (leaderboardScreen == null) leaderboardScreen = new LeaderboardScreen(this);
+                setScreen(leaderboardScreen);
+                break;
         }
     }
 
     public GameState getCurrentState() { return currentState; }
 
     @Override
+    public void pause() {
+        if (labScreen != null) labScreen.snapshotState();
+        ShipData.get().save();
+        AnalyticsService.getInstance().appBackgrounded();
+    }
+
+    @Override
+    public void resume() {
+        super.resume();
+        AnalyticsService.getInstance().appForegrounded();
+    }
+
+    @Override
     public void dispose() {
+        if (labScreen != null) labScreen.snapshotState();
+        ShipData.get().save();
+        AnalyticsService.getInstance().sessionEnd();
         if (mainMenuScreen != null) mainMenuScreen.dispose();
         if (labScreen      != null) labScreen.dispose();
         if (flightScreen   != null) flightScreen.dispose();
+        if (deployScreen   != null) deployScreen.dispose();
         if (galacticScreen != null) galacticScreen.dispose();
         if (arrivalScreen  != null) arrivalScreen.dispose();
+        if (leaderboardScreen != null) leaderboardScreen.dispose();
         if (fadeBatch      != null) fadeBatch.dispose();
         if (fadePixel      != null) fadePixel.dispose();
         skin.dispose();

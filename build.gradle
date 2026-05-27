@@ -27,6 +27,48 @@ repositories {
 
 ext.gdxVersion = '1.12.1'
 
+// ---- Analytics config: read .env, generate AnalyticsConfig.java ----
+def analyticsEnv = [
+    ANALYTICS_URL    : '',
+    ANALYTICS_TOKEN  : '',
+    ANALYTICS_APP_ID : 'innovation-odyssey',
+    ANALYTICS_ENV    : 'production',
+    ANALYTICS_VERSION: '0.1.0'
+]
+def envFile = file('.env')
+if (envFile.exists()) {
+    envFile.eachLine { line ->
+        if (!line.startsWith('#') && line.contains('=')) {
+            def idx = line.indexOf('=')
+            def k   = line.substring(0, idx).trim()
+            def v   = line.substring(idx + 1).trim()
+            if (analyticsEnv.containsKey(k)) analyticsEnv[k] = v
+        }
+    }
+}
+
+task generateAnalyticsConfig {
+    def outFile = file('src/com/odyssey/analytics/AnalyticsConfig.java')
+    if (envFile.exists()) inputs.file(envFile)
+    outputs.file(outFile)
+    doLast {
+        outFile.parentFile.mkdirs()
+        outFile.text = """\
+package com.odyssey.analytics;
+// AUTO-GENERATED from .env — do not edit or commit
+public final class AnalyticsConfig {
+    public static final String BASE_URL       = "${analyticsEnv.ANALYTICS_URL}";
+    public static final String CLIENT_SECRET  = "${analyticsEnv.ANALYTICS_TOKEN}";
+    public static final String APP_ID         = "${analyticsEnv.ANALYTICS_APP_ID}";
+    public static final String ENV            = "${analyticsEnv.ANALYTICS_ENV}";
+    public static final String CLIENT_VERSION = "${analyticsEnv.ANALYTICS_VERSION}";
+}
+"""
+    }
+}
+compileJava.dependsOn generateAnalyticsConfig
+// ---- end analytics config ----
+
 dependencies {
     implementation "com.badlogicgames.gdx:gdx:$gdxVersion"
     implementation "com.badlogicgames.gdx:gdx-box2d:$gdxVersion"
@@ -35,6 +77,7 @@ dependencies {
     runtimeOnly    "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
     runtimeOnly    "com.badlogicgames.gdx:gdx-box2d-platform:$gdxVersion:natives-desktop"
     runtimeOnly    "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-desktop"
+    implementation 'com.google.code.gson:gson:2.10.1'
 }
 
 sourceSets {

@@ -2,16 +2,23 @@ package com.odyssey.physics;
 
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.*;
+import com.badlogic.gdx.utils.ObjectMap;
 import com.odyssey.ShipData;
 
 public class EnergyContactListener implements ContactListener {
 
     private final Vector2 normVec = new Vector2();
+    /** Tracks last-collision timestamp per orb body; written here, read in stepPhysics idle-pull. */
+    private final ObjectMap<Body, Long> ballLastHitMs;
 
     // Sparks (◆/❅) earned per collision type
     private static final float SPARK_INTERN_INTERN = 20f;  // multiplied by collisionEnergyMult
     private static final float SPARK_WALL          = 1f;   // every ring/wall hit
     private static final float SPARK_GRAVITY       = 50f;  // gravity-well core contact
+
+    public EnergyContactListener(ObjectMap<Body, Long> ballLastHitMs) {
+        this.ballLastHitMs = ballLastHitMs;
+    }
 
     @Override
     public void beginContact(Contact contact) {
@@ -24,14 +31,26 @@ public class EnergyContactListener implements ContactListener {
 
         // ---- Classify each body by its userData token ----
         boolean aIsIntern = bodyA.getUserData() instanceof String
-                            && ((String) bodyA.getUserData()).startsWith("INTERN");
+                            && (((String) bodyA.getUserData()).startsWith("INTERN")
+                                || "PELLET".equals(bodyA.getUserData()));
         boolean bIsIntern = bodyB.getUserData() instanceof String
-                            && ((String) bodyB.getUserData()).startsWith("INTERN");
+                            && (((String) bodyB.getUserData()).startsWith("INTERN")
+                                || "PELLET".equals(bodyB.getUserData()));
 
-        // Cryo-Vent impulse is handled entirely in stepPhysics — skip here
-        boolean aIsCryo = "CRYO_VENT".equals(bodyA.getUserData());
-        boolean bIsCryo = "CRYO_VENT".equals(bodyB.getUserData());
-        if (aIsCryo || bIsCryo) return;
+        // Icicle Node contacts are handled entirely in stepPhysics — skip here
+        boolean aIsIcicle = "ICICLE".equals(bodyA.getUserData());
+        boolean bIsIcicle = "ICICLE".equals(bodyB.getUserData());
+        if (aIsIcicle || bIsIcicle) return;
+
+        // Stamp last-hit time for any intern involved — used by idle-pull in stepPhysics
+        if (ballLastHitMs != null) {
+            long now = System.currentTimeMillis();
+            if (aIsIntern) ballLastHitMs.put(bodyA, now);
+            if (bIsIntern) ballLastHitMs.put(bodyB, now);
+        }
+
+        // Pause all earnings while player is placing a structure
+        if (ShipData.get().placingStructure) return;
 
         // Ember IV: Kinetic Blade slam — award +35 J per impact
         boolean aIsBlade = "KINETIC_BLADE".equals(bodyA.getUserData());
@@ -61,6 +80,39 @@ public class EnergyContactListener implements ContactListener {
         boolean aIsStdBumper = bodyA.getUserData() instanceof ShipData.BumperHitData;
         boolean bIsStdBumper = bodyB.getUserData() instanceof ShipData.BumperHitData;
 
+        // Frostheim arm bumpers — fixed 25 SP, bypass normal bumper multiplier
+        boolean aIsArmBumper = aIsStdBumper && ((ShipData.BumperHitData) bodyA.getUserData()).isArmBumper;
+        boolean bIsArmBumper = bIsStdBumper && ((ShipData.BumperHitData) bodyB.getUserData()).isArmBumper;
+        if (aIsArmBumper || bIsArmBumper) {
+            if (aIsIntern || bIsIntern) {
+                ShipData sdArm = ShipData.get();
+                sdArm.addCrystals(25f);
+                queueFloatNum(contact, bodyA, bodyB, 25f, 3, sdArm);
+                if (aIsArmBumper) ((ShipData.BumperHitData) bodyA.getUserData()).lastHitMs = System.currentTimeMillis();
+                if (bIsArmBumper) ((ShipData.BumperHitData) bodyB.getUserData()).lastHitMs = System.currentTimeMillis();
+            }
+            return;
+        }
+
+        // Frostheim valley notch guards — 8 SP per hit, 280ms cooldown (Perk C)
+        boolean aIsValleyBlade = aIsStdBumper && ((ShipData.BumperHitData) bodyA.getUserData()).isValleyBlade;
+        boolean bIsValleyBlade = bIsStdBumper && ((ShipData.BumperHitData) bodyB.getUserData()).isValleyBlade;
+        if (aIsValleyBlade || bIsValleyBlade) {
+            if (aIsIntern || bIsIntern) {
+                Body bladeBody = aIsValleyBlade ? bodyA : bodyB;
+                ShipData.BumperHitData vhd = (ShipData.BumperHitData) bladeBody.getUserData();
+                long now = System.currentTimeMillis();
+                if (now < vhd.lastHitMs) vhd.lastHitMs = now; // NTP clock rollback guard
+                if (now - vhd.lastHitMs >= 280) {
+                    ShipData sdVb = ShipData.get();
+                    sdVb.addCrystals(8f);
+                    queueFloatNum(contact, bodyA, bodyB, 8f, 3, sdVb);
+                    vhd.lastHitMs = now;
+                }
+            }
+            return;
+        }
+
         // fixtureIsBump catches attractor core (Level 1: "BUMPER") and Tesla-Coil core (Level 2: "TESLA_COIL_CORE")
         boolean fixtureIsBump = "BUMPER".equals(fA.getUserData())
                              || "BUMPER".equals(fB.getUserData())
@@ -76,6 +128,7 @@ public class EnergyContactListener implements ContactListener {
             // ---- Intern-intern collision: primary Spark / Frost-Shard source ----
             float sparks = SPARK_INTERN_INTERN * sd.collisionEnergyMult;
             sd.addCrystals(sparks);
+            sd.pendingCollisionSounds++;
             queueFloatNum(contact, bodyA, bodyB, sparks, 1, sd);
 
             // Mutual separation impulse keeps the chaos alive
@@ -110,10 +163,16 @@ public class EnergyContactListener implements ContactListener {
             }
 
         } else if (aIsIntern || bIsIntern) {
-            // ---- Wall / ring contact: tiny passive trickle ----
+            // ---- Wall / ring contact ----
             float wallGain = SPARK_WALL * sd.wallEnergyMult;
-            sd.addCrystals(wallGain);
-            queueFloatNum(contact, bodyA, bodyB, wallGain, 0, sd); // color 0 = energy (green)
+            if (wallGain > 0f) {
+                sd.addCrystals(wallGain);
+                queueFloatNum(contact, bodyA, bodyB, wallGain, 0, sd);
+            }
+            // Perk 2 (Wall Energy, wallEnergyMult >= 2): also generate energy
+            if (sd.wallEnergyMult >= 2f) {
+                sd.addJoules(8f);
+            }
         }
     }
 

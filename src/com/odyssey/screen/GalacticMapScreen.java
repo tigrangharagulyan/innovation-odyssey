@@ -91,11 +91,13 @@ public class GalacticMapScreen extends ScreenAdapter {
         setJump.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent event, Actor actor) {
                 ShipData.get().commitSelectedPlanet();
+                game.resetLabScreen();
                 game.transitionTo(GameState.ENGINEERING_LAB);
             }
         });
         departure.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent event, Actor actor) {
+                game.resetLabScreen();
                 game.transitionTo(GameState.ENGINEERING_LAB);
             }
         });

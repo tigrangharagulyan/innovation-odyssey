@@ -2,14 +2,24 @@ package com.odyssey.screen;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.InputAdapter;
+import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.scenes.scene2d.Actor;
+import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.Touchable;
+import com.badlogic.gdx.scenes.scene2d.ui.Label;
+import com.badlogic.gdx.scenes.scene2d.ui.Table;
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
+import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import com.badlogic.gdx.utils.viewport.FitViewport;
@@ -22,14 +32,14 @@ public class MainMenuScreen extends ScreenAdapter {
 
     private static final float W = 480f, H = 854f;
 
-    // Planet node positions and sizes (0-4 = game planets, 5-6 = locked)
-    private static final float[] NX = {130, 350, 118, 352, 118, 338, 228};
-    private static final float[] NY = {120, 230, 345, 460, 570, 660, 750};
-    private static final float[] NR = { 40,  36,  34,  32,  30,  27,  27};
+    // Planet node positions and sizes (0-4 = game planets, 5 = locked/coming soon)
+    private static final float[] NX = {130, 350, 118, 352, 118, 338};
+    private static final float[] NY = {120, 230, 345, 460, 570, 660};
+    private static final float[] NR = { 40,  36,  34,  32,  30,  27};
 
-    // Zigzag path through 5 game planets + locked branch
+    // Zigzag path through 5 game planets + 1 locked stub
     private static final int[][] EDGES = {
-        {0, 1}, {1, 2}, {2, 3}, {3, 4}, {4, 5}, {4, 6}, {5, 6}
+        {0, 1}, {1, 2}, {2, 3}, {3, 4}, {4, 5}
     };
 
     // Planet glow colors: {innerR,G,B, outerR,G,B}
@@ -50,6 +60,16 @@ public class MainMenuScreen extends ScreenAdapter {
 
     // NEW GAME button bounds (bottom-right corner)
     private static final float NG_X = 312f, NG_Y = 16f, NG_W = 148f, NG_H = 36f;
+    // SHOP button — width/height only; Y is dynamic (just below the green stats panel)
+    private static final float SH_W = 130f, SH_H = 36f;
+    private static final float SH_X = (480f - 130f) / 2f;
+
+    private float shopY() { return statsY() - 72f - 8f - SH_H; }
+
+    // LEADERBOARD button — left of shop, same visual row
+    private static final float LB_W = 120f, LB_H = 36f;
+    private static final float LB_X = 16f;
+    private float lbY() { return statsY() - 72f - 8f - LB_H; }
 
     private final OdysseyGame   game;
     private final ExtendViewport viewport;
@@ -57,11 +77,23 @@ public class MainMenuScreen extends ScreenAdapter {
     private final SpriteBatch   batch;
     private final BitmapFont    titleFont, bodyFont, smallFont;
 
+    private Stage stage;
+    private Table shopOverlay;
+
+    // Record-attempt overlays
+    private Table replayDialogue;      // shown when player taps a past planet
+    private Table replayResultOverlay; // shown after returning from a replay run
+
+    // Leaderboard rank popup (Scene2D, shown after arrival)
+    private Table   rankPopup;
+    private boolean rankPopupPending = false;
+
     // Pre-baked starfield
     private final float[] starX, starY, starA;
 
     private float rocketX, rocketY, rocketAngle;
-    private int   currentIdx;
+    private int   currentIdx;   // rocket position — replay planet during replay
+    private int   displayIdx;   // planet unlock display — always real progress
     private float animTime = 0f;
     private final Vector3 tv = new Vector3();
     private boolean showRocketTutorial = false;
@@ -95,8 +127,29 @@ public class MainMenuScreen extends ScreenAdapter {
             @Override public boolean touchDown(int sx, int sy, int ptr, int btn) {
                 tv.set(sx, sy, 0);
                 viewport.unproject(tv);
+
+                // Replay mode: tap the player's real saved planet to abandon and restore progress
+                if (ShipData.get().isReplayMode) {
+                    int mySaveIdx = Math.min(ShipData.get().rb_currentPlanetIndex, NX.length - 1);
+                    float pcx = NX[mySaveIdx], pcy = NY[mySaveIdx], pr = NR[mySaveIdx] + 22f;
+                    float pdx = tv.x - pcx, pdy = tv.y - pcy;
+                    if (pdx*pdx + pdy*pdy < pr*pr) {
+                        ShipData sd3 = ShipData.get();
+                        sd3.abandonReplay();
+                        sd3.save();
+                        game.resetLabScreen();
+                        game.transitionTo(GameState.ENGINEERING_LAB);
+                        return true;
+                    }
+                }
+
                 float dx = tv.x - rocketX, dy = tv.y - rocketY;
-                if (dx*dx + dy*dy < ROCKET_HIT * ROCKET_HIT) {
+                float badgeTapX = rocketX - 61f, badgeTapY = rocketY + ROCKET_HIT + 20f;
+                boolean inRocket = dx*dx + dy*dy < ROCKET_HIT * ROCKET_HIT;
+                boolean inBadge  = tv.x >= badgeTapX && tv.x <= badgeTapX + 122f
+                                && tv.y >= badgeTapY && tv.y <= badgeTapY + 38f;
+                if (inRocket || inBadge) {
+                    game.resetLabScreen();
                     game.transitionTo(GameState.ENGINEERING_LAB);
                     return true;
                 }
@@ -108,6 +161,15 @@ public class MainMenuScreen extends ScreenAdapter {
                         return true;
                     }
                 }
+                // Past-planet tap: open record attempt dialogue
+                for (int pi = 0; pi < currentIdx; pi++) {
+                    float pcx = NX[pi], pcy = NY[pi], pr = NR[pi];
+                    float pdx = tv.x - pcx, pdy = tv.y - pcy;
+                    if (pdx*pdx + pdy*pdy < pr*pr) {
+                        openReplayDialogue(pi);
+                        return true;
+                    }
+                }
                 // NEW GAME button
                 if (tv.x >= NG_X && tv.x <= NG_X + NG_W && tv.y >= NG_Y && tv.y <= NG_Y + NG_H) {
                     ShipData.get().reset();
@@ -115,21 +177,326 @@ public class MainMenuScreen extends ScreenAdapter {
                     game.transitionTo(GameState.ENGINEERING_LAB);
                     return true;
                 }
+                // SHOP button — show shop overlay
+                if (tv.x >= SH_X && tv.x <= SH_X + SH_W && tv.y >= shopY() && tv.y <= shopY() + SH_H) {
+                    if (shopOverlay != null) shopOverlay.setVisible(true);
+                    return true;
+                }
+                // LEADERBOARD button
+                if (tv.x >= LB_X && tv.x <= LB_X + LB_W && tv.y >= lbY() && tv.y <= lbY() + LB_H) {
+                    game.transitionTo(GameState.LEADERBOARD);
+                    return true;
+                }
                 return false;
             }
         });
+
+        // ---- Shop overlay (Scene2D) ----
+        if (stage != null) stage.dispose();
+        stage = new Stage(new ExtendViewport(W, H));
+        buildShopOverlay();
+        buildRankPopup();
+        buildReplayResultOverlay();
+        Gdx.input.setInputProcessor(new InputMultiplexer(stage,
+            Gdx.input.getInputProcessor()));
+    }
+
+    private void buildShopOverlay() {
+        TextButton.TextButtonStyle closeStyle = game.skin.get("default", TextButton.TextButtonStyle.class);
+
+        shopOverlay = new Table();
+        shopOverlay.setFillParent(true);
+        shopOverlay.setVisible(false);
+        shopOverlay.setTouchable(Touchable.enabled);
+        shopOverlay.background(game.skin.newDrawable("white", new Color(0f, 0.03f, 0.10f, 0.96f)));
+        shopOverlay.center();
+
+        // ---- Title ----
+        Label title = new Label("SHOP", game.skin);
+        title.setFontScale(2.80f);
+        title.setColor(1f, 0.84f, 0.22f, 1f);
+        shopOverlay.add(title).padBottom(6f).row();
+
+        Label sub = new Label("coming soon", game.skin);
+        sub.setFontScale(0.80f);
+        sub.setColor(0.55f, 0.62f, 0.72f, 1f);
+        shopOverlay.add(sub).padBottom(28f).row();
+
+        // ---- Cards ----
+        addShopCard(shopOverlay,
+            "\u25B6",  new Color(0.22f, 0.88f, 1.00f, 1f),
+            "ADS",     new Color(0.85f, 0.96f, 1.00f, 1f),
+            "Watch short rewarded ads\nto earn bonus Gems & energy.",
+            new Color(0.60f, 0.78f, 0.90f, 1f));
+
+        addShopCard(shopOverlay,
+            "\u2666",  new Color(0.30f, 0.85f, 0.40f, 1f),
+            "GEMS",    new Color(0.82f, 1.00f, 0.85f, 1f),
+            "Buy hard currency packs\nto unlock lives & boosts.",
+            new Color(0.60f, 0.85f, 0.65f, 1f));
+
+        addShopCard(shopOverlay,
+            "\u221E",  new Color(1.00f, 0.65f, 0.18f, 1f),
+            "PERMANENTS", new Color(1.00f, 0.90f, 0.72f, 1f),
+            "One-time lifetime upgrades:\nmultipliers, speed & capacity.",
+            new Color(0.88f, 0.72f, 0.45f, 1f));
+
+        // ---- Close button ----
+        TextButton btnClose = new TextButton("CLOSE", closeStyle);
+        btnClose.getLabel().setFontScale(0.95f);
+        btnClose.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent e, Actor a) {
+                shopOverlay.setVisible(false);
+            }
+        });
+        shopOverlay.add(btnClose).width(260f).height(64f).padTop(28f).row();
+
+        stage.addActor(shopOverlay);
+    }
+
+    private void buildRankPopup() {
+        final ShipData sd = ShipData.get();
+        if (sd.pendingRankResult < 0) return; // nothing to show
+
+        rankPopup = new Table();
+        rankPopup.setFillParent(true);
+        rankPopup.setBackground(game.skin.newDrawable("white", new Color(0f, 0.02f, 0.08f, 0.92f)));
+        rankPopup.center();
+
+        Label title = new Label("LEADERBOARD", game.skin);
+        rankPopup.add(title).center().padBottom(8f).row();
+
+        String planetName = ShipData.PLANETS[sd.pendingRankPlanet].name;
+        Label rankLabel = new Label("Rank #" + sd.pendingRankResult + "  on  " + planetName, game.skin);
+        rankLabel.setAlignment(Align.center);
+        rankLabel.setColor(sd.pendingRankResult <= 3
+            ? new Color(1f, 0.82f, 0.20f, 1f)
+            : new Color(0.22f, 1.00f, 0.52f, 1f));
+        rankPopup.add(rankLabel).center().padBottom(14f).row();
+
+        // Context snippet: up to 5 rows around player rank
+        float bestTime = sd.bestArrivalTimes[sd.pendingRankPlanet];
+        java.util.List<com.odyssey.FakeLeaderboard.Entry> board =
+            com.odyssey.FakeLeaderboard.getBoard(sd.pendingRankPlanet, bestTime);
+        int playerIdx = sd.pendingRankResult - 1;
+        int start = Math.max(0, playerIdx - 2);
+        int end   = Math.min(board.size(), start + 5);
+        start     = Math.max(0, end - 5);
+        StringBuilder sb = new StringBuilder();
+        for (int i = start; i < end; i++) {
+            com.odyssey.FakeLeaderboard.Entry e = board.get(i);
+            if (e.isPlayer) sb.append("[#").append(i+1).append("]  > YOU <  ")
+                              .append(com.odyssey.FakeLeaderboard.formatTime(e.timeSeconds)).append("\n");
+            else            sb.append("  #").append(i+1).append("   ").append(e.name)
+                              .append("   ").append(com.odyssey.FakeLeaderboard.formatTime(e.timeSeconds)).append("\n");
+        }
+        Label ctx = new Label(sb.toString().trim(), game.skin);
+        ctx.setFontScale(0.72f);
+        ctx.setColor(0.75f, 0.85f, 1.00f, 0.90f);
+        ctx.setAlignment(Align.center);
+        ctx.setWrap(true);
+        rankPopup.add(ctx).width(380f).center().padBottom(20f).row();
+
+        TextButton viewFull = new TextButton("VIEW FULL BOARD", game.skin);
+        viewFull.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent event, Actor actor) {
+                sd.pendingRankResult = -1;
+                sd.pendingRankPlanet = -1;
+                game.transitionTo(GameState.LEADERBOARD);
+            }
+        });
+
+        TextButton cont = new TextButton("CONTINUE", game.skin);
+        cont.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent event, Actor actor) {
+                sd.pendingRankResult = -1;
+                sd.pendingRankPlanet = -1;
+                rankPopup.setVisible(false);
+            }
+        });
+
+        rankPopup.add(viewFull).width(320f).height(64f).padBottom(10f).row();
+        rankPopup.add(cont).width(320f).height(60f).row();
+
+        stage.addActor(rankPopup);
+    }
+
+    /** Adds one shop category card row to the parent table. */
+    private void addShopCard(Table parent,
+                             String icon,  Color iconColor,
+                             String name,  Color nameColor,
+                             String desc,  Color descColor) {
+        // Card background
+        Table card = new Table();
+        card.background(game.skin.newDrawable("white", new Color(0.04f, 0.08f, 0.18f, 0.85f)));
+        card.pad(14f, 18f, 14f, 18f);
+
+        // Icon column
+        Label lblIcon = new Label(icon, game.skin);
+        lblIcon.setFontScale(2.60f);
+        lblIcon.setColor(iconColor);
+        card.add(lblIcon).width(54f).top().padRight(16f);
+
+        // Text column
+        Table text = new Table();
+        Label lblName = new Label(name, game.skin);
+        lblName.setFontScale(1.30f);
+        lblName.setColor(nameColor);
+        text.add(lblName).left().row();
+
+        Label lblDesc = new Label(desc, game.skin);
+        lblDesc.setFontScale(0.72f);
+        lblDesc.setColor(descColor);
+        lblDesc.setWrap(true);
+        text.add(lblDesc).left().width(260f).row();
+
+        card.add(text).left();
+
+        parent.add(card).width(380f).padBottom(12f).row();
+    }
+
+    /** Builds and shows the record-attempt dialogue for planet at index pi. */
+    private void openReplayDialogue(int pi) {
+        // Tear down any previous instance
+        if (replayDialogue != null) { replayDialogue.remove(); replayDialogue = null; }
+
+        ShipData sd   = ShipData.get();
+        String planet = ShipData.PLANETS[pi].name;
+        int cost      = 50 * (pi + 1);
+        boolean canAfford = sd.diamonds >= cost;
+
+        // Best time text
+        String bestText;
+        if (sd.bestArrivalTimes[pi] == Float.MAX_VALUE) {
+            bestText = "No record yet";
+        } else {
+            int totalSecs = (int) sd.bestArrivalTimes[pi];
+            bestText = String.format("Best: %d:%02d", totalSecs / 60, totalSecs % 60);
+        }
+
+        replayDialogue = new Table();
+        replayDialogue.setFillParent(true);
+        replayDialogue.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.enabled);
+        replayDialogue.background(game.skin.newDrawable("white",
+            new com.badlogic.gdx.graphics.Color(0f, 0.03f, 0.12f, 0.95f)));
+        replayDialogue.center();
+
+        Label title = new Label(planet, game.skin);
+        title.setColor(0.35f, 1.00f, 0.85f, 1f);
+        title.setFontScale(1.6f);
+        replayDialogue.add(title).padBottom(8f).row();
+
+        Label bestLbl = new Label(bestText, game.skin);
+        bestLbl.setColor(0.70f, 0.80f, 0.90f, 0.90f);
+        replayDialogue.add(bestLbl).padBottom(4f).row();
+
+        Label costLbl = new Label("Cost: " + cost + " \u25C6", game.skin);
+        costLbl.setColor(canAfford ? new com.badlogic.gdx.graphics.Color(0.38f, 0.92f, 1f, 1f)
+                                   : new com.badlogic.gdx.graphics.Color(0.55f, 0.55f, 0.55f, 0.70f));
+        replayDialogue.add(costLbl).padBottom(24f).row();
+
+        TextButton tryBtn = new TextButton("TRY FOR RECORD", game.skin);
+        tryBtn.setColor(canAfford ? com.odyssey.OdysseyTheme.BTN_ACTIVE
+                                  : com.odyssey.OdysseyTheme.BTN_LOCKED);
+        tryBtn.setDisabled(!canAfford);
+        if (canAfford) {
+            final int planetIdx = pi;
+            tryBtn.addListener(new com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
+                @Override public void clicked(com.badlogic.gdx.scenes.scene2d.InputEvent e, float x, float y) {
+                    replayDialogue.remove();
+                    replayDialogue = null;
+                    ShipData.get().startReplay(planetIdx);
+                    game.forceRebuildLab();
+                    game.transitionTo(GameState.ENGINEERING_LAB);
+                }
+            });
+        }
+        replayDialogue.add(tryBtn).width(260f).height(52f).padBottom(10f).row();
+
+        TextButton cancelBtn = new TextButton("CANCEL", game.skin);
+        cancelBtn.addListener(new com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
+            @Override public void clicked(com.badlogic.gdx.scenes.scene2d.InputEvent e, float x, float y) {
+                replayDialogue.remove();
+                replayDialogue = null;
+            }
+        });
+        replayDialogue.add(cancelBtn).width(200f).height(48f).row();
+
+        stage.addActor(replayDialogue);
+    }
+
+    /** Builds and shows the replay result overlay. Clears pendingReplayResult. */
+    private void buildReplayResultOverlay() {
+        ShipData sd = ShipData.get();
+        if (!sd.pendingReplayResult) return;
+        sd.pendingReplayResult = false;
+
+        if (replayResultOverlay != null) { replayResultOverlay.remove(); replayResultOverlay = null; }
+
+        String planet = ShipData.PLANETS[sd.pendingReplayPlanetIdx].name;
+        int totalSecs = (int) sd.pendingReplayTime;
+        String timeStr = String.format("%d:%02d", totalSecs / 60, totalSecs % 60);
+
+        replayResultOverlay = new Table();
+        replayResultOverlay.setFillParent(true);
+        replayResultOverlay.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.enabled);
+        replayResultOverlay.background(game.skin.newDrawable("white",
+            new com.badlogic.gdx.graphics.Color(0f, 0.03f, 0.12f, 0.95f)));
+        replayResultOverlay.center();
+
+        Label planetLbl = new Label(planet, game.skin);
+        planetLbl.setColor(0.35f, 1.00f, 0.85f, 1f);
+        planetLbl.setFontScale(1.5f);
+        replayResultOverlay.add(planetLbl).padBottom(12f).row();
+
+        if (sd.pendingReplayIsNewRecord) {
+            Label newRec = new Label("NEW RECORD!", game.skin);
+            newRec.setColor(1.00f, 0.82f, 0.10f, 1f);
+            newRec.setFontScale(1.8f);
+            replayResultOverlay.add(newRec).padBottom(8f).row();
+        }
+
+        Label timeLbl = new Label(timeStr, game.skin);
+        timeLbl.setColor(1f, 1f, 1f, 0.95f);
+        timeLbl.setFontScale(2.0f);
+        replayResultOverlay.add(timeLbl).padBottom(6f).row();
+
+        if (!sd.pendingReplayIsNewRecord) {
+            float best = sd.bestArrivalTimes[sd.pendingReplayPlanetIdx];
+            int bestSecs = (int) best;
+            String bestStr = best == Float.MAX_VALUE ? "\u2014"
+                : String.format("Best: %d:%02d", bestSecs / 60, bestSecs % 60);
+            Label bestLbl = new Label(bestStr, game.skin);
+            bestLbl.setColor(0.55f, 0.65f, 0.75f, 0.85f);
+            replayResultOverlay.add(bestLbl).padBottom(20f).row();
+        } else {
+            replayResultOverlay.add(new Label("", game.skin)).padBottom(20f).row();
+        }
+
+        TextButton closeBtn = new TextButton("CLOSE", game.skin);
+        closeBtn.addListener(new com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
+            @Override public void clicked(com.badlogic.gdx.scenes.scene2d.InputEvent e, float x, float y) {
+                replayResultOverlay.remove();
+                replayResultOverlay = null;
+            }
+        });
+        replayResultOverlay.add(closeBtn).width(200f).height(52f).row();
+
+        stage.addActor(replayResultOverlay);
     }
 
     private void refresh() {
         ShipData sd = ShipData.get();
-        currentIdx = Math.min(sd.currentPlanetIndex, NX.length - 1);
+        currentIdx  = Math.min(sd.currentPlanetIndex, NX.length - 1);
+        int realPlanetIdx = sd.isReplayMode ? sd.rb_currentPlanetIndex : sd.currentPlanetIndex;
+        displayIdx  = Math.min(realPlanetIdx, ShipData.PLANETS.length - 1);
         int next   = Math.min(currentIdx + 1, NX.length - 1);
 
         // Map sectorReached (-1..2) to a position along the current edge.
         // Checkpoint dots are at t = 0.25, 0.50, 0.75.
         float t;
-        if (sd.arrivalReady) {
-            t = 1.0f; // show at destination planet
+        if (sd.arrivalReady && sd.sectorReached < 0) {
+            t = 0.0f; // arrived, no flights yet — sit at destination planet
         } else {
             switch (sd.sectorReached) {
                 case 0:  t = 0.25f; break; // CP I  — first dot
@@ -161,6 +528,7 @@ public class MainMenuScreen extends ScreenAdapter {
     @Override
     public void render(float delta) {
         animTime += delta;
+        ShipData.get().tickLives();   // regen lives in real-time on main menu too
         Gdx.gl.glClearColor(OdysseyTheme.SPACE_BG.r, OdysseyTheme.SPACE_BG.g, OdysseyTheme.SPACE_BG.b, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
         viewport.apply();
@@ -173,16 +541,23 @@ public class MainMenuScreen extends ScreenAdapter {
         drawGrid();
         drawPaths();
         drawPlanets();
+
         drawRocket();
 
         drawNewGameButton();
+        drawShopButton();
+        drawLeaderboardButton();
+        drawTopStatsBg();
 
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
         drawTitle();
+        drawTopStatsText();
         drawLabels();
         drawBottomBar();
         drawNewGameLabel();
+        drawShopLabel();
+        drawLeaderboardLabel();
         batch.end();
 
         // Tutorial overlay drawn last — on top of all planet labels
@@ -191,6 +566,12 @@ public class MainMenuScreen extends ScreenAdapter {
             batch.begin();
             drawRocketTutorialText();
             batch.end();
+        }
+
+        // Stage (shop overlay)
+        if (stage != null) {
+            stage.act(delta);
+            stage.draw();
         }
     }
 
@@ -266,6 +647,7 @@ public class MainMenuScreen extends ScreenAdapter {
         sr.end();
     }
 
+
     private Color edgeColor(int a, int b) {
         if (isTraveled(a, b))   return GOLD;
         if (isActiveEdge(a, b)) return PATH_ON;
@@ -277,17 +659,16 @@ public class MainMenuScreen extends ScreenAdapter {
         for (int i = 0; i < NX.length; i++) {
             float cx = NX[i], cy = NY[i], r = NR[i];
             if (i < COL.length) {
-                float[] c   = COL[i];
-                float   dim = (i > currentIdx) ? 0.42f : 1f;
+                float[] c = COL[i];
                 for (int g = 5; g > 0; g--) {
-                    sr.setColor(c[0], c[1], c[2], 0.028f * g * dim);
+                    sr.setColor(c[0], c[1], c[2], 0.028f * g);
                     sr.circle(cx, cy, r + g * 8f, 24);
                 }
-                sr.setColor(c[3] * dim, c[4] * dim, c[5] * dim, 1f);
+                sr.setColor(c[3] * 0.45f, c[4] * 0.45f, c[5] * 0.45f, 1f);
                 sr.circle(cx, cy, r, 32);
-                sr.setColor(c[0] * dim, c[1] * dim, c[2] * dim, 1f);
+                sr.setColor(c[0] * 0.38f, c[1] * 0.38f, c[2] * 0.38f, 1f);
                 sr.circle(cx, cy, r * 0.66f, 32);
-                sr.setColor(1f, 1f, 1f, 0.14f * dim);
+                sr.setColor(1f, 1f, 1f, 0.06f);
                 sr.circle(cx - r * 0.22f, cy + r * 0.22f, r * 0.35f, 18);
             } else {
                 sr.setColor(0.07f, 0.08f, 0.12f, 1f);
@@ -303,7 +684,7 @@ public class MainMenuScreen extends ScreenAdapter {
         for (int i = 0; i < NX.length; i++) {
             float cx = NX[i], cy = NY[i], r = NR[i];
             if (i >= COL.length) {
-                sr.setColor(0.70f, 0.13f, 0.13f, 1f);
+                sr.setColor(0.38f, 0.10f, 0.10f, 0.70f);
                 sr.circle(cx, cy, r, 32);
                 sr.circle(cx, cy, r + 2.5f, 32);
                 sr.setColor(0.42f, 0.42f, 0.48f, 0.78f);
@@ -350,6 +731,169 @@ public class MainMenuScreen extends ScreenAdapter {
                 float ny2 = NY[currentIdx] + arcR * com.badlogic.gdx.math.MathUtils.sinDeg(ang);
                 sr.line(prevX, prevY, nx2, ny2);
                 prevX = nx2; prevY = ny2;
+            }
+            sr.end();
+        }
+
+        // Replay mode: amber pulsing glow on the player's REAL saved planet
+        if (ShipData.get().isReplayMode) {
+            int mySaveIdx = Math.min(ShipData.get().rb_currentPlanetIndex, NX.length - 1);
+            float cx = NX[mySaveIdx], cy = NY[mySaveIdx], r = NR[mySaveIdx];
+            float pulse = 0.70f + 0.30f * com.badlogic.gdx.math.MathUtils.sin(animTime * 3.2f);
+            sr.begin(ShapeRenderer.ShapeType.Line);
+            sr.setColor(1.00f, 0.72f, 0.12f, 0.90f * pulse);
+            sr.circle(cx, cy, r + 8f,  36);
+            sr.circle(cx, cy, r + 13f, 36);
+            sr.circle(cx, cy, r + 18f, 36);
+            sr.end();
+            sr.begin(ShapeRenderer.ShapeType.Filled);
+            sr.setColor(1.00f, 0.65f, 0.08f, 0.18f * pulse);
+            sr.circle(cx, cy, r + 22f, 36);
+            sr.end();
+        }
+
+        drawPlanetSymbols();
+
+        // Replay mode: "YOUR SAVE · TAP TO RETURN" label drawn in batch after symbols
+        if (ShipData.get().isReplayMode) {
+            int mySaveIdx = Math.min(ShipData.get().rb_currentPlanetIndex, NX.length - 1);
+            float cx = NX[mySaveIdx], cy = NY[mySaveIdx], r = NR[mySaveIdx];
+            GlyphLayout gl = new GlyphLayout();
+            batch.setProjectionMatrix(viewport.getCamera().combined);
+            batch.begin();
+            bodyFont.getData().setScale(0.72f);
+            bodyFont.setColor(1.00f, 0.80f, 0.20f, 0.95f);
+            gl.setText(bodyFont, "YOUR SAVE");
+            bodyFont.draw(batch, "YOUR SAVE", cx - gl.width * 0.5f, cy + r + 30f);
+            bodyFont.getData().setScale(0.58f);
+            bodyFont.setColor(0.88f, 0.65f, 0.12f, 0.80f);
+            gl.setText(bodyFont, "TAP TO RETURN");
+            bodyFont.draw(batch, "TAP TO RETURN", cx - gl.width * 0.5f, cy + r + 15f);
+            bodyFont.getData().setScale(1f);
+            batch.end();
+        }
+    }
+
+    /** Per-planet icon drawn inside the planet circle. */
+    private void drawPlanetSymbols() {
+        // Per-planet pulse (each offset in phase for organic feel)
+        float[] pulse = new float[5];
+        for (int i = 0; i < 5; i++)
+            pulse[i] = 0.65f + 0.35f * MathUtils.sin(animTime * 2.0f + i * 1.1f);
+
+        // ── Ambient glow halos behind each active planet symbol ───────────────
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        for (int i = 0; i < Math.min(NX.length, COL.length); i++) {
+            float cx = NX[i], cy = NY[i], r = NR[i];
+            if (i >= COL.length) continue;
+            float p = pulse[i];
+            float[] c = COL[i];
+            sr.setColor(c[0] * 0.5f, c[1] * 0.5f, c[2] * 0.5f, 0.09f * p);
+            sr.circle(cx, cy, r * 0.62f, 22);
+            sr.setColor(c[0] * 0.7f, c[1] * 0.7f, c[2] * 0.7f, 0.14f * p);
+            sr.circle(cx, cy, r * 0.38f, 16);
+        }
+
+        // ── Filled symbols: heart (Cryon Reach) + flame (Helios Forge) ────────
+        for (int i = 0; i < Math.min(NX.length, COL.length); i++) {
+            if (i >= COL.length) continue;
+            float cx = NX[i], cy = NY[i], r = NR[i];
+            float dim = 1.00f;
+            float p = pulse[i];
+            switch (i) {
+                case 3: { // Cryon Reach — heart
+                    float hr  = r * 0.27f;
+                    float bcy = cy + hr * 0.45f;
+                    // soft glow behind heart
+                    sr.setColor(1f, 0.28f, 0.48f, 0.18f * dim * p);
+                    sr.circle(cx, bcy - hr * 0.3f, hr * 2.3f, 18);
+                    // main heart
+                    sr.setColor(1f, 0.32f, 0.52f, 0.96f * dim);
+                    sr.circle(cx - hr, bcy, hr, 16);
+                    sr.circle(cx + hr, bcy, hr, 16);
+                    sr.triangle(cx - hr * 1.90f, bcy,
+                                cx + hr * 1.90f, bcy,
+                                cx,              cy - hr * 1.65f);
+                    break;
+                }
+                case 4: { // Helios Forge — forge flame
+                    float fh = r * 0.54f, fw = r * 0.38f;
+                    // outer glow orb
+                    sr.setColor(1f, 0.45f, 0.05f, 0.16f * dim * p);
+                    sr.circle(cx, cy, r * 0.50f, 18);
+                    // outer flame
+                    sr.setColor(1f, 0.52f, 0.10f, 0.90f * dim);
+                    sr.triangle(cx, cy + fh, cx - fw, cy - fh * 0.22f, cx + fw, cy - fh * 0.22f);
+                    // inner bright flame
+                    sr.setColor(1f, 0.96f, 0.48f, 0.97f * dim);
+                    sr.triangle(cx, cy + fh * 0.62f,
+                                cx - fw * 0.46f, cy - fh * 0.02f,
+                                cx + fw * 0.46f, cy - fh * 0.02f);
+                    break;
+                }
+            }
+        }
+        sr.end();
+
+        // ── Line symbols: Solara, Ember IV, Frostheim — drawn twice ───────────
+        // Pass 0 = glow (scaled up, low alpha); Pass 1 = sharp bright lines
+        for (int pass = 0; pass < 2; pass++) {
+            sr.begin(ShapeRenderer.ShapeType.Line);
+            for (int i = 0; i < Math.min(NX.length, COL.length); i++) {
+                if (i >= COL.length) continue;
+                float cx = NX[i], cy = NY[i], r = NR[i];
+                float dim = 1.00f;
+                float p = pulse[i];
+                float sc = (pass == 0) ? 1.10f : 1.00f;
+                switch (i) {
+                    case 0: { // Solara — centrifuge (two rings + 3 spinning spokes)
+                        float or1 = r * 0.56f * sc, or2 = r * 0.27f * sc;
+                        sr.setColor(1f, 0.95f, 0.55f, (pass == 0) ? 0.28f * dim * p : 0.96f * dim);
+                        sr.circle(cx, cy, or1, 26);
+                        sr.circle(cx, cy, or2, 16);
+                        for (int s = 0; s < 3; s++) {
+                            float ang = s * (float)(Math.PI * 2.0 / 3.0) + animTime * 0.55f;
+                            float cos = (float)Math.cos(ang), sin = (float)Math.sin(ang);
+                            sr.line(cx + cos * or2, cy + sin * or2,
+                                    cx + cos * or1, cy + sin * or1);
+                        }
+                        break;
+                    }
+                    case 1: { // Ember IV — diamond (rotated square + inner cross)
+                        float hs = r * 0.52f * sc;
+                        sr.setColor(1f, 0.62f, 1f, (pass == 0) ? 0.26f * dim * p : 0.96f * dim);
+                        sr.line(cx,      cy + hs, cx + hs, cy);
+                        sr.line(cx + hs, cy,      cx,      cy - hs);
+                        sr.line(cx,      cy - hs, cx - hs, cy);
+                        sr.line(cx - hs, cy,      cx,      cy + hs);
+                        sr.setColor(1f, 0.62f, 1f, (pass == 0) ? 0.14f * dim * p : 0.58f * dim);
+                        sr.line(cx - hs, cy,      cx + hs, cy);
+                        sr.line(cx,      cy - hs, cx,      cy + hs);
+                        break;
+                    }
+                    case 2: { // Frostheim — 6-arm snowflake with branches
+                        float armLen = r * 0.56f * sc;
+                        sr.setColor(0.70f, 0.97f, 1f, (pass == 0) ? 0.26f * dim * p : 0.98f * dim);
+                        float baseAngle = animTime * 0.12f;
+                        for (int s = 0; s < 6; s++) {
+                            float ang = s * (float)(Math.PI / 3.0) + baseAngle;
+                            float cos = (float)Math.cos(ang), sin = (float)Math.sin(ang);
+                            float ex = cx + cos * armLen, ey = cy + sin * armLen;
+                            sr.line(cx, cy, ex, ey);
+                            for (float t : new float[]{0.44f, 0.68f}) {
+                                float bx = cx + cos * armLen * t;
+                                float by = cy + sin * armLen * t;
+                                float blen = armLen * 0.28f;
+                                float perp = ang + (float)(Math.PI / 2.0);
+                                float pc = (float)Math.cos(perp) * blen;
+                                float ps = (float)Math.sin(perp) * blen;
+                                sr.line(bx, by, bx + pc, by + ps);
+                                sr.line(bx, by, bx - pc, by - ps);
+                            }
+                        }
+                        break;
+                    }
+                }
             }
             sr.end();
         }
@@ -452,56 +996,349 @@ public class MainMenuScreen extends ScreenAdapter {
     }
 
     private void drawTitle() {
+        titleFont.getData().setScale(4.2f);
         titleFont.setColor(CYAN);
-        titleFont.draw(batch, "GALACTIC MAP", 0f, viewport.getWorldHeight() - 22f, W, Align.center, false);
+        titleFont.draw(batch, "GALACTIC MAP", 0f, viewport.getWorldHeight() - 18f, W, Align.center, false);
+    }
+
+    private float statsY() { return viewport.getWorldHeight() - 96f; }
+
+    private void drawTopStatsBg() {
+        float sy = statsY();
+        sr.setProjectionMatrix(viewport.getCamera().combined);
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        // ── Heart icon (lives, row 1 left) ────────────────────────────────────
+        float hx = 34f, hy = sy - 8f, hhr = 5.5f;
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        sr.setColor(1f, 0.28f, 0.40f, 0.92f);
+        sr.circle(hx - hhr * 0.65f, hy + hhr * 0.25f, hhr * 0.72f, 10);
+        sr.circle(hx + hhr * 0.65f, hy + hhr * 0.25f, hhr * 0.72f, 10);
+        sr.triangle(hx - hhr * 1.30f, hy + hhr * 0.25f,
+                    hx + hhr * 1.30f, hy + hhr * 0.25f,
+                    hx,               hy - hhr * 1.20f);
+        sr.end();
+
+        // ── Gem icon (gems, row 1 right) ──────────────────────────────────────
+        float gx = W - 34f, gy = sy - 8f, gs = 6.5f;
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        sr.setColor(0.38f, 0.92f, 1.00f, 0.92f);
+        sr.triangle(gx, gy + gs, gx + gs, gy, gx, gy - gs);
+        sr.triangle(gx, gy + gs, gx - gs, gy, gx, gy - gs);
+        sr.end();
+        sr.begin(ShapeRenderer.ShapeType.Line);
+        sr.setColor(0.72f, 1.00f, 1.00f, 0.78f);
+        sr.triangle(gx, gy + gs, gx + gs, gy, gx, gy - gs);
+        sr.triangle(gx, gy + gs, gx - gs, gy, gx, gy - gs);
+        sr.end();
+
+        // ── Planet orbit icon (planets visited, row 2 center-left) ───────────
+        float ox = W * 0.5f - 68f, oy = sy - 54f, or_ = 5.5f;
+        sr.begin(ShapeRenderer.ShapeType.Line);
+        sr.setColor(0.28f, 1.00f, 0.72f, 0.85f);
+        sr.circle(ox, oy, or_, 14);
+        sr.end();
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        sr.setColor(0.28f, 1.00f, 0.72f, 0.80f);
+        sr.circle(ox, oy, or_ * 0.38f, 8);
+        sr.end();
+    }
+
+    private void drawTopStatsText() {
+        ShipData sd = ShipData.get();
+        float sy = statsY();
+        smallFont.getData().setScale(1.45f);
+
+        float charW = 10.5f;
+        float gap   = 16f;   // space between label and value
+
+        // ── Row 1: LIVES (left)  ·  GEMS (right) ─────────────────────────────
+        // LIVES label then gap then value
+        float livesLabelX = 46f;
+        String livesVal = sd.lives + "/" + sd.maxLives;
+        smallFont.setColor(0.40f, 0.55f, 0.68f, 0.80f);
+        smallFont.draw(batch, "LIVES", livesLabelX, sy);
+        smallFont.setColor(1f, 0.40f, 0.45f, 1f);
+        smallFont.draw(batch, livesVal, livesLabelX + 5f * charW + gap, sy);
+
+        // ── Life timer sub-row (left, below LIVES, only when regenerating) ────
+        if (!sd.unlimitedLives && sd.lives < sd.maxLives) {
+            long secs = sd.secondsToNextLife();
+            String timer = secs > 0
+                ? String.format("Life in %d:%02d", secs / 60, secs % 60)
+                : "Life ready!";
+            smallFont.getData().setScale(1.05f);
+            smallFont.setColor(1f, 0.38f, 0.42f, 0.80f);
+            smallFont.draw(batch, timer, livesLabelX, sy - 18f);
+            smallFont.getData().setScale(1.45f);
+        }
+
+        // GEMS value then gap then label (right-anchored)
+        String gemsVal = String.valueOf(sd.diamonds);
+        float gemsValX = W - 46f - gemsVal.length() * charW;
+        smallFont.setColor(0.38f, 0.92f, 1.00f, 1f);
+        smallFont.draw(batch, gemsVal, gemsValX, sy);
+        smallFont.setColor(0.40f, 0.55f, 0.68f, 0.80f);
+        smallFont.draw(batch, "GEMS", gemsValX - gap - 4f * charW, sy);
+
+        // ── Row 2: PLANETS VISITED (centered) ────────────────────────────────
+        float ry = sy - 44f;
+        String planetsVal = String.valueOf(sd.arrivalsCompleted);
+        // center the whole "PLANETS  <val>" block around W/2
+        float blockW = 7f * charW + gap + planetsVal.length() * charW;
+        float blockX = W * 0.5f - blockW * 0.5f;
+        smallFont.setColor(0.40f, 0.55f, 0.68f, 0.78f);
+        smallFont.draw(batch, "PLANETS", blockX, ry);
+        smallFont.setColor(0.28f, 0.96f, 0.72f, 0.92f);
+        smallFont.draw(batch, planetsVal, blockX + 7f * charW + gap, ry);
     }
 
     private void drawLabels() {
+        ShipData sd = ShipData.get();
         for (int i = 0; i < NX.length; i++) {
             float cx = NX[i], cy = NY[i], r = NR[i];
             if (i < ShipData.PLANETS.length) {
-                String name   = ShipData.PLANETS[i].name;
-                boolean dimmed = (i > currentIdx);
-                bodyFont.setColor(dimmed ? DIM : Color.WHITE);
+                String name = ShipData.PLANETS[i].name;
+                bodyFont.setColor(Color.WHITE);
                 float tw = name.length() * 7.2f;
                 bodyFont.draw(batch, name, cx - tw * 0.5f, cy - r - 7f);
-            } else {
-                smallFont.setColor(0.40f, 0.40f, 0.46f, 0.70f);
-                smallFont.draw(batch, "COMING", cx - 20f, cy - r -  6f);
-                smallFont.draw(batch, " SOON",  cx - 14f, cy - r - 18f);
+
+                // Time: completed planets show duration, current shows elapsed
+                smallFont.getData().setScale(0.72f);
+                if (i < displayIdx && sd.planetCompletionMs[i] > 0L) {
+                    smallFont.setColor(0.50f, 0.75f, 1.00f, 0.85f);
+                    String t = ShipData.formatDuration(sd.planetCompletionMs[i]);
+                    smallFont.draw(batch, t, cx - 48f, cy - r - 19f, 96f, Align.center, false);
+                } else if (i == displayIdx && sd.planetStartTimestampMs > 0L) {
+                    long elapsed = System.currentTimeMillis() - sd.planetStartTimestampMs;
+                    smallFont.setColor(0.28f, 0.92f, 1.00f, 0.90f);
+                    String t = ShipData.formatDuration(elapsed);
+                    smallFont.draw(batch, t, cx - 48f, cy - r - 19f, 96f, Align.center, false);
+                }
+                smallFont.getData().setScale(1.00f);
+
+                // Gem farm rate
+                if (sd.arrivalsCompleted >= 1 && i < ShipData.GEM_FARM_RATES.length) {
+                    int rate = ShipData.GEM_FARM_RATES[i];
+                    String rateStr = "+" + rate + " gem/hr";
+                    smallFont.getData().setScale(0.85f);
+                    smallFont.setColor(1.00f, 0.82f, 0.20f, 0.88f);
+                    smallFont.draw(batch, rateStr, cx - 64f, cy + r + 28f, 128f, Align.center, false);
+                    smallFont.getData().setScale(1.00f);
+                }
             }
         }
-        // Tap hint near rocket (offset so it doesn't overlap planet)
-        smallFont.setColor(CYAN.r, CYAN.g, CYAN.b, 0.65f);
-        float hintX = (currentIdx % 2 == 0) ? rocketX + NR[currentIdx] + 6f : rocketX - 108f;
-        smallFont.draw(batch, ">> ENTER BAY", hintX, rocketY + 6f);
+        // ── ENTER BAY glowing badge ───────────────────────────────────────────
+        float badgeX   = rocketX - 61f;           // centered on rocket (badgeW=122/2=61)
+        float badgeY   = rocketY + ROCKET_HIT + 28f; // above outermost glow ring
+        float badgeW   = 122f;
+        float badgeH   = 22f;
+        float bpulse   = 0.5f + 0.5f * MathUtils.sin(animTime * 2.6f);
+        float bounce   = MathUtils.sin(animTime * 4.5f) * 2.8f;
+
+        batch.end();
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        sr.setProjectionMatrix(viewport.getCamera().combined);
+
+        // Outer glow layers
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        for (int g = 7; g > 0; g--) {
+            float ex = g * 3.2f;
+            sr.setColor(0.10f, 0.95f, 0.88f, 0.017f * g * bpulse);
+            drawShapeRoundedRectFilled(sr, badgeX - ex, badgeY - ex, badgeW + ex*2f, badgeH + ex*2f, 8f + ex, 8);
+        }
+        // Dark badge fill
+        sr.setColor(0.02f, 0.09f, 0.20f, 0.90f);
+        drawShapeRoundedRectFilled(sr, badgeX, badgeY, badgeW, badgeH, 8f, 8);
+        // Subtle cyan inner highlight strip at top
+        sr.setColor(0.20f, 1.00f, 0.95f, 0.08f);
+        sr.rect(badgeX + 1f, badgeY + badgeH - 4f, badgeW - 2f, 3f);
+        // Animated >> arrow triangles (bounce right)
+        float arrowMidY = badgeY + badgeH * 0.5f;
+        float ah = 5.0f, aw = 5.5f;
+        for (int a = 0; a < 2; a++) {
+            float ax = badgeX + 7f + a * 9f + bounce;
+            sr.setColor(0.30f, 1.00f, 0.92f, (0.70f + 0.30f * bpulse) - a * 0.18f);
+            sr.triangle(ax,      arrowMidY + ah,
+                        ax,      arrowMidY - ah,
+                        ax + aw, arrowMidY);
+        }
+        sr.end();
+
+        // Pulsing border
+        sr.begin(ShapeRenderer.ShapeType.Line);
+        sr.setColor(0.25f, 1.00f, 0.95f, 0.60f + 0.35f * bpulse);
+        drawShapeRoundedRectLine(sr, badgeX, badgeY, badgeW, badgeH, 8f, 8);
+        sr.setColor(0.15f, 0.80f, 0.75f, 0.20f);
+        drawShapeRoundedRectLine(sr, badgeX + 1f, badgeY + 1f, badgeW - 2f, badgeH - 2f, 7f, 8);
+        sr.end();
+
+        batch.begin();
+        smallFont.getData().setScale(1.10f);
+        float textAlpha = 0.82f + 0.18f * bpulse;
+        smallFont.setColor(0.85f, 1.00f, 0.98f, textAlpha);
+        smallFont.draw(batch, "ENTER BAY", badgeX + 28f, badgeY + badgeH - 4f, badgeW - 30f, Align.center, false);
     }
 
     private void drawBottomBar() {
         ShipData sd = ShipData.get();
         float y = 46f;
-        smallFont.setColor(DIM);  smallFont.draw(batch, "Energy:", 28f, y);
-        String eStr = sd.totalJoules >= 1_000f
-            ? String.format("%.1fK J", sd.totalJoules / 1000f)
-            : String.format("%.0f J",  sd.totalJoules);
-        smallFont.setColor(CYAN); smallFont.draw(batch, eStr, 96f, y);
-        smallFont.setColor(DIM);  smallFont.draw(batch, "Planets visited:", 196f, y);
-        smallFont.setColor(CYAN); smallFont.draw(batch, String.valueOf(sd.arrivalsCompleted), 360f, y);
         if (sd.arrivalReady) {
             smallFont.setColor(0.22f, 1f, 0.44f, 0.95f);
-            smallFont.draw(batch, ">> ARRIVAL READY", 302f, y);
+            smallFont.draw(batch, ">> ARRIVAL READY", 28f, y);
         }
+    }
+
+    private void drawShopButton() {
+        float pulse  = 0.5f + 0.5f * MathUtils.sin(animTime * 2.2f);
+        float pulse2 = 0.5f + 0.5f * MathUtils.sin(animTime * 3.4f + 0.8f);
+        sr.setProjectionMatrix(viewport.getCamera().combined);
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        float sy = shopY();
+
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        // Amber/gold outer glow layers
+        for (int g = 8; g > 0; g--) {
+            float ex = g * 3.8f;
+            sr.setColor(1.00f, 0.70f, 0.08f, 0.018f * g * pulse);
+            drawShapeRoundedRectFilled(sr, SH_X - ex, sy - ex, SH_W + ex*2f, SH_H + ex*2f, 14f + ex, 8);
+        }
+        // Dark fill with warm amber tint
+        sr.setColor(0.14f, 0.08f, 0.02f, 0.92f);
+        drawShapeRoundedRectFilled(sr, SH_X, sy, SH_W, SH_H, 14f, 8);
+        // Inner amber gradient band (top highlight)
+        sr.setColor(1.00f, 0.75f, 0.15f, 0.10f + 0.08f * pulse);
+        sr.rect(SH_X + 2f, sy + SH_H - 7f, SH_W - 4f, 5f);
+        // Coin icon — filled circle left side
+        float cx = SH_X + 18f, cy = sy + SH_H * 0.5f, cr = 7.5f;
+        // Coin glow
+        sr.setColor(1.00f, 0.82f, 0.10f, 0.22f * pulse);
+        sr.circle(cx, cy, cr * 1.8f, 16);
+        // Coin body
+        sr.setColor(1.00f, 0.80f, 0.08f, 0.92f);
+        sr.circle(cx, cy, cr, 20);
+        // Coin inner highlight
+        sr.setColor(1.00f, 0.98f, 0.72f, 0.45f);
+        sr.circle(cx - cr * 0.18f, cy + cr * 0.25f, cr * 0.45f, 12);
+        sr.end();
+
+        // Bright animated border
+        sr.begin(ShapeRenderer.ShapeType.Line);
+        sr.setColor(1.00f, 0.82f, 0.20f, 0.70f + 0.28f * pulse);
+        drawShapeRoundedRectLine(sr, SH_X, sy, SH_W, SH_H, 14f, 8);
+        sr.setColor(1.00f, 0.62f, 0.08f, 0.22f + 0.15f * pulse2);
+        drawShapeRoundedRectLine(sr, SH_X + 1f, sy + 1f, SH_W - 2f, SH_H - 2f, 13f, 8);
+        // Coin rim
+        sr.setColor(1.00f, 0.95f, 0.55f, 0.60f);
+        sr.circle(cx, cy, cr, 20);
+        sr.end();
+    }
+
+    private void drawShopLabel() {
+        float sy    = shopY();
+        float pulse = 0.5f + 0.5f * MathUtils.sin(animTime * 2.2f);
+        smallFont.getData().setScale(1.35f);
+        smallFont.setColor(1.00f, 0.88f, 0.30f, 0.88f + 0.12f * pulse);
+        smallFont.draw(batch, "SHOP", SH_X + 30f, sy + SH_H - 9f, SH_W - 32f, Align.center, false);
+        smallFont.getData().setScale(1.00f);
+    }
+
+    private void drawLeaderboardButton() {
+        float pulse = 0.5f + 0.5f * MathUtils.sin(animTime * 1.9f + 0.4f);
+        float ly    = lbY();
+        sr.setProjectionMatrix(viewport.getCamera().combined);
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        for (int g = 6; g > 0; g--) {
+            float ex = g * 2.8f;
+            sr.setColor(0.22f, 0.72f, 1.00f, 0.008f * g * pulse);
+            drawShapeRoundedRectFilled(sr, LB_X - ex, ly - ex, LB_W + ex*2f, LB_H + ex*2f, 14f + ex, 8);
+        }
+        sr.setColor(0.02f, 0.07f, 0.18f, 0.92f);
+        drawShapeRoundedRectFilled(sr, LB_X, ly, LB_W, LB_H, 14f, 8);
+        sr.setColor(0.22f, 0.72f, 1.00f, 0.10f + 0.06f * pulse);
+        sr.rect(LB_X + 2f, ly + LB_H - 6f, LB_W - 4f, 4f);
+        sr.end();
+
+        sr.begin(ShapeRenderer.ShapeType.Line);
+        sr.setColor(0.22f, 0.72f, 1.00f, 0.65f + 0.28f * pulse);
+        drawShapeRoundedRectLine(sr, LB_X, ly, LB_W, LB_H, 14f, 8);
+        sr.end();
+    }
+
+    private void drawLeaderboardLabel() {
+        float ly    = lbY();
+        float pulse = 0.5f + 0.5f * MathUtils.sin(animTime * 1.9f + 0.4f);
+        smallFont.getData().setScale(1.15f);
+        smallFont.setColor(0.55f, 0.88f, 1.00f, 0.88f + 0.12f * pulse);
+        smallFont.draw(batch, "RANKS", LB_X + 4f, ly + LB_H - 10f, LB_W - 8f, Align.center, false);
+        smallFont.getData().setScale(1.00f);
+    }
+
+    /**
+     * Draws a FILLED rounded rectangle. Call inside begin(ShapeType.Filled).
+     * Uses rect+arc decomposition — the only approach that works in Filled mode.
+     */
+    private static void drawShapeRoundedRectFilled(ShapeRenderer sr,
+                                                    float x, float y, float w, float h,
+                                                    float r, int segs) {
+        sr.rect(x + r, y,         w - 2*r, h);       // vertical centre strip
+        sr.rect(x,     y + r,     r,       h - 2*r); // left strip
+        sr.rect(x+w-r, y + r,     r,       h - 2*r); // right strip
+        sr.arc(x + r,       y + r,       r, 180, 90, segs); // bottom-left
+        sr.arc(x + w - r,   y + r,       r, 270, 90, segs); // bottom-right
+        sr.arc(x + w - r,   y + h - r,   r,   0, 90, segs); // top-right
+        sr.arc(x + r,       y + h - r,   r,  90, 90, segs); // top-left
+    }
+
+    /**
+     * Draws an OUTLINED rounded rectangle. Call inside begin(ShapeType.Line).
+     * Uses a polygon vertex array — the only approach that works in Line mode.
+     */
+    private static void drawShapeRoundedRectLine(ShapeRenderer sr,
+                                                  float x, float y, float w, float h,
+                                                  float r, int segs) {
+        int total = segs * 4;
+        float[] v = new float[total * 2];
+        int vi = 0;
+        for (int i = 0; i < segs; i++) {
+            float a = (float) Math.toRadians(180.0 + i * 90.0 / segs);
+            v[vi++] = x + r + r * MathUtils.cos(a);
+            v[vi++] = y + r + r * MathUtils.sin(a);
+        }
+        for (int i = 0; i < segs; i++) {
+            float a = (float) Math.toRadians(270.0 + i * 90.0 / segs);
+            v[vi++] = x + w - r + r * MathUtils.cos(a);
+            v[vi++] = y + r + r * MathUtils.sin(a);
+        }
+        for (int i = 0; i < segs; i++) {
+            float a = (float) Math.toRadians(0.0 + i * 90.0 / segs);
+            v[vi++] = x + w - r + r * MathUtils.cos(a);
+            v[vi++] = y + h - r + r * MathUtils.sin(a);
+        }
+        for (int i = 0; i < segs; i++) {
+            float a = (float) Math.toRadians(90.0 + i * 90.0 / segs);
+            v[vi++] = x + r + r * MathUtils.cos(a);
+            v[vi++] = y + h - r + r * MathUtils.sin(a);
+        }
+        sr.polygon(v);
     }
 
     private void drawNewGameButton() {
         sr.setProjectionMatrix(viewport.getCamera().combined);
         sr.begin(ShapeRenderer.ShapeType.Filled);
         sr.setColor(0.70f, 0.10f, 0.10f, 0.88f);
-        sr.rect(NG_X, NG_Y, NG_W, NG_H);
+        drawShapeRoundedRectFilled(sr, NG_X, NG_Y, NG_W, NG_H, 14f, 8);
         sr.end();
         sr.begin(ShapeRenderer.ShapeType.Line);
         sr.setColor(1f, 0.35f, 0.35f, 0.90f);
-        sr.rect(NG_X, NG_Y, NG_W, NG_H);
+        drawShapeRoundedRectLine(sr, NG_X, NG_Y, NG_W, NG_H, 14f, 8);
         sr.end();
     }
 
@@ -626,12 +1463,16 @@ public class MainMenuScreen extends ScreenAdapter {
             tutCardX, tutCardY + 18f, tutCardW, Align.center, false);
     }
 
-    @Override public void resize(int w, int h) { viewport.update(w, h, true); }
+    @Override public void resize(int w, int h) {
+        viewport.update(w, h, true);
+        if (stage != null) stage.getViewport().update(w, h, true);
+    }
 
     @Override
     public void dispose() {
         sr.dispose();
         batch.dispose();
+        if (stage != null) stage.dispose();
         // fonts owned by skin — do not dispose here
     }
 }
