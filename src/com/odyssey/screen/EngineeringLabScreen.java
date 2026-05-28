@@ -3425,7 +3425,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         if (balls.size == 0) {
             ShipData sdInit = ShipData.get();
-            int needed = sdInit.arrivalsCompleted > 0 ? 2 : 1;
+            int needed = sdInit.savedBallCount > 0
+                ? sdInit.savedBallCount
+                : (sdInit.arrivalsCompleted > 0 ? 2 : 1);
             needed = Math.max(0, needed - sdInit.pendingNewRecruits);
             float[][] initSpots = {
                 {CENTRIFUGE_CX - 0.6f, CENTRIFUGE_CY + 0.4f},
