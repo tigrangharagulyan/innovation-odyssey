@@ -38,6 +38,9 @@ import com.odyssey.OdysseyTheme;
 import com.odyssey.SoundManager;
 import com.odyssey.ShipData;
 import com.odyssey.physics.EnergyContactListener;
+import com.odyssey.planet.PlanetDefinition;
+import com.odyssey.planet.PlanetHooks;
+import com.odyssey.planet.PlanetState;
 
 public class EngineeringLabScreen extends ScreenAdapter {
 
@@ -551,6 +554,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private float shakeDuration = 0.05f;
     private float shakeMag      = 4f;
 
+    // Planet architecture — current planet definition and state
+    private PlanetDefinition currentDef   = ShipData.PLANET_DEFS[0];
+    private PlanetState      currentState = ShipData.get().getState(0);
+
     // ---- Construction -----------------------------------------------------------
 
     public EngineeringLabScreen(OdysseyGame game) {
@@ -635,30 +642,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
         pm.setBlending(Pixmap.Blending.None);
 
         int pidx = ShipData.get().currentPlanetIndex;
-        // Gradient palette [r0, r_t, g0, g_t, b0, b_t] (t=0 = bottom of screen, t=1 = top)
-        float[] gp = switch (pidx) {
-            case 1  -> new float[]{0.040f,0.030f, 0.010f,0.008f, 0.005f,0.003f}; // Ember IV  volcanic
-            case 2  -> new float[]{0.010f,0.008f, 0.018f,0.028f, 0.048f,0.065f}; // Frostheim ice
-            case 3  -> new float[]{0.005f,0.006f, 0.022f,0.025f, 0.028f,0.040f}; // Cryon Reach teal
-            case 4  -> new float[]{0.022f,0.018f, 0.016f,0.014f, 0.007f,0.004f}; // Helios Forge heat
-            default -> new float[]{0.015f,0.020f, 0.018f,0.025f, 0.055f,0.070f}; // Solara blue
-        };
-        // Chamber glow color [glowR, glowG, glowB]
-        float[] gc = switch (pidx) {
-            case 1  -> new float[]{0.65f, 0.10f, 0.95f}; // Ember IV  nova-purple
-            case 2  -> new float[]{0.48f, 0.72f, 1.00f}; // Frostheim ice-blue
-            case 3  -> new float[]{0.05f, 0.85f, 0.78f}; // Cryon Reach teal
-            case 4  -> new float[]{0.95f, 0.82f, 0.35f}; // Helios Forge solar
-            default -> new float[]{0.12f, 0.62f, 1.00f}; // Solara cyan
-        };
-        // Star tint multipliers [sr, sg, sb]
-        float[] st = switch (pidx) {
-            case 1  -> new float[]{1.05f, 0.82f, 0.75f}; // Ember IV  reddish
-            case 2  -> new float[]{0.88f, 0.94f, 1.05f}; // Frostheim blueish
-            case 3  -> new float[]{0.82f, 1.05f, 0.98f}; // Cryon Reach teal
-            case 4  -> new float[]{1.05f, 0.98f, 0.75f}; // Helios Forge warm
-            default -> new float[]{1.00f, 1.00f, 1.00f}; // Solara neutral
-        };
+        float[] gp = currentDef.bgGradient();
+        float[] gc = currentDef.chamberGlow();
+        float[] st = currentDef.starTint();
 
         // Background gradient (bottom of Pixmap = top of screen after LibGDX flip)
         for (int y = 0; y < H; y++) {
@@ -681,7 +667,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         float cCX = CCX_PX, cCY = H - CCY_PX;
         float cR   = CENTRIFUGE_R * PPM;
         float sqHS = RECT_HW * PPM; // square half-size in pixels (same for both axes)
-        boolean isSquare = (pidx == 1);
+        boolean isSquare = isEmberIV();
 
         // Dark inner area
         float scanR = isSquare ? sqHS + 2 : cR + 2;
@@ -735,23 +721,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
         float outerR = size * 0.46f;
         float innerR = size * 0.31f;
 
-        int pidx = ShipData.get().currentPlanetIndex;
-        // Ring fill color: [r_base, r_peak, g_base, g_peak, b_base, b_peak]
-        float[] rc = switch (pidx) {
-            case 1  -> new float[]{0.35f,0.20f, 0.05f,0.10f, 0.70f,0.90f}; // Ember IV  nova-purple
-            case 2  -> new float[]{0.50f,0.40f, 0.72f,0.22f, 0.90f,0.10f}; // Frostheim ice-white
-            case 3  -> new float[]{0.04f,0.08f, 0.50f,0.38f, 0.46f,0.40f}; // Cryon Reach teal
-            case 4  -> new float[]{0.80f,0.18f, 0.68f,0.24f, 0.20f,0.16f}; // Helios Forge yellow
-            default -> new float[]{0.07f,0.23f, 0.48f,0.42f, 0.82f,0.18f}; // Solara cyan-blue
-        };
-        // Segment mark color [r, g, b]
-        float[] mc = switch (pidx) {
-            case 1  -> new float[]{0.85f, 0.50f, 1.00f}; // Ember IV  nova-purple
-            case 2  -> new float[]{0.85f, 0.95f, 1.00f}; // Frostheim ice-white
-            case 3  -> new float[]{0.25f, 1.00f, 0.88f}; // Cryon Reach teal
-            case 4  -> new float[]{1.00f, 0.90f, 0.40f}; // Helios Forge yellow
-            default -> new float[]{0.60f, 0.92f, 1.00f}; // Solara cyan
-        };
+        float[] rc = currentDef.ringInnerColor();
+        float[] mc = currentDef.ringMidColor();
 
         for (int y = 0; y < size; y++) {
             for (int x = 0; x < size; x++) {
@@ -2621,6 +2592,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             @Override public void changed(ChangeEvent e, Actor a) {
                 if (!isJumpReady()) return;
                 ShipData sd2 = ShipData.get();
+                sd2.saveReplayBackup(sd2.currentPlanetIndex, currentState.deepCopy());
                 commitNextPlanetDestination(sd2);
                 sd2.savedFlightJPS = sd2.currentJPS;
                 SoundManager.get().playLaunch();
@@ -3089,6 +3061,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     }
                     sd2.consumeLife();
                 }
+                sd2.saveReplayBackup(sd2.currentPlanetIndex, currentState.deepCopy());
                 commitNextPlanetDestination(sd2);
                 sd2.savedFlightJPS = sd2.currentJPS;
                 SoundManager.get().playLaunch();
@@ -3427,6 +3400,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
         }
 
         int pidx = ShipData.get().currentPlanetIndex;
+        currentDef   = ShipData.PLANET_DEFS[pidx];
+        currentState = ShipData.get().getState(pidx);
         if (pidx != lastPlanetIndex) {
             lastPlanetIndex = pidx;
             fullReset();
@@ -6847,6 +6822,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
     }
 
     private void fullReset() {
+        int pidx = ShipData.get().currentPlanetIndex;
+        currentDef   = ShipData.PLANET_DEFS[pidx];
+        currentState = ShipData.get().getState(pidx);
+
         // Restore any captured orbs to Dynamic before destroying bodies
         for (int c = 0; c < spiralCaptures.size; c++)
             spiralCaptures.get(c).orb.setType(com.badlogic.gdx.physics.box2d.BodyDef.BodyType.DynamicBody);
@@ -8105,7 +8084,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     // ---- Helpers ----------------------------------------------------------------
 
     private boolean isFrostheim() {
-        return ShipData.get().currentPlanetIndex == 2;
+        return "frostheim".equals(currentDef.id());
     }
 
     private boolean isFrostheimPerkUnlocked(int slot) {
@@ -8120,7 +8099,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     }
 
     private boolean isEmberIV() {
-        return ShipData.get().currentPlanetIndex == 1;
+        return "nova_terra".equals(currentDef.id());
     }
 
     private void setGravShiftVisible(boolean visible) {
@@ -8276,10 +8255,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     }
 
     private float nextCheckpointEnergyCost() {
-        float[] energies;
-        if (isEmberIV())        energies = EMBER_CP_ENERGIES;
-        else if (isFrostheim()) energies = FROSTHEIM_CP_ENERGIES;
-        else                    energies = SOLARA_CP_ENERGIES;
+        float[] energies = currentDef.cpEnergies();
         int nextIdx = ShipData.get().sectorReached + 1;
         if (nextIdx < 0) nextIdx = 0;
         return nextIdx < energies.length ? energies[nextIdx] : energies[energies.length - 1];
@@ -8472,6 +8448,29 @@ public class EngineeringLabScreen extends ScreenAdapter {
         int icicleNodeIdx = -1;  // which icicle node triggered this split; -1 = none
         PelletGroup(float x, float y) { spawnX = x; spawnY = y; }
     }
+
+    // ---- Planet hooks bridge --------------------------------------------------------
+
+    private final PlanetHooks planetHooks = new PlanetHooks() {
+        @Override public PlanetState  state()            { return currentState; }
+        @Override public ShipData     shipData()         { return ShipData.get(); }
+        @Override public com.badlogic.gdx.physics.box2d.World world() { return world; }
+        @Override public com.badlogic.gdx.utils.Array<com.badlogic.gdx.physics.box2d.Body> balls()          { return balls; }
+        @Override public com.badlogic.gdx.utils.Array<com.badlogic.gdx.physics.box2d.Body> bumpers()        { return bumpers; }
+        @Override public com.badlogic.gdx.utils.Array<com.badlogic.gdx.physics.box2d.Body> attractors()     { return attractors; }
+        @Override public com.badlogic.gdx.utils.Array<com.badlogic.gdx.physics.box2d.Body> specialBodiesA() { return kineticBlades; }
+        @Override public com.badlogic.gdx.utils.Array<com.badlogic.gdx.physics.box2d.Body> specialBodiesB() { return springPads; }
+        @Override public com.badlogic.gdx.utils.Array<Float> specialData()                                  { return null; }
+        @Override public float drumCenterX() { return CENTRIFUGE_CX; }
+        @Override public float drumCenterY() { return CENTRIFUGE_CY; }
+        @Override public float drumRadius()  { return CENTRIFUGE_R; }
+        @Override public void showCelebration(String title, String body) { showNotif(title, body); }
+        @Override public void triggerShake(float mag, float dur) {
+            shakeMag      = mag;
+            shakeDuration = dur;
+            shakeTimer    = dur;
+        }
+    };
 
     /** Tracks an orb captured by a Spiral Slingshot — orbits for SPIRAL_DURATION then launches. */
     private static final class SpiralCapture {
