@@ -3402,6 +3402,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         int pidx = ShipData.get().currentPlanetIndex;
         currentDef   = ShipData.PLANET_DEFS[pidx];
         currentState = ShipData.get().getState(pidx);
+        boolean didFullReset = false;
         if (pidx != lastPlanetIndex) {
             lastPlanetIndex = pidx;
             fullReset();
@@ -3409,6 +3410,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             texRing.dispose();
             texBackground = genBackground();
             texRing       = genRingTexture((int) RING_TEX_SIZE);
+            didFullReset = true;
         }
 
         ShipData sd = ShipData.get();
@@ -3444,8 +3446,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
             }
         }
 
-        restorePortalsAndRelays();
-        restoreStructures();
+        if (didFullReset) {
+            restorePortalsAndRelays();
+            restoreStructures();
+        }
         applySectorPerks();
         claimGemFarming();
         claimPendingRecruits();
