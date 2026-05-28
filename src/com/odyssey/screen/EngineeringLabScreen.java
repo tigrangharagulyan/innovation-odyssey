@@ -3564,9 +3564,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
         spiralCaptures.clear();
 
         // Spawn placed structures
-        for (int i = 0; i + 1 < sd.savedBumpers.length; i += 2)
+        int maxBR = maxBumpersAllowed();
+        for (int i = 0; i + 1 < sd.savedBumpers.length && bumpers.size < maxBR; i += 2)
             spawnCentrifugeBumper(sd.savedBumpers[i], sd.savedBumpers[i + 1]);
-        for (int i = 0; i + 1 < sd.savedAttractors.length; i += 2)
+        int maxGR = maxGravityAllowed();
+        for (int i = 0; i + 1 < sd.savedAttractors.length && attractors.size < maxGR; i += 2)
             spawnAttractorBumper(sd.savedAttractors[i], sd.savedAttractors[i + 1]);
         for (int i = 0; i + 1 < sd.savedIcicleNodes.length && icicleNodes.size < maxIcicleNodesAllowed(); i += 2) {
             float ix = sd.savedIcicleNodes[i], iy = sd.savedIcicleNodes[i + 1];
