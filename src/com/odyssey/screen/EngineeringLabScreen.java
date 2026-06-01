@@ -2968,11 +2968,13 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 }
                 ShipData sd2 = ShipData.get();
                 if (balls.size < internCap() && sd2.spendCrystals(internCost())) {
-                    // Slingshot: start flying intern from button toward drum
+                    // Slingshot: use RAW (pre-clamp) stage coords for direction
                     float originWX = dragOriginStageX / PPM;
                     float originWY = (dragOriginStageY + 80f) / PPM;
-                    float dvx = originWX - wx;
-                    float dvy = originWY - wy;
+                    float rawWxI = dragStageX / PPM;
+                    float rawWyI = (dragStageY + 80f) / PPM;
+                    float dvx = originWX - rawWxI;   // pull down → fires up
+                    float dvy = originWY - rawWyI;
                     float dragDist = (float) Math.sqrt(dvx * dvx + dvy * dvy);
                     if (dragDist < 0.01f) { dvx = 0f; dvy = 1f; dragDist = 1f; }
                     float launchSpeed = Math.min(dragDist * 4f, 9f) + 3f;
@@ -3059,11 +3061,13 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     }
                 } else if (!isEmberIV()) {
                     if (bumpers.size < maxBumpersAllowed() && sd2.spendCrystals(bumperCost())) {
-                        // Slingshot: pull down = velocity UP toward drum
+                        // Slingshot: use RAW (pre-clamp) stage coords for direction
                         float originWX = dragOriginStageX / PPM;
                         float originWY = (dragOriginStageY + 80f) / PPM;
-                        float dvx = originWX - wx;   // opposite of drag = slingshot fire direction
-                        float dvy = originWY - wy;
+                        float rawWxS = dragStageX / PPM;
+                        float rawWyS = (dragStageY + 80f) / PPM;
+                        float dvx = originWX - rawWxS;   // pull down → fires up
+                        float dvy = originWY - rawWyS;
                         float dragDist = (float) Math.sqrt(dvx * dvx + dvy * dvy);
                         if (dragDist < 0.01f) { dvx = 0f; dvy = 1f; dragDist = 1f; }
                         float launchSpeed = Math.min(dragDist * 4f, 9f) + 3f;
