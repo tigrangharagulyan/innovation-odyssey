@@ -15,14 +15,18 @@ public final class ShipData {
     /** Mutable state stored in each standard bumper body's userData for per-bumper hit animation. */
     public static final class BumperHitData {
 
-        public boolean isArmBumper   = false;
-        public boolean isValleyBlade = false;
-        public long    lastHitMs     = 0L;
+        public boolean isArmBumper    = false;
+        public boolean isValleyBlade  = false;
+        public long    lastHitMs      = 0L;
+        public int     hitCount       = 0;    // counts intern contacts; caps at 10
+        public boolean harvestPending = false; // true when hitCount reached 10
     }
 
     /** Mutable state stored in each gravity-well (attractor) body's userData for per-hit animation. */
     public static final class AttractorHitData {
-        public long lastHitMs = 0L;
+        public long    lastHitMs      = 0L;
+        public int     hitCount       = 0;
+        public boolean harvestPending = false;
     }
 
     public static final class PlanetProfile {
