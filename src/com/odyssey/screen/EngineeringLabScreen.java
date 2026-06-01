@@ -59,9 +59,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private static final float BALL_RADIUS        = 0.25f;
     private static final float EMBER_BALL_RADIUS  = 0.38f;
     // Per-type physics: radius, restitution, entry-velocity multiplier
-    private static final float[] ORB_RADIUS = {0.25f, 0.14f, 0.32f};       // SPARK, BLAZE, FROST
-    private static final float[] ORB_REST   = {1.10f, 1.25f, 0.65f};       // SPARK, BLAZE, FROST
-    private static final float[] ORB_VEL    = {0.90f, 1.00f, 0.28f};       // entry-velocity mult
+    private static final float[] ORB_RADIUS = {0.14f, 0.25f, 0.32f};       // SPARK(fast/small), BLAZE(normal), FROST(big/slow)
+    private static final float[] ORB_REST   = {1.25f, 0.90f, 0.65f};       // SPARK, BLAZE, FROST
+    private static final float[] ORB_VEL    = {1.00f, 0.60f, 0.28f};       // entry-velocity mult
     private static final float EMBER_INTERN_DRAW  = 52f;
     private static final float BALL_DENSITY        = 1.0f;
     private static final float BALL_RESTITUTION    = 0.90f;
@@ -353,9 +353,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private boolean blazeHeatPending = false;   // skill 1: apply impulse next physics step
     private boolean blazeBlastPending = false;  // skill 2: radial burst next physics step
     private static final String[][] ORB_SKILLS = {
-        {"ENERGY+", "CHAIN", "SURGE", "STATIC"},
-        {"RING DMG+", "HEAT", "BLAST", "BURN"},
-        {"SLOW", "ICE SPIKE", "CRYO", "FREEZE"}
+        {"DASH", "OVERDRIVE", "CHAIN", "STATIC"},   // SPARK — fast/small
+        {"RING DMG+", "HEAT", "BLAST", "BURN"},      // BLAZE — normal (skills TBD)
+        {"SLOW", "ICE SPIKE", "CRYO", "FREEZE"}      // FROST — big/slow
     };
     private static final float[][] ORB_COLORS = {
         {0.75f, 0.20f, 1.00f},  // SPARK — purple
