@@ -361,7 +361,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private static final float[][] SKILL_DURATION = {
         { 0f,  0f,  6f,  6f},  // SPARK: DASH instant, MARKER until-hit, OVERDRIVE 6s, SPLIT 6s
         { 6f,  6f,  0f,  0f},  // BLAZE
-        { 6f,  0f,  6f, 10f},  // FROST: ATTACH 6s, ICE RUSH instant, BIG 6s, GRAVITY 10s
+        {60f,  0f,  6f, 10f},  // FROST: ATTACH holds until ICE RUSH, BIG 6s, GRAVITY 10s
     };
     private final float[][] skillCooldownTimer = new float[3][4];
     private final float[][] skillActiveTimer   = new float[3][4];
@@ -390,7 +390,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private static final String[][] ORB_SKILL_DESC = {
         {"Burst fwd\ninstant", "Next hit\nauto-dash", "6s min\nspd 8m/s", "6s split\n3 orbs"},
         {"3x ring\nhit rate", "Pull orbs\nto BLAZE", "10 hits\n3x dmg", "+30 mana\ninstant"},
-        {"Pin to\nring wall", "Rush to\nring", "2x size\n2x dmg", "Pull/push\n10s"},
+        {"Spin outer\nring", "Detach+\nrush in", "3x size\n3x dmg", "Pull/push\n10s"},
     };
     private static final float[][] ORB_COLORS = {
         {0.75f, 0.20f, 1.00f},  // SPARK — purple
@@ -9168,8 +9168,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     }
                 }
             }
-            if (skillActiveTimer[2][0] <= 0 || (rings[0] == null)) {
+            // Detach only if outer ring destroyed (ICE RUSH handles detach via frostIcePending)
+            if (rings[0] == null) {
                 frostAttachActive = false;
+                skillActiveTimer[2][0] = 0f;
                 if (_fBody2 != null) { float _ka = MathUtils.random(MathUtils.PI2); _fBody2.setLinearVelocity(MathUtils.cos(_ka) * 5f, MathUtils.sin(_ka) * 5f); }
             }
         }
@@ -9707,7 +9709,14 @@ public class EngineeringLabScreen extends ScreenAdapter {
                         frostAttachActive = true; frostAttachHitTimer = 0f;
                     } else { mana += SKILL_MANA_COST[2][0]; skillCooldownTimer[2][0] = 0; }
                     break;
-                case 1: frostIcePending = true; frostAttachActive = false; break; // ICE RUSH breaks attach
+                case 1: // ICE RUSH — detach FROST and fire inward
+                    frostIcePending = true;
+                    if (frostAttachActive) {
+                        frostAttachActive = false;
+                        skillActiveTimer[2][0] = 0f;
+                        skillCooldownTimer[2][0] = SKILL_COOLDOWN[2][0]; // start ATTACH cooldown now
+                    }
+                    break;
                 case 2: { // BIG — shockwave push + visual
                     Body _fBig = null;
                     for (int _bi = 0; _bi < balls.size; _bi++) { if ("INTERN_FROST".equals(balls.get(_bi).getUserData())) { _fBig = balls.get(_bi); break; } }
