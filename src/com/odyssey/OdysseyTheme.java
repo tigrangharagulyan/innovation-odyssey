@@ -36,4 +36,6 @@ public final class OdysseyTheme {
     public static final Color FLOAT_E       = new Color(0.267f, 0.533f, 1.000f, 1f);  // blue — Energy
     public static final Color FLOAT_SPECIAL = new Color(0.000f, 0.800f, 0.667f, 1f);  // teal — gravity/special
     public static final Color FLOAT_BUMPER  = new Color(0.600f, 0.400f, 1.000f, 1f);  // violet — bumper/attractor
+    public static final Color FLOAT_HARVEST = new Color(1.000f, 0.850f, 0.100f, 1f);  // gold — harvest joules
+    public static final Color FLOAT_GEMS    = new Color(0.350f, 1.000f, 0.900f, 1f);  // cyan — harvest gems
 }

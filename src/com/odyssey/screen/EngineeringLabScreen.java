@@ -5254,8 +5254,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 case 0  -> OdysseyTheme.FLOAT_E;
                 case 1  -> OdysseyTheme.FLOAT_SP;
                 case 2  -> OdysseyTheme.FLOAT_SPECIAL;
-                case 4  -> new com.badlogic.gdx.graphics.Color(1.0f, 0.85f, 0.10f, 1f);
-                case 5  -> new com.badlogic.gdx.graphics.Color(0.35f, 1.00f, 0.90f, 1f);
+                case 4  -> OdysseyTheme.FLOAT_HARVEST;
+                case 5  -> OdysseyTheme.FLOAT_GEMS;
                 default -> OdysseyTheme.FLOAT_BUMPER;
             };
 
