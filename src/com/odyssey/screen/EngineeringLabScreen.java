@@ -345,16 +345,20 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private static final float MANA_LAUNCH_COST = 25f;   // per orb launch
     private Label manaLabel;
     // Active skill state (4 slots, indexed by skill slot)
-    private static final float[] SKILL_MANA_COST = {20f, 15f, 25f, 20f};  // per skill
-    private static final float[] SKILL_COOLDOWN  = {12f,  8f, 15f, 10f};  // seconds
-    private static final float[] SKILL_DURATION  = { 8f,  5f,  0f, 10f};  // 0 = instant
+    // BLAZE: SHIELD=0, MAGNET=1, OVERLOAD=2, RALLY=3
+    private static final float[] SKILL_MANA_COST = {20f, 20f, 25f, 0f};   // RALLY free (restores mana)
+    private static final float[] SKILL_COOLDOWN  = {14f, 12f, 16f, 18f};
+    private static final float[] SKILL_DURATION  = { 6f,  6f,  0f,  0f};  // 0 = instant
     private final float[] skillCooldownTimer = {0f, 0f, 0f, 0f};
     private final float[] skillActiveTimer   = {0f, 0f, 0f, 0f};
-    private boolean blazeHeatPending = false;   // skill 1: apply impulse next physics step
-    private boolean blazeBlastPending = false;  // skill 2: radial burst next physics step
+    private boolean blazeMagnetActive  = false;  // skill 1: pull other orbs
+    private float   blazeRallyFlash    = 0f;     // skill 3: mana restore flash timer
+    private float   blazeOverloadFlash = 0f;     // skill 2: glow flash on activation
+    // Animation state
+    private float   blazeShieldAngle   = 0f;     // skill 0: rotating shield arc angle
     private static final String[][] ORB_SKILLS = {
         {"DASH", "OVERDRIVE", "CHAIN", "STATIC"},   // SPARK — fast/small
-        {"RING DMG+", "HEAT", "BLAST", "BURN"},      // BLAZE — normal (skills TBD)
+        {"SHIELD", "MAGNET", "OVERLOAD", "RALLY"},     // BLAZE — normal
         {"SLOW", "ICE SPIKE", "CRYO", "FREEZE"}      // FROST — big/slow
     };
     private static final float[][] ORB_COLORS = {
@@ -3764,8 +3768,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
         selectedOrbType = OrbType.SPARK;
         mana = MAX_MANA;
         for (int _i = 0; _i < 4; _i++) { skillCooldownTimer[_i] = 0; skillActiveTimer[_i] = 0; }
-        blazeHeatPending = false; blazeBlastPending = false;
-        ShipData.get().blazeDoubleDamage = false; ShipData.get().blazeBurnActive = false;
+        blazeMagnetActive = false; blazeRallyFlash = 0f; blazeOverloadFlash = 0f; blazeShieldAngle = 0f;
+        ShipData _sk = ShipData.get();
+        _sk.blazeShieldActive = false; _sk.blazeOverloadHits = 0;
         if (orbSkillLabels != null) updateOrbSkillRow();
         if (btnBumper      != null) btnBumper.setVisible(true);
         if (btnGravityWell != null) btnGravityWell.setVisible(true);
@@ -4040,8 +4045,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
             if (skillCooldownTimer[_si] > 0) skillCooldownTimer[_si] = Math.max(0, skillCooldownTimer[_si] - delta);
             if (skillActiveTimer[_si]   > 0) skillActiveTimer[_si]   = Math.max(0, skillActiveTimer[_si]   - delta);
         }
-        _ssd.blazeDoubleDamage = skillActiveTimer[0] > 0;
-        _ssd.blazeBurnActive   = skillActiveTimer[3] > 0;
+        _ssd.blazeShieldActive = skillActiveTimer[0] > 0;
+        blazeMagnetActive      = skillActiveTimer[1] > 0;
+        if (blazeRallyFlash    > 0) blazeRallyFlash    -= delta;
+        if (blazeOverloadFlash > 0) blazeOverloadFlash -= delta;
+        blazeShieldAngle += delta * 150f; // degrees per second
+        if (blazeShieldAngle > 360f) blazeShieldAngle -= 360f;
         // Flying bumper: travel from button to drum, then hand off to physics
         if (flyingBumperActive) {
             flyingBumperWX += flyingBumperVX * delta;
@@ -4189,6 +4198,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         drawArmBumpers();
         drawValleyBlades();
         drawInterns();
+        drawSkillEffects();
         drawRelayNodes();
         drawPortals();
         drawHarvestGlows();
@@ -7088,8 +7098,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
             float scaleY  = breathe;
             float drawAngle = 0f;
 
-            // Speed-based glow intensity
+            // Speed-based glow intensity; OVERLOAD boosts BLAZE glow
+            boolean _overloading = _blaze && ShipData.get().blazeOverloadHits > 0;
             float glow = Math.min(0.55f + speed * 0.09f, 1f);
+            if (_overloading) glow = Math.min(1f, glow + 0.35f + MathUtils.sin(animTime * 12f) * 0.15f);
 
             boolean ember = isEmberIV();
             if (ember) {
@@ -7114,6 +7126,13 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 batch.draw(texParticleCore, px - chw, py - chh, chw, chh,
                     coreW, coreH, scaleX, scaleY, drawAngle,
                     0, 0, texParticleCore.getWidth(), texParticleCore.getHeight(), false, false);
+                // OVERLOAD: extra outer burst ring
+                if (_overloading) {
+                    float _ox = _dSz * 1.6f, _ohw = _ox * 0.5f;
+                    float _oa = 0.35f + MathUtils.sin(animTime * 10f) * 0.25f;
+                    batch.setColor(1f, 0.65f, 0.10f, _oa);
+                    batch.draw(texParticle, px - _ohw, py - _ohw, _ox, _ox);
+                }
             }
         }
         // Flying intern sprite (visual slingshot phase before entering drum)
@@ -7130,6 +7149,80 @@ public class EngineeringLabScreen extends ScreenAdapter {
         batch.setColor(1f, 1f, 1f, 1f);
     }
 
+    private void drawSkillEffects() {
+        // Find BLAZE position
+        com.badlogic.gdx.math.Vector2 _bPos = null;
+        for (int _i = 0; _i < balls.size; _i++) {
+            if ("INTERN_BLAZE".equals(balls.get(_i).getUserData())) {
+                _bPos = balls.get(_i).getPosition(); break;
+            }
+        }
+        boolean _anyEffect = skillActiveTimer[0] > 0 || blazeMagnetActive || blazeRallyFlash > 0;
+        if (!_anyEffect) return;
+
+        batch.end();
+        shapeR.setProjectionMatrix(physCam.combined);
+        com.badlogic.gdx.Gdx.gl.glEnable(com.badlogic.gdx.graphics.GL20.GL_BLEND);
+
+        // ── SHIELD: rotating dashed arc around BLAZE ──
+        if (_bPos != null && skillActiveTimer[0] > 0) {
+            float _sr = ORB_RADIUS[1] * 3.0f;
+            float _sa = 0.55f + MathUtils.sin(animTime * 6f) * 0.25f;
+            shapeR.begin(com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType.Line);
+            shapeR.setColor(1f, 0.80f, 0.25f, _sa);
+            int _segs = 24;
+            for (int _si = 0; _si < _segs; _si += 2) {
+                float _a1 = (float) Math.toRadians(blazeShieldAngle + _si       * (360f / _segs));
+                float _a2 = (float) Math.toRadians(blazeShieldAngle + (_si + 1) * (360f / _segs));
+                shapeR.line(_bPos.x + MathUtils.cos((float)_a1) * _sr, _bPos.y + MathUtils.sin((float)_a1) * _sr,
+                            _bPos.x + MathUtils.cos((float)_a2) * _sr, _bPos.y + MathUtils.sin((float)_a2) * _sr);
+            }
+            shapeR.end();
+        }
+
+        // ── MAGNET: animated dotted pull lines toward BLAZE ──
+        if (_bPos != null && blazeMagnetActive) {
+            shapeR.begin(com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType.Line);
+            float _mt = animTime * 2.5f;
+            for (int _bi = 0; _bi < balls.size; _bi++) {
+                Body _mb = balls.get(_bi);
+                if ("INTERN_BLAZE".equals(_mb.getUserData())) continue;
+                com.badlogic.gdx.math.Vector2 _mp = _mb.getPosition();
+                float _dx = _bPos.x - _mp.x, _dy = _bPos.y - _mp.y;
+                for (int _si = 0; _si < 5; _si++) {
+                    float _t0 = ((_si * 0.18f + _mt * 0.12f) % 1.0f);
+                    float _t1 = _t0 + 0.09f;
+                    if (_t1 > 1f) continue;
+                    float _fa = 0.20f + 0.25f * (1f - _t0); // fade near BLAZE
+                    shapeR.setColor(1f, 0.55f, 0.15f, _fa);
+                    shapeR.line(_mp.x + _dx * _t0, _mp.y + _dy * _t0,
+                                _mp.x + _dx * _t1, _mp.y + _dy * _t1);
+                }
+            }
+            shapeR.end();
+        }
+
+        // ── RALLY: expanding ring burst ──
+        if (blazeRallyFlash > 0) {
+            float _rfx = _bPos != null ? _bPos.x : CENTRIFUGE_CX;
+            float _rfy = _bPos != null ? _bPos.y : CENTRIFUGE_CY;
+            float _rp  = 1f - (blazeRallyFlash / 0.8f);
+            float _rr  = _rp * 2.2f;
+            float _ra  = (1f - _rp) * 0.85f;
+            shapeR.begin(com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType.Line);
+            shapeR.setColor(0.35f, 0.70f, 1f, _ra);
+            int _rn = 20;
+            for (int _ri = 0; _ri < _rn; _ri++) {
+                float _r1 = (float) Math.toRadians(_ri       * 360f / _rn);
+                float _r2 = (float) Math.toRadians((_ri + 1) * 360f / _rn);
+                shapeR.line(_rfx + MathUtils.cos((float)_r1) * _rr, _rfy + MathUtils.sin((float)_r1) * _rr,
+                            _rfx + MathUtils.cos((float)_r2) * _rr, _rfy + MathUtils.sin((float)_r2) * _rr);
+            }
+            shapeR.end();
+        }
+
+        batch.begin();
+    }
 
     private void drawHeartbeatPulse() {
         if (pulseHistory.size == 0) return;
@@ -8767,44 +8860,26 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 triggerPlanetWin();
             }
         }
-        // ---- BLAZE skill 1: HEAT — strong impulse on the BLAZE orb ----
-        if (blazeHeatPending) {
-            blazeHeatPending = false;
-            for (int _bi = 0; _bi < balls.size; _bi++) {
-                Body _bb = balls.get(_bi);
-                if ("INTERN_BLAZE".equals(_bb.getUserData())) {
-                    com.badlogic.gdx.math.Vector2 _bv = _bb.getLinearVelocity();
-                    float _bspd = _bv.len();
-                    float _bax = _bspd > 0.1f ? _bv.x / _bspd : 1f;
-                    float _bay = _bspd > 0.1f ? _bv.y / _bspd : 0f;
-                    _bb.applyLinearImpulse(_bax * 3.5f, _bay * 3.5f,
-                        _bb.getPosition().x, _bb.getPosition().y, true);
-                }
-            }
-        }
-        // ---- BLAZE skill 2: BLAST — radial burst from BLAZE position ----
-        if (blazeBlastPending) {
-            blazeBlastPending = false;
-            com.badlogic.gdx.math.Vector2 _blazePos = null;
+        // ---- BLAZE skill 1: MAGNET — pull all non-BLAZE orbs toward BLAZE ----
+        if (blazeMagnetActive) {
+            com.badlogic.gdx.math.Vector2 _mPos = null;
             for (int _bi = 0; _bi < balls.size; _bi++) {
                 if ("INTERN_BLAZE".equals(balls.get(_bi).getUserData())) {
-                    _blazePos = balls.get(_bi).getPosition();
-                    break;
+                    _mPos = balls.get(_bi).getPosition(); break;
                 }
             }
-            if (_blazePos != null) {
+            if (_mPos != null) {
                 for (int _bi = 0; _bi < balls.size; _bi++) {
-                    Body _ob = balls.get(_bi);
-                    if ("INTERN_BLAZE".equals(_ob.getUserData())) continue;
-                    com.badlogic.gdx.math.Vector2 _op = _ob.getPosition();
-                    float _dx = _op.x - _blazePos.x, _dy = _op.y - _blazePos.y;
-                    float _dl = (float) Math.sqrt(_dx*_dx + _dy*_dy);
-                    if (_dl < 0.001f) { _dx = 1f; _dy = 0f; _dl = 1f; }
-                    _ob.applyLinearImpulse(
-                        _dx / _dl * 4.5f, _dy / _dl * 4.5f,
-                        _op.x, _op.y, true);
+                    Body _mb = balls.get(_bi);
+                    if ("INTERN_BLAZE".equals(_mb.getUserData())) continue;
+                    com.badlogic.gdx.math.Vector2 _mp = _mb.getPosition();
+                    float _mdx = _mPos.x - _mp.x, _mdy = _mPos.y - _mp.y;
+                    float _mdl = (float) Math.sqrt(_mdx*_mdx + _mdy*_mdy);
+                    if (_mdl < 0.3f) continue; // already close enough
+                    _mb.applyLinearImpulse(
+                        _mdx / _mdl * 0.08f, _mdy / _mdl * 0.08f,
+                        _mp.x, _mp.y, true);
                 }
-                triggerShake(3f, 0.06f);
             }
         }
     }
@@ -9263,10 +9338,17 @@ public class EngineeringLabScreen extends ScreenAdapter {
         skillCooldownTimer[slot] = SKILL_COOLDOWN[slot];
         skillActiveTimer[slot]   = SKILL_DURATION[slot];
         switch (slot) {
-            case 0: /* RING DMG+ — flag set in render tick */ break;
-            case 1: blazeHeatPending  = true; break;
-            case 2: blazeBlastPending = true; skillActiveTimer[2] = 0; break;
-            case 3: /* BURN — flag set in render tick */ break;
+            case 0: /* SHIELD — blazeShieldActive set in tick */ break;
+            case 1: blazeMagnetActive = true; break;
+            case 2: // OVERLOAD — 10 triple-damage hits
+                ShipData.get().blazeOverloadHits = 10;
+                blazeOverloadFlash = 0.6f;
+                break;
+            case 3: // RALLY — instant +30 mana, no cost
+                mana += SKILL_MANA_COST[slot]; // refund the 0 cost
+                mana = Math.min(MAX_MANA, mana + 30f);
+                blazeRallyFlash = 0.8f;
+                break;
         }
         SoundManager.get().playMilestone();
         updateOrbSkillRow();

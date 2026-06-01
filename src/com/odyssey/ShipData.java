@@ -245,8 +245,10 @@ public final class ShipData {
 
     public final com.badlogic.gdx.utils.Array<float[]> pendingContactEvents = new com.badlogic.gdx.utils.Array<>();
     // BLAZE active skill flags — set by EngineeringLabScreen, read by EnergyContactListener
-    public boolean blazeDoubleDamage = false;  // skill 0: RING DMG+
-    public boolean blazeBurnActive   = false;  // skill 3: BURN
+    public boolean blazeDoubleDamage  = false;  // legacy — kept for OVERLOAD reuse
+    public boolean blazeBurnActive    = false;  // legacy — kept
+    public boolean blazeShieldActive  = false;  // skill 0: SHIELD — fast ring hits
+    public int     blazeOverloadHits  = 0;      // skill 2: OVERLOAD — hits left at 3×
     public int pendingBumperSounds    = 0;
     public int pendingCollisionSounds = 0;
 

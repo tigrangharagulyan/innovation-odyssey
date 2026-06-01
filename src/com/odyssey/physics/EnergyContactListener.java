@@ -46,10 +46,13 @@ public class EnergyContactListener implements ContactListener {
                 long _now = System.currentTimeMillis();
                 boolean _isBlaze = (_aInt && "INTERN_BLAZE".equals(bodyA.getUserData()))
                                 || (_bInt && "INTERN_BLAZE".equals(bodyB.getUserData()));
-                int _dmg = (_isBlaze && ShipData.get().blazeDoubleDamage) ? 2 : 1;
+                ShipData _sd0 = ShipData.get();
+                long _cooldown = (_isBlaze && _sd0.blazeShieldActive) ? 30L : 120L;
+                int  _dmg = 1;
+                if (_isBlaze && _sd0.blazeOverloadHits > 0) { _dmg = 3; _sd0.blazeOverloadHits--; }
                 if (aIsRing) {
                     ShipData.RingHitData _rhd = (ShipData.RingHitData) bodyA.getUserData();
-                    if (!_rhd.readyToDestroy && _now - _rhd.lastHitMs > 120L) {
+                    if (!_rhd.readyToDestroy && _now - _rhd.lastHitMs > _cooldown) {
                         _rhd.lastHitMs = _now;
                         _rhd.hitsRemaining -= _dmg;
                         if (_rhd.hitsRemaining <= 0) _rhd.readyToDestroy = true;
@@ -57,7 +60,7 @@ public class EnergyContactListener implements ContactListener {
                 }
                 if (bIsRing) {
                     ShipData.RingHitData _rhd = (ShipData.RingHitData) bodyB.getUserData();
-                    if (!_rhd.readyToDestroy && _now - _rhd.lastHitMs > 120L) {
+                    if (!_rhd.readyToDestroy && _now - _rhd.lastHitMs > _cooldown) {
                         _rhd.lastHitMs = _now;
                         _rhd.hitsRemaining -= _dmg;
                         if (_rhd.hitsRemaining <= 0) _rhd.readyToDestroy = true;
