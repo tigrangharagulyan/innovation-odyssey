@@ -353,6 +353,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private static final int PLACE_INTERN = 5;
     private int   dragMode         = PLACE_NONE;
     private float dragStageX, dragStageY;
+    private float dragOriginStageX = 0f;
+    private float dragOriginStageY = 0f;
+    private final com.badlogic.gdx.utils.Array<com.badlogic.gdx.physics.box2d.Body>  curlingBodies  = new com.badlogic.gdx.utils.Array<>();
+    private final com.badlogic.gdx.utils.Array<Float> curlingTimers  = new com.badlogic.gdx.utils.Array<>();
+    private static final float CURLING_SETTLE_TIME  = 2.0f;
+    private static final float CURLING_SETTLE_SPEED = 0.3f;
     private InputMultiplexer inputMux;
     private float jpsTimer         = 0f;
     private float lastJoules       = 0f;
@@ -2072,6 +2078,26 @@ public class EngineeringLabScreen extends ScreenAdapter {
         bumpers.add(body);
     }
 
+    private void launchCurlingBumper(float wx, float wy, float vx, float vy) {
+        com.badlogic.gdx.physics.box2d.BodyDef bd = new com.badlogic.gdx.physics.box2d.BodyDef();
+        bd.type = com.badlogic.gdx.physics.box2d.BodyDef.BodyType.DynamicBody;
+        bd.position.set(wx, wy);
+        com.badlogic.gdx.physics.box2d.CircleShape circle = new com.badlogic.gdx.physics.box2d.CircleShape();
+        circle.setRadius(bumperCoreR);
+        com.badlogic.gdx.physics.box2d.FixtureDef fd = new com.badlogic.gdx.physics.box2d.FixtureDef();
+        fd.shape       = circle;
+        fd.restitution = 0.50f;
+        fd.friction    = 0.3f;
+        fd.density     = 1.0f;
+        com.badlogic.gdx.physics.box2d.Body body = world.createBody(bd);
+        body.createFixture(fd);
+        body.setUserData(new ShipData.BumperHitData());
+        body.setLinearVelocity(vx, vy);
+        circle.dispose();
+        curlingBodies.add(body);
+        curlingTimers.add(0f);
+    }
+
     private void spawnIcicleNode(float wx, float wy) {
         // Snap to nearest of 6 arm directions at clamped radius from center
         float centAng = (centrifugeBody != null) ? centrifugeBody.getAngle() : 0f;
@@ -2965,9 +2991,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     ShipData.get().placingStructure = true;
                     return true;
                 }
-                dragMode   = PLACE_BUMPER;
-                dragStageX = event.getStageX();
-                dragStageY = event.getStageY();
+                dragMode         = PLACE_BUMPER;
+                dragStageX       = event.getStageX();
+                dragStageY       = event.getStageY();
+                dragOriginStageX = event.getStageX();
+                dragOriginStageY = event.getStageY();
                 ShipData.get().placingStructure = true;
                 return true;
             }
@@ -3013,7 +3041,14 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     }
                 } else if (!isEmberIV()) {
                     if (bumpers.size < maxBumpersAllowed() && sd2.spendCrystals(bumperCost())) {
-                        spawnCentrifugeBumper(wx, wy);
+                        float originWX = dragOriginStageX / PPM;
+                        float originWY = (dragOriginStageY + 80f) / PPM;
+                        float dvx = wx - originWX;
+                        float dvy = wy - originWY;
+                        float dist = (float) Math.sqrt(dvx * dvx + dvy * dvy);
+                        float launchSpeed = Math.min(dist * 4f, 12f);
+                        if (dist > 0.01f) { dvx /= dist; dvy /= dist; }
+                        launchCurlingBumper(originWX, originWY, dvx * launchSpeed, dvy * launchSpeed);
                     }
                 }
             }
@@ -6992,6 +7027,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
             spiralCaptures.get(c).orb.setType(com.badlogic.gdx.physics.box2d.BodyDef.BodyType.DynamicBody);
         spiralCaptures.clear();
         // Destroy every placed construction body — pause menu is visible so world is not stepping
+        for (int _ci = 0; _ci < curlingBodies.size; _ci++) world.destroyBody(curlingBodies.items[_ci]);
+        curlingBodies.clear();
+        curlingTimers.clear();
         for (int i = 0; i < bumpers.size;       i++) world.destroyBody(bumpers.get(i));
         for (int i = 0; i < attractors.size;    i++) world.destroyBody(attractors.get(i));
         for (int i = 0; i < icicleNodes.size;   i++) world.destroyBody(icicleNodes.get(i));
@@ -7088,6 +7126,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
             spiralCaptures.get(c).orb.setType(com.badlogic.gdx.physics.box2d.BodyDef.BodyType.DynamicBody);
         spiralCaptures.clear();
         // Destroy every placed body and all interns
+        for (int _ci = 0; _ci < curlingBodies.size; _ci++) world.destroyBody(curlingBodies.items[_ci]);
+        curlingBodies.clear();
+        curlingTimers.clear();
         for (int i = 0; i < bumpers.size;       i++) world.destroyBody(bumpers.get(i));
         for (int i = 0; i < attractors.size;    i++) world.destroyBody(attractors.get(i));
         for (int i = 0; i < icicleNodes.size;   i++) world.destroyBody(icicleNodes.get(i));
@@ -8323,6 +8364,30 @@ public class EngineeringLabScreen extends ScreenAdapter {
             }
             pulseTimer                  = 0f;
             accumulatedSparksThisSecond = 0f;
+        }
+        // ---- Settle curling bodies ----
+        for (int _ci = curlingBodies.size - 1; _ci >= 0; _ci--) {
+            com.badlogic.gdx.physics.box2d.Body _cb = curlingBodies.items[_ci];
+            float _ct = curlingTimers.get(_ci) + delta;
+            curlingTimers.set(_ci, _ct);
+            float _speed = _cb.getLinearVelocity().len();
+            boolean _settled = _ct >= CURLING_SETTLE_TIME || _speed < CURLING_SETTLE_SPEED;
+            if (_settled) {
+                float _fx = _cb.getPosition().x;
+                float _fy = _cb.getPosition().y;
+                world.destroyBody(_cb);
+                curlingBodies.removeIndex(_ci);
+                curlingTimers.removeIndex(_ci);
+                float _dx = _fx - CENTRIFUGE_CX, _dy = _fy - CENTRIFUGE_CY;
+                float _d2 = _dx * _dx + _dy * _dy;
+                float _maxR = CENTRIFUGE_R * 0.90f;
+                if (_d2 > _maxR * _maxR) {
+                    float _d = (float) Math.sqrt(_d2);
+                    _fx = CENTRIFUGE_CX + _dx / _d * _maxR;
+                    _fy = CENTRIFUGE_CY + _dy / _d * _maxR;
+                }
+                spawnCentrifugeBumper(_fx, _fy);
+            }
         }
     }
 
