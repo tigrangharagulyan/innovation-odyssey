@@ -7541,8 +7541,44 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 batch.setColor(1f, 1f, 1f, alpha * 0.8f);
                 float coreD = orbD * 0.45f;
                 batch.draw(texParticleCore, px - coreD * 0.5f, py - coreD * 0.5f, coreD, coreD);
-            } else if (dragMode == PLACE_BUMPER) {
-                Texture icon = isFrostheim() ? texCryoVent : texBumper;
+            } else if (dragMode == PLACE_BUMPER && !isFrostheim()) {
+                // Slingshot visual — ghost at drum center, trajectory dots, rubber band
+                float gcx = CENTRIFUGE_CX * PPM, gcy = CENTRIFUGE_CY * PPM;
+                float sz  = BUMPER_W * 1.3f;
+                // Ghost bumper at drum center (cyan = in-flight color)
+                batch.setColor(0.35f, 1.0f, 0.90f, 0.85f);
+                batch.draw(texBumper, gcx - sz * 0.5f, gcy - sz * 0.5f, sz, sz);
+                // Trajectory dots: direction opposite of drag = slingshot direction
+                float originWX = dragOriginStageX / PPM;
+                float originWY = (dragOriginStageY + 80f) / PPM;
+                float dvx = originWX - rawWx;
+                float dvy = originWY - rawWy;
+                float dlen = (float) Math.sqrt(dvx * dvx + dvy * dvy);
+                if (dlen > 0.01f) {
+                    dvx /= dlen; dvy /= dlen;
+                    for (int _d = 1; _d <= 6; _d++) {
+                        float dotX = (CENTRIFUGE_CX + dvx * _d * 0.45f) * PPM;
+                        float dotY = (CENTRIFUGE_CY + dvy * _d * 0.45f) * PPM;
+                        float dotSz = 10f * (1f - _d * 0.1f);
+                        batch.setColor(0.35f, 1.0f, 0.90f, 0.70f - _d * 0.08f);
+                        batch.draw(texParticleCore, dotX - dotSz * 0.5f, dotY - dotSz * 0.5f, dotSz, dotSz);
+                    }
+                }
+                // Rubber band line from button origin to finger
+                float ox  = dragOriginStageX, oy  = dragOriginStageY + 80f;
+                float fx  = dragStageX,       fy  = dragStageY + 80f;
+                float lx  = fx - ox, ly = fy - oy;
+                float lineLen = (float) Math.sqrt(lx * lx + ly * ly);
+                if (lineLen > 4f) {
+                    float ang = (float) Math.toDegrees(Math.atan2(ly, lx));
+                    batch.setColor(1f, 0.6f, 0.2f, 0.75f);
+                    batch.draw(texPixel, ox, oy - 2f, 0f, 2f, lineLen, 4f, 1f, 1f, ang,
+                        0, 0, 1, 1, false, false);
+                }
+                batch.setColor(1f, 1f, 1f, 1f);
+            } else if (dragMode == PLACE_BUMPER && isFrostheim()) {
+                // Frostheim icicle: keep original placement ghost
+                Texture icon = texCryoVent;
                 float sz = BUMPER_W * 1.2f;
                 batch.setColor(1f, 1f, 1f, alpha);
                 batch.draw(icon, px - sz * 0.5f, py - sz * 0.5f, sz, sz);
