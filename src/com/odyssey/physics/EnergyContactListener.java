@@ -29,6 +29,53 @@ public class EnergyContactListener implements ContactListener {
         Body bodyA = fA.getBody();
         Body bodyB = fB.getBody();
 
+        // ---- Ring and center hit detection ----
+        boolean aIsRing   = bodyA.getUserData() instanceof ShipData.RingHitData;
+        boolean bIsRing   = bodyB.getUserData() instanceof ShipData.RingHitData;
+        boolean aIsCenter = bodyA.getUserData() instanceof ShipData.CenterHitData;
+        boolean bIsCenter = bodyB.getUserData() instanceof ShipData.CenterHitData;
+
+        if (aIsRing || bIsRing || aIsCenter || bIsCenter) {
+            boolean _aInt = (bodyA.getUserData() instanceof ShipData.InternBallData)
+                         || "PELLET".equals(bodyA.getUserData())
+                         || (bodyA.getUserData() instanceof String && ((String) bodyA.getUserData()).startsWith("INTERN"));
+            boolean _bInt = (bodyB.getUserData() instanceof ShipData.InternBallData)
+                         || "PELLET".equals(bodyB.getUserData())
+                         || (bodyB.getUserData() instanceof String && ((String) bodyB.getUserData()).startsWith("INTERN"));
+            if (_aInt || _bInt) {
+                long _now = System.currentTimeMillis();
+                if (aIsRing) {
+                    ShipData.RingHitData _rhd = (ShipData.RingHitData) bodyA.getUserData();
+                    if (!_rhd.readyToDestroy && _now - _rhd.lastHitMs > 120L) {
+                        _rhd.lastHitMs = _now;
+                        if (--_rhd.hitsRemaining <= 0) _rhd.readyToDestroy = true;
+                    }
+                }
+                if (bIsRing) {
+                    ShipData.RingHitData _rhd = (ShipData.RingHitData) bodyB.getUserData();
+                    if (!_rhd.readyToDestroy && _now - _rhd.lastHitMs > 120L) {
+                        _rhd.lastHitMs = _now;
+                        if (--_rhd.hitsRemaining <= 0) _rhd.readyToDestroy = true;
+                    }
+                }
+                if (aIsCenter) {
+                    ShipData.CenterHitData _chd = (ShipData.CenterHitData) bodyA.getUserData();
+                    if (!_chd.readyToDestroy && _now - _chd.lastHitMs > 80L) {
+                        _chd.lastHitMs = _now;
+                        if (--_chd.hitsRemaining <= 0) _chd.readyToDestroy = true;
+                    }
+                }
+                if (bIsCenter) {
+                    ShipData.CenterHitData _chd = (ShipData.CenterHitData) bodyB.getUserData();
+                    if (!_chd.readyToDestroy && _now - _chd.lastHitMs > 80L) {
+                        _chd.lastHitMs = _now;
+                        if (--_chd.hitsRemaining <= 0) _chd.readyToDestroy = true;
+                    }
+                }
+            }
+            return;  // ring/center contacts don't generate SP/energy
+        }
+
         // ---- Classify each body by its userData token ----
         boolean aIsIntern = bodyA.getUserData() instanceof String
                             && (((String) bodyA.getUserData()).startsWith("INTERN")
