@@ -367,6 +367,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private boolean flyingInternActive = false;
     private float   flyingInternWX, flyingInternWY;
     private float   flyingInternVX, flyingInternVY;
+    // Visual flight phase — gravity well slingshot
+    private boolean flyingAttractorActive = false;
+    private float   flyingAttractorWX, flyingAttractorWY;
+    private float   flyingAttractorVX, flyingAttractorVY;
     private InputMultiplexer inputMux;
     private float jpsTimer         = 0f;
     private float lastJoules       = 0f;
@@ -2094,13 +2098,14 @@ public class EngineeringLabScreen extends ScreenAdapter {
         circle.setRadius(bumperCoreR);
         com.badlogic.gdx.physics.box2d.FixtureDef fd = new com.badlogic.gdx.physics.box2d.FixtureDef();
         fd.shape       = circle;
-        fd.restitution = 0.50f;
-        fd.friction    = 0.3f;
+        fd.restitution = 0.88f;   // high bounce — loses energy off walls not gravity
+        fd.friction    = 0.02f;
         fd.density     = 1.0f;
         com.badlogic.gdx.physics.box2d.Body body = world.createBody(bd);
         body.createFixture(fd);
         body.setUserData(new ShipData.BumperHitData());
         body.setLinearVelocity(vx, vy);
+        body.setGravityScale(0f);  // no gravity — settles anywhere in drum, not always bottom
         circle.dispose();
         curlingBodies.add(body);
         curlingTimers.add(0f);
@@ -3103,9 +3108,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     if (!gravityUnlocked() || attractors.size >= maxGravityAllowed()) return false;
                     if (sd2.crystals < gravityCost()) return false;
                 }
-                dragMode   = PLACE_GRAVITY;
-                dragStageX = event.getStageX();
-                dragStageY = event.getStageY();
+                dragMode         = PLACE_GRAVITY;
+                dragStageX       = event.getStageX();
+                dragStageY       = event.getStageY();
+                dragOriginStageX = event.getStageX();
+                dragOriginStageY = event.getStageY();
                 return true;
             }
             @Override
@@ -3148,7 +3155,21 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     }
                 } else if (!isEmberIV()) {
                     if (attractors.size < maxGravityAllowed() && sd2.spendCrystals(gravityCost())) {
-                        spawnAttractorBumper(wx, wy);
+                        float originWX = dragOriginStageX / PPM;
+                        float originWY = (dragOriginStageY + 80f) / PPM;
+                        float rawWxA   = dragStageX / PPM;
+                        float rawWyA   = (dragStageY + 80f) / PPM;
+                        float dvx = originWX - rawWxA;
+                        float dvy = originWY - rawWyA;
+                        float dragDist = (float) Math.sqrt(dvx * dvx + dvy * dvy);
+                        if (dragDist < 0.01f) { dvx = 0f; dvy = 1f; dragDist = 1f; }
+                        float launchSpeed = Math.min(dragDist * 4f, 9f) + 3f;
+                        dvx /= dragDist; dvy /= dragDist;
+                        flyingAttractorWX = originWX;
+                        flyingAttractorWY = originWY;
+                        flyingAttractorVX = dvx * launchSpeed;
+                        flyingAttractorVY = dvy * launchSpeed;
+                        flyingAttractorActive = true;
                     }
                 }
             }
@@ -3936,6 +3957,20 @@ public class EngineeringLabScreen extends ScreenAdapter {
             } else if (flyingInternWY > WORLD_H + 2f || flyingInternWY < -1f
                        || flyingInternWX < -1f || flyingInternWX > WORLD_W + 1f) {
                 flyingInternActive = false;
+            }
+        }
+        // Flying gravity well
+        if (flyingAttractorActive) {
+            flyingAttractorWX += flyingAttractorVX * delta;
+            flyingAttractorWY += flyingAttractorVY * delta;
+            float _adx = flyingAttractorWX - CENTRIFUGE_CX;
+            float _ady = flyingAttractorWY - CENTRIFUGE_CY;
+            if (_adx * _adx + _ady * _ady < (CENTRIFUGE_R * 0.80f) * (CENTRIFUGE_R * 0.80f)) {
+                spawnAttractorBumper(flyingAttractorWX, flyingAttractorWY);
+                flyingAttractorActive = false;
+            } else if (flyingAttractorWY > WORLD_H + 2f || flyingAttractorWY < -1f
+                       || flyingAttractorWX < -1f || flyingAttractorWX > WORLD_W + 1f) {
+                flyingAttractorActive = false;
             }
         }
         // Age all pulse-history entries; drop any that have fully faded
@@ -5754,6 +5789,18 @@ public class EngineeringLabScreen extends ScreenAdapter {
             float cB = 1f;
             batch.setColor(cR, cG, cB, 0.95f);
             batch.draw(texGravCenter, px - ghw, py - ghw, ghw, ghw, gcd, gcd, 1f, 1f, animTime * 44f,
+                0, 0, texGravCenter.getWidth(), texGravCenter.getHeight(), false, false);
+        }
+        // Flying attractor (visual slingshot phase)
+        if (flyingAttractorActive) {
+            float _apx = flyingAttractorWX * PPM, _apy = flyingAttractorWY * PPM;
+            float _afd = 80f;
+            batch.setColor(0.60f, 0.30f, 1f, 0.65f);
+            batch.draw(texGravField, _apx - _afd * 0.5f, _apy - _afd * 0.5f, _afd, _afd);
+            batch.setColor(0.78f, 0.22f, 1f, 0.95f);
+            float _agcd = 44f;
+            batch.draw(texGravCenter, _apx - _agcd * 0.5f, _apy - _agcd * 0.5f,
+                _agcd * 0.5f, _agcd * 0.5f, _agcd, _agcd, 1f, 1f, animTime * 60f,
                 0, 0, texGravCenter.getWidth(), texGravCenter.getHeight(), false, false);
         }
         batch.setColor(1f, 1f, 1f, 1f);
@@ -7693,14 +7740,42 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 batch.setColor(1f, 0.75f, 0.20f, alpha);
                 float sz = BUMPER_W * 1.2f;
                 batch.draw(texBlade1, px - sz * 0.5f, py - sz * 0.5f, sz, sz);
-            } else if (dragMode == PLACE_GRAVITY) {
+            } else if (dragMode == PLACE_GRAVITY && !isFrostheim()) {
+                float ox3 = dragOriginStageX, oy3 = dragOriginStageY + 80f;
+                float fx3 = dragStageX,       fy3 = dragStageY + 80f;
+                float dvx3 = ox3 - fx3, dvy3 = oy3 - fy3;
+                float dlen3 = (float) Math.sqrt(dvx3 * dvx3 + dvy3 * dvy3);
+                batch.end();
+                Gdx.gl.glLineWidth(3f);
+                shapeR.setProjectionMatrix(renderCam.combined);
+                shapeR.begin(ShapeRenderer.ShapeType.Filled);
+                shapeR.setColor(0.60f, 0.30f, 1f, 0.80f);
+                shapeR.rectLine(ox3, oy3, fx3, fy3, 4f);
+                if (dlen3 > 4f) {
+                    float nx3 = dvx3 / dlen3, ny3 = dvy3 / dlen3;
+                    for (int _d3 = 1; _d3 <= 8; _d3++) {
+                        float dotR3 = 8f * (1f - _d3 * 0.08f);
+                        shapeR.setColor(0.70f, 0.35f, 1f, 0.80f - _d3 * 0.08f);
+                        shapeR.circle(ox3 + nx3 * _d3 * 34f, oy3 + ny3 * _d3 * 34f, dotR3, 10);
+                    }
+                }
+                shapeR.end();
+                Gdx.gl.glLineWidth(1f);
+                batch.begin();
+                float _gfd = gravityFieldR * 2f * PPM, _gfh = _gfd * 0.5f;
+                batch.setColor(0.60f, 0.30f, 1f, 0.60f);
+                batch.draw(texGravField, ox3 - _gfh, oy3 - _gfh, _gfd, _gfd);
+                batch.setColor(1f, 1f, 1f, 0.90f);
+                float _gsz = BUMPER_W * 1.2f;
+                batch.draw(texGravCenter, ox3 - _gsz * 0.5f, oy3 - _gsz * 0.5f, _gsz, _gsz);
+            } else if (dragMode == PLACE_GRAVITY && isFrostheim()) {
+                // Frostheim tesla: original placement ghost
                 float fd = gravityFieldR * 2f * PPM, fh = fd * 0.5f;
                 batch.setColor(0.60f, 0.30f, 1f, alpha * 0.55f);
                 batch.draw(texGravField, px - fh, py - fh, fd, fd);
-                Texture icon = isFrostheim() ? texTeslaCoil : texGravCenter;
                 float sz = BUMPER_W * 1.2f;
                 batch.setColor(1f, 1f, 1f, alpha);
-                batch.draw(icon, px - sz * 0.5f, py - sz * 0.5f, sz, sz);
+                batch.draw(texTeslaCoil, px - sz * 0.5f, py - sz * 0.5f, sz, sz);
             } else if (dragMode == PLACE_SPRING_PAD) {
                 batch.setColor(1f, 0.42f, 0.05f, alpha);
                 float sz = BUMPER_W * 1.2f;
