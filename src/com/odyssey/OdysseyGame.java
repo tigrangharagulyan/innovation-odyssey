@@ -131,7 +131,12 @@ public class OdysseyGame extends Game {
                      + "▲"   // ▲ up-pointing triangle
                      + "✓"   // ✓ check mark
                      + "♥"   // ♥ heart (lives HUD)
-                     + "◆";  // ◆ diamond (gems HUD)
+                     + "◆"   // ◆ diamond (gems HUD)
+                     + "∞"   // ∞ infinity (shop permanents)
+                     + "●"   // ● filled circle (gravity field tag)
+                     + "○"   // ○ open circle (gravity offline tag)
+                     + "—"   // — em dash (used throughout UI text)
+                     + "›";  // › right angle quotation (breadcrumb arrows)
 
         p.size = 17; BitmapFont font   = gen.generateFont(p);
         p.size = 24; BitmapFont medium = gen.generateFont(p);

@@ -435,7 +435,7 @@ public class InternDeployScreen extends ScreenAdapter {
         drawCentered("CREW HANDOFF", W * 0.5f, H - 48f);
         font.getData().setScale(0.65f);
         font.setColor(0.45f, 0.65f, 0.85f, 0.80f);
-        drawCentered(fromName + "  ›  " + toName, W * 0.5f, H - 76f);
+        drawCentered(fromName + "  →  " + toName, W * 0.5f, H - 76f);
 
         // Planet name labels
         font.getData().setScale(0.70f);

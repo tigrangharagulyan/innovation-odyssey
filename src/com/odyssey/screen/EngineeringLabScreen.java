@@ -38,6 +38,9 @@ import com.odyssey.OdysseyTheme;
 import com.odyssey.SoundManager;
 import com.odyssey.ShipData;
 import com.odyssey.physics.EnergyContactListener;
+import com.odyssey.planet.PlanetDefinition;
+import com.odyssey.planet.PlanetHooks;
+import com.odyssey.planet.PlanetState;
 
 public class EngineeringLabScreen extends ScreenAdapter {
 
@@ -153,8 +156,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
         "Arm Bumpers", "Notch Guards", "Merge Burst", "Cryo Extension", "Double Vortex"
     };
     private static final String[] FROST_PERK_DESCS = {
-        "Bumpers on each arm tip \u00b7 +25 \u2745 per hit",
-        "Deflectors in small arm notches \u00b7 +8 \u2745 per hit",
+        "Bumpers on each arm tip · +25 FS per hit",
+        "Deflectors in small arm notches · +8 FS per hit",
         "Pellets merging back award +500 Energy",
         "Pellet merge window extended: 5s \u2192 7s",
         "Capture up to 2 orbs per coil"
@@ -293,6 +296,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private Texture texEmberPerk1, texEmberPerk2, texEmberPerk3, texEmberPerk4, texEmberPerk5;
     private Texture texFrostPerk1, texFrostPerk2, texFrostPerk3, texFrostPerk4, texFrostPerk5;
     private Texture texIconSP, texIconEnergy;
+    private Texture texHandDrag;
     private com.badlogic.gdx.scenes.scene2d.ui.Image uiIconSP, uiIconEnergy;
 
     // Perk tap popup state
@@ -405,6 +409,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     // 0=intro overlay, 1=hire-intern callout, 2=launch callout, 3=done
     private int   tutorialStep    = 0;
     private float tutorialStepAge = 0f;   // time spent on current callout step
+    private float tutorialEnergyBaseline = 0f; // powerGenerated snapshot when step 1 begins
     private int   lastPlanetIndex = -1;           // tracks planet changes for texture regen
 
     // Speed tooltip (small popup above r/s label, auto-hides after 5s)
@@ -442,8 +447,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private boolean frostheimCpIII = false;
 
     // Frostheim purchasable start unlocks (before any checkpoint)
-    private boolean frostheimIcicleUnlocked      = false;  // 400❅ — unlocks Icicle Node slot
-    private boolean frostheimThirdInternUnlocked = false;  // 800❅ — spawns 3rd intern
+    private boolean frostheimIcicleUnlocked      = false;  // 400FS — unlocks Icicle Node slot
+    private boolean frostheimThirdInternUnlocked = false;  // 800FS — spawns 3rd intern
     private boolean frostheimArmBumpersActive        = false;  // perk A: 6 powerful repulsors on arm tips
     private boolean frostheimMergeBurstUnlocked       = false;  // perk B: +500 J on pellet merge-back
     private boolean frostheimValleyBladesUnlocked     = false;  // perk C: deflectors in valley dips
@@ -551,6 +556,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private float shakeDuration = 0.05f;
     private float shakeMag      = 4f;
 
+    // Planet architecture — current planet definition and state
+    private PlanetDefinition currentDef   = ShipData.PLANET_DEFS[0];
+    private PlanetState      currentState = ShipData.get().getState(0);
+
     // ---- Construction -----------------------------------------------------------
 
     public EngineeringLabScreen(OdysseyGame game) {
@@ -567,7 +576,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         texBackground   = genBackground();
         texParticle     = genGlowTexture(64);
         texParticleCore = genGlowTexture(24);
-        texBumper       = genBumperTexture(48);
+        texBumper       = new Texture(Gdx.files.internal("ui/bumper.png"));
         texRing         = genRingTexture((int) RING_TEX_SIZE);
         texGravField    = genGravFieldTexture(128);
         texGravCenter   = genGravCenterTexture(48);
@@ -580,6 +589,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         texBlade2       = genBladeTextureB(96);
         texBlade3       = genBladeTextureC(96);
         texRocket       = genRocketTexture(56);
+        texHandDrag     = new Texture(Gdx.files.internal("ui/hand_drag.png"));
         texLock         = genLockTexture(28);
         texPerkSpeed    = genPerkIconSpeed(40);
         texPerkElas     = genPerkIconElas(40);
@@ -600,7 +610,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             texFrostPerk4 = genFrostPerkIconCryoExtension(40);
             texFrostPerk5 = genFrostPerkIconDoubleVortex(40);
         }
-        texIconSP       = genIconCrystal(20);
+        texIconSP       = genIconSpaceCoin(24);
         texIconEnergy   = genIconBolt(24);
 
         // 1×1 white pixel — used for all colored stick-limb rect drawing
@@ -635,30 +645,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
         pm.setBlending(Pixmap.Blending.None);
 
         int pidx = ShipData.get().currentPlanetIndex;
-        // Gradient palette [r0, r_t, g0, g_t, b0, b_t] (t=0 = bottom of screen, t=1 = top)
-        float[] gp = switch (pidx) {
-            case 1  -> new float[]{0.040f,0.030f, 0.010f,0.008f, 0.005f,0.003f}; // Ember IV  volcanic
-            case 2  -> new float[]{0.010f,0.008f, 0.018f,0.028f, 0.048f,0.065f}; // Frostheim ice
-            case 3  -> new float[]{0.005f,0.006f, 0.022f,0.025f, 0.028f,0.040f}; // Cryon Reach teal
-            case 4  -> new float[]{0.022f,0.018f, 0.016f,0.014f, 0.007f,0.004f}; // Helios Forge heat
-            default -> new float[]{0.015f,0.020f, 0.018f,0.025f, 0.055f,0.070f}; // Solara blue
-        };
-        // Chamber glow color [glowR, glowG, glowB]
-        float[] gc = switch (pidx) {
-            case 1  -> new float[]{0.65f, 0.10f, 0.95f}; // Ember IV  nova-purple
-            case 2  -> new float[]{0.48f, 0.72f, 1.00f}; // Frostheim ice-blue
-            case 3  -> new float[]{0.05f, 0.85f, 0.78f}; // Cryon Reach teal
-            case 4  -> new float[]{0.95f, 0.82f, 0.35f}; // Helios Forge solar
-            default -> new float[]{0.12f, 0.62f, 1.00f}; // Solara cyan
-        };
-        // Star tint multipliers [sr, sg, sb]
-        float[] st = switch (pidx) {
-            case 1  -> new float[]{1.05f, 0.82f, 0.75f}; // Ember IV  reddish
-            case 2  -> new float[]{0.88f, 0.94f, 1.05f}; // Frostheim blueish
-            case 3  -> new float[]{0.82f, 1.05f, 0.98f}; // Cryon Reach teal
-            case 4  -> new float[]{1.05f, 0.98f, 0.75f}; // Helios Forge warm
-            default -> new float[]{1.00f, 1.00f, 1.00f}; // Solara neutral
-        };
+        float[] gp = currentDef.bgGradient();
+        float[] gc = currentDef.chamberGlow();
+        float[] st = currentDef.starTint();
 
         // Background gradient (bottom of Pixmap = top of screen after LibGDX flip)
         for (int y = 0; y < H; y++) {
@@ -681,7 +670,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         float cCX = CCX_PX, cCY = H - CCY_PX;
         float cR   = CENTRIFUGE_R * PPM;
         float sqHS = RECT_HW * PPM; // square half-size in pixels (same for both axes)
-        boolean isSquare = (pidx == 1);
+        boolean isSquare = isEmberIV();
 
         // Dark inner area
         float scanR = isSquare ? sqHS + 2 : cR + 2;
@@ -735,23 +724,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
         float outerR = size * 0.46f;
         float innerR = size * 0.31f;
 
-        int pidx = ShipData.get().currentPlanetIndex;
-        // Ring fill color: [r_base, r_peak, g_base, g_peak, b_base, b_peak]
-        float[] rc = switch (pidx) {
-            case 1  -> new float[]{0.35f,0.20f, 0.05f,0.10f, 0.70f,0.90f}; // Ember IV  nova-purple
-            case 2  -> new float[]{0.50f,0.40f, 0.72f,0.22f, 0.90f,0.10f}; // Frostheim ice-white
-            case 3  -> new float[]{0.04f,0.08f, 0.50f,0.38f, 0.46f,0.40f}; // Cryon Reach teal
-            case 4  -> new float[]{0.80f,0.18f, 0.68f,0.24f, 0.20f,0.16f}; // Helios Forge yellow
-            default -> new float[]{0.07f,0.23f, 0.48f,0.42f, 0.82f,0.18f}; // Solara cyan-blue
-        };
-        // Segment mark color [r, g, b]
-        float[] mc = switch (pidx) {
-            case 1  -> new float[]{0.85f, 0.50f, 1.00f}; // Ember IV  nova-purple
-            case 2  -> new float[]{0.85f, 0.95f, 1.00f}; // Frostheim ice-white
-            case 3  -> new float[]{0.25f, 1.00f, 0.88f}; // Cryon Reach teal
-            case 4  -> new float[]{1.00f, 0.90f, 0.40f}; // Helios Forge yellow
-            default -> new float[]{0.60f, 0.92f, 1.00f}; // Solara cyan
-        };
+        float[] rc = currentDef.ringInnerColor();
+        float[] mc = currentDef.ringMidColor();
 
         for (int y = 0; y < size; y++) {
             for (int x = 0; x < size; x++) {
@@ -1315,6 +1289,71 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     pm.setColor(Math.min(1f, 1.0f * t2 + 0.3f), Math.min(1f, 0.95f * t2 + 0.3f), 0.50f * t2, 0.55f);
                     pm.drawPixel(x, y);
                 }
+            }
+        }
+        Texture t = new Texture(pm); pm.dispose(); return t;
+    }
+
+    // Space Points coin icon — round gold coin with 5-pointed star impression
+    private Texture genIconSpaceCoin(int s) {
+        Pixmap pm = new Pixmap(s, s, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        pm.setColor(0f, 0f, 0f, 0f); pm.fill();
+        float cx = s * 0.5f, cy = s * 0.5f, r = s * 0.5f - 1f;
+        // Coin body — gold gradient (brighter toward center)
+        for (int y = 0; y < s; y++) {
+            for (int x = 0; x < s; x++) {
+                float dx = x - cx, dy = y - cy;
+                float dist = (float) Math.sqrt(dx * dx + dy * dy);
+                if (dist <= r) {
+                    float t = 1f - dist / r;
+                    pm.setColor(Math.min(1f, 0.82f + t * 0.18f),
+                                Math.min(1f, 0.60f + t * 0.22f),
+                                0.06f + t * 0.06f, 1f);
+                    pm.drawPixel(x, y);
+                }
+            }
+        }
+        // Upper-left specular highlight
+        for (int y = 0; y < s; y++) {
+            for (int x = 0; x < s; x++) {
+                float dx = x - cx, dy = y - cy;
+                float dist = (float) Math.sqrt(dx * dx + dy * dy);
+                if (dist <= r * 0.55f && dx <= 0 && dy <= 0) {
+                    float t = 1f - dist / (r * 0.55f);
+                    pm.setColor(1f, 0.97f, 0.78f, t * 0.52f);
+                    pm.drawPixel(x, y);
+                }
+            }
+        }
+        // 5-pointed star inset (dark gold lines)
+        pm.setColor(0.50f, 0.24f, 0.01f, 0.80f);
+        float outerStar = r * 0.50f, innerStar = r * 0.21f;
+        int[] starPx = new int[10 * 2];
+        for (int i = 0; i < 5; i++) {
+            double ao = Math.PI / 2 + i * 2 * Math.PI / 5;
+            double ai = Math.PI / 2 + (i + 0.5) * 2 * Math.PI / 5;
+            starPx[i * 4]     = (int)(cx + outerStar * Math.cos(ao));
+            starPx[i * 4 + 1] = (int)(cy - outerStar * Math.sin(ao));
+            starPx[i * 4 + 2] = (int)(cx + innerStar * Math.cos(ai));
+            starPx[i * 4 + 3] = (int)(cy - innerStar * Math.sin(ai));
+        }
+        for (int i = 0; i < 5; i++) {
+            int nx = (i + 1) % 5;
+            int ox = starPx[i * 4], oy = starPx[i * 4 + 1];
+            int ix = starPx[i * 4 + 2], iy = starPx[i * 4 + 3];
+            int ox2 = starPx[nx * 4], oy2 = starPx[nx * 4 + 1];
+            pm.drawLine(ox, oy, ix, iy);
+            pm.drawLine(ix, iy, ox2, oy2);
+        }
+        // Rim highlight
+        pm.setColor(1f, 0.95f, 0.55f, 0.65f);
+        for (int y = 0; y < s; y++) {
+            for (int x = 0; x < s; x++) {
+                float dx = x - cx, dy = y - cy;
+                float dist = (float) Math.sqrt(dx * dx + dy * dy);
+                if (dist >= r - 1.5f && dist <= r + 0.5f)
+                    pm.drawPixel(x, y);
             }
         }
         Texture t = new Texture(pm); pm.dispose(); return t;
@@ -2621,6 +2660,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             @Override public void changed(ChangeEvent e, Actor a) {
                 if (!isJumpReady()) return;
                 ShipData sd2 = ShipData.get();
+                sd2.saveReplayBackup(sd2.currentPlanetIndex, currentState.deepCopy());
                 commitNextPlanetDestination(sd2);
                 sd2.savedFlightJPS = sd2.currentJPS;
                 SoundManager.get().playLaunch();
@@ -3089,6 +3129,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     }
                     sd2.consumeLife();
                 }
+                sd2.saveReplayBackup(sd2.currentPlanetIndex, currentState.deepCopy());
                 commitNextPlanetDestination(sd2);
                 sd2.savedFlightJPS = sd2.currentJPS;
                 SoundManager.get().playLaunch();
@@ -3427,6 +3468,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
         }
 
         int pidx = ShipData.get().currentPlanetIndex;
+        currentDef   = ShipData.PLANET_DEFS[pidx];
+        currentState = ShipData.get().getState(pidx);
+        boolean didFullReset = false;
         if (pidx != lastPlanetIndex) {
             lastPlanetIndex = pidx;
             fullReset();
@@ -3434,6 +3478,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             texRing.dispose();
             texBackground = genBackground();
             texRing       = genRingTexture((int) RING_TEX_SIZE);
+            didFullReset = true;
         }
 
         ShipData sd = ShipData.get();
@@ -3450,7 +3495,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         if (balls.size == 0) {
             ShipData sdInit = ShipData.get();
-            int needed = sdInit.arrivalsCompleted > 0 ? 2 : 1;
+            int needed = sdInit.savedBallCount > 0
+                ? sdInit.savedBallCount
+                : (sdInit.arrivalsCompleted > 0 ? 2 : 1);
             needed = Math.max(0, needed - sdInit.pendingNewRecruits);
             float[][] initSpots = {
                 {CENTRIFUGE_CX - 0.6f, CENTRIFUGE_CY + 0.4f},
@@ -3467,8 +3514,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
             }
         }
 
-        restorePortalsAndRelays();
-        restoreStructures();
+        if (didFullReset) {
+            restorePortalsAndRelays();
+            restoreStructures();
+        }
         applySectorPerks();
         claimGemFarming();
         claimPendingRecruits();
@@ -3587,9 +3636,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
         spiralCaptures.clear();
 
         // Spawn placed structures
-        for (int i = 0; i + 1 < sd.savedBumpers.length; i += 2)
+        int maxBR = maxBumpersAllowed();
+        for (int i = 0; i + 1 < sd.savedBumpers.length && bumpers.size < maxBR; i += 2)
             spawnCentrifugeBumper(sd.savedBumpers[i], sd.savedBumpers[i + 1]);
-        for (int i = 0; i + 1 < sd.savedAttractors.length; i += 2)
+        int maxGR = maxGravityAllowed();
+        for (int i = 0; i + 1 < sd.savedAttractors.length && attractors.size < maxGR; i += 2)
             spawnAttractorBumper(sd.savedAttractors[i], sd.savedAttractors[i + 1]);
         for (int i = 0; i + 1 < sd.savedIcicleNodes.length && icicleNodes.size < maxIcicleNodesAllowed(); i += 2) {
             float ix = sd.savedIcicleNodes[i], iy = sd.savedIcicleNodes[i + 1];
@@ -3706,9 +3757,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         if (tutorialStep == 0 && inputHit) {
             // Step 0 → 1: intro dismissed, physics starts, show "hire intern" callout
-            tutorialStep    = 1;
-            tutorialStepAge = 0f;
-            tutorialDone    = true;
+            tutorialStep             = 1;
+            tutorialStepAge          = 0f;
+            tutorialEnergyBaseline   = ShipData.get().powerGenerated;
+            tutorialDone             = true;
         } else if (tutorialStep == 1) {
             // Advance only after intern is placed and 3s have passed
             if (tutorialPostDropTimer >= 0f) {
@@ -3721,7 +3773,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
             }
         } else if (tutorialStep == 2) {
             tutorialStepAge += delta;
-            if (inputHit) {
+            // advance when 200J earned THIS session, or on tap
+            float earnedThisSession = ShipData.get().powerGenerated - tutorialEnergyBaseline;
+            if (earnedThisSession >= 200f || inputHit) {
                 tutorialStep    = 3;
                 tutorialStepAge = 0f;
             }
@@ -3858,10 +3912,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // ---- Lives / Gems HUD tick ----
         sd.tickLives();
-        livesLabel.setText("  " + sd.lives + "/" + sd.maxLives);
+        livesLabel.setText(sd.lives + "/" + sd.maxLives);
         livesLabel.setColor(sd.lives > 0 ? new Color(1f, 0.35f, 0.35f, 1f)
                                          : new Color(1f, 0.20f, 0.20f, 1.00f));
-        diamondsLabel.setText("  " + sd.diamonds);
+        diamondsLabel.setText(String.valueOf(sd.diamonds));
         if (livesBlockTable.isVisible()) {
             long secs = sd.secondsToNextLife();
             lifeTimerLabel.setText(secs <= 0 ? "Life ready soon..."
@@ -4006,7 +4060,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             } else if (placementMode == PLACE_GRAVITY) {
                 btnGravityWell.setText("SPIRAL\nTap Ring");
             } else {
-                btnGravityWell.setText(String.format("TESLA %d/%d\n%.0f FS",
+                btnGravityWell.setText(String.format("SPIRAL %d/%d\n%.0f FS",
                     teslaCoils.size, maxTC, teslaCost()));
             }
         } else if (ember) {
@@ -4356,24 +4410,42 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 false
             );
         } else if (tutorialStep == 2) {
-            // Observation: intern hired, now watch SP accumulate
-            // crystalsLabel: left side of stats strip, approx X=60, Y=139
+            // Draw card — "SP" replaced with spaces; icon drawn inline below
             drawTutorialCalloutCard(
-                "IT'S WORKING!",
-                "Your intern earns Space Points (SP)",
-                "watch the SP counter — bottom left!",
+                "SPACE POINTS EARNED!",
+                "Each bounce earns    — your main currency.",
+                "Spend it on bumpers, gravity wells and more!",
                 60f, 184f,
                 false, false
             );
+            // Inline SP coin icon: position it where the gap sits in the centered text
+            final String PREFIX = "Each bounce earns  ";
+            final String FULL   = "Each bounce earns    — your main currency.";
+            float iconSz = 16f;
+            floatFont.getData().setScale(1.18f);
+            floatLayout.setText(floatFont, FULL);
+            float startX = RENDER_W * 0.5f - floatLayout.width * 0.5f;
+            floatLayout.setText(floatFont, PREFIX);
+            float iconX = startX + floatLayout.width;
+            floatFont.getData().setScale(1f);
+            float cardBotY2 = CCY_PX + CENTRIFUGE_R * PPM + 20f;
+            float line1Y = cardBotY2 + 160f - 60f;  // matches ty in drawTutorialCalloutCard
+            batch.setColor(1f, 0.90f, 0.20f, 1f);
+            batch.draw(texIconSP, iconX, line1Y - iconSz + 1f, iconSz, iconSz);
+            batch.setColor(1f, 1f, 1f, 1f);
         } else if (tutorialStep == 3) {
-            // Observation: Energy current/needed — top center panel
+            // Card sits inside the ring; arrow points up to the energy bar in the top panel
+            float energyBarY = renderViewport.getWorldHeight() - 95f;
+            float cardBot3   = CCY_PX - CENTRIFUGE_R * PPM * 0.5f - 80f; // center of ring, offset down
             drawTutorialCalloutCard(
                 "ENERGY (E)",
                 "Ring spin generates Energy.",
                 "Energy fuels your LAUNCH to next sector!",
-                240f, renderViewport.getWorldHeight() - 50f,
+                240f, energyBarY,
                 false,
-                true    // arrowFromTop: points up at top panel
+                true,   // arrowFromTop: points up to energy bar
+                false,
+                cardBot3
             );
         } else if (tutorialStep == 4) {
             // Observation: ring speed — right side of stats strip
@@ -4764,36 +4836,15 @@ public class EngineeringLabScreen extends ScreenAdapter {
             }
         }
 
-        // --- Finger shape: glow-circle tip + rect shaft ---
-        final float TIP_D  = 28f;   // diameter of fingertip
-        final float TIP_R  = TIP_D * 0.5f;
-        final float SHAFT_W = 9f;
-        final float SHAFT_H = 16f;
-
-        // Shadow
-        batch.setColor(0f, 0f, 0f, fingerAlpha * 0.38f);
-        batch.draw(texParticle,
-            fingerX - TIP_R + 3f, fingerY - TIP_R - 3f,
-            TIP_D, TIP_D);
-        batch.draw(texPixel,
-            fingerX - SHAFT_W * 0.5f + 3f, fingerY - TIP_R - SHAFT_H - 3f,
-            SHAFT_W, SHAFT_H);
-
-        // Shaft
-        batch.setColor(0.88f, 0.80f, 0.73f, fingerAlpha * 0.90f);
-        batch.draw(texPixel,
-            fingerX - SHAFT_W * 0.5f, fingerY - TIP_R - SHAFT_H,
-            SHAFT_W, SHAFT_H);
-
-        // Fingertip (glow orb tinted skin-tone)
-        batch.setColor(0.97f, 0.89f, 0.81f, fingerAlpha * 0.95f);
-        batch.draw(texParticle, fingerX - TIP_R, fingerY - TIP_R, TIP_D, TIP_D);
-
-        // Bright highlight
-        batch.setColor(1f, 1f, 1f, fingerAlpha * 0.50f);
-        batch.draw(texParticleCore,
-            fingerX - TIP_R * 0.35f, fingerY + TIP_R * 0.10f,
-            10f, 10f);
+        // --- Hand sprite (asset: ui/hand_drag.png) ---
+        // fingerX/fingerY = fingertip; sprite is 128×192, fingertip at top-center
+        final float SPR_W = 80f;
+        final float SPR_H = 120f;  // maintain 128:192 = 2:3 ratio
+        // fingertip sits at top-center of sprite → anchor at (SPR_W*0.5, SPR_H)
+        batch.setColor(1f, 1f, 1f, fingerAlpha);
+        batch.draw(texHandDrag,
+            fingerX - SPR_W * 0.5f, fingerY - SPR_H,
+            SPR_W, SPR_H);
 
         batch.setColor(1f, 1f, 1f, 1f);
     }
@@ -4832,17 +4883,24 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private void drawTutorialCalloutCard(String title, String line1, String line2,
                                           float tipX, float tipY,
                                           boolean isAction, boolean arrowFromTop) {
-        drawTutorialCalloutCard(title, line1, line2, tipX, tipY, isAction, arrowFromTop, false);
+        drawTutorialCalloutCard(title, line1, line2, tipX, tipY, isAction, arrowFromTop, false, -1f);
     }
     private void drawTutorialCalloutCard(String title, String line1, String line2,
                                           float tipX, float tipY,
                                           boolean isAction, boolean arrowFromTop, boolean isIcon) {
+        drawTutorialCalloutCard(title, line1, line2, tipX, tipY, isAction, arrowFromTop, isIcon, -1f);
+    }
+    private void drawTutorialCalloutCard(String title, String line1, String line2,
+                                          float tipX, float tipY,
+                                          boolean isAction, boolean arrowFromTop, boolean isIcon,
+                                          float cardBotYOverride) {
         float cx       = RENDER_W * 0.5f;
         float cardW    = 420f;
         float cardH    = 160f;
         float cardX    = cx - cardW * 0.5f;
-        // Place card above the centrifuge (centrifuge top ≈ CCY_PX + CENTRIFUGE_R*PPM = 600)
-        float cardBotY = CCY_PX + CENTRIFUGE_R * PPM + 20f;
+        float cardBotY = cardBotYOverride > 0f
+                ? cardBotYOverride
+                : CCY_PX + CENTRIFUGE_R * PPM + 20f;
 
         // Dark vignette over the lower portion of the screen (centrifuge + stats/buttons)
         batch.setColor(0f, 0f, 0f, 0.50f);
@@ -5007,7 +5065,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // ── Heart icon (lives label) ──────────────────────────────────────────
         Vector2 lp = livesLabel.localToStageCoordinates(new Vector2(0f, livesLabel.getHeight() * 0.5f));
-        float hx = lp.x + 7f, hy = lp.y, hhr = 5.5f;
+        float hx = lp.x - 14f, hy = lp.y, hhr = 5.5f;
         ShipData sdI = ShipData.get();
         shapeR.begin(ShapeRenderer.ShapeType.Filled);
         shapeR.setColor(sdI.lives > 0 ? new Color(1f, 0.28f, 0.40f, 0.95f)
@@ -5021,7 +5079,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // ── Diamond icon (gems label) ─────────────────────────────────────────
         Vector2 dp = diamondsLabel.localToStageCoordinates(new Vector2(0f, diamondsLabel.getHeight() * 0.5f));
-        float gx = dp.x + 7f, gy = dp.y, gs = 5.5f;
+        float gx = dp.x - 14f, gy = dp.y, gs = 5.5f;
         shapeR.begin(ShapeRenderer.ShapeType.Filled);
         shapeR.setColor(0.38f, 0.92f, 1.00f, 0.92f);
         shapeR.triangle(gx, gy + gs, gx + gs, gy, gx, gy - gs);
@@ -5051,6 +5109,42 @@ public class EngineeringLabScreen extends ScreenAdapter {
             }
             shapeR.end();
         }
+    }
+
+    /** Draws a gold Space Points coin (circle + 5-point star) via shapeR. Call outside batch begin/end. */
+    private void drawSpCoinIcon(float cx, float cy, float r) {
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeR.setProjectionMatrix(renderViewport.getCamera().combined);
+        shapeR.begin(ShapeRenderer.ShapeType.Filled);
+        // Outer glow
+        shapeR.setColor(1f, 0.78f, 0.05f, 0.18f);
+        shapeR.circle(cx, cy, r * 1.50f, 24);
+        // Coin body
+        shapeR.setColor(1f, 0.80f, 0.10f, 1f);
+        shapeR.circle(cx, cy, r, 28);
+        // Inner highlight (upper-left)
+        shapeR.setColor(1f, 0.98f, 0.72f, 0.48f);
+        shapeR.circle(cx - r * 0.20f, cy + r * 0.22f, r * 0.50f, 16);
+        // 5-pointed star
+        shapeR.setColor(0.55f, 0.26f, 0.01f, 0.85f);
+        float outerS = r * 0.52f, innerS = r * 0.22f;
+        for (int i = 0; i < 5; i++) {
+            float a1 = (float)(Math.PI / 2 + i       * 2 * Math.PI / 5);
+            float a2 = (float)(Math.PI / 2 + (i+0.5) * 2 * Math.PI / 5);
+            float a3 = (float)(Math.PI / 2 + (i+1)   * 2 * Math.PI / 5);
+            float ox1 = cx + outerS * MathUtils.cos(a1), oy1 = cy + outerS * MathUtils.sin(a1);
+            float ix  = cx + innerS * MathUtils.cos(a2), iy  = cy + innerS * MathUtils.sin(a2);
+            float ox2 = cx + outerS * MathUtils.cos(a3), oy2 = cy + outerS * MathUtils.sin(a3);
+            shapeR.triangle(cx, cy, ox1, oy1, ix, iy);
+            shapeR.triangle(cx, cy, ix, iy, ox2, oy2);
+        }
+        shapeR.end();
+        // Coin rim
+        shapeR.begin(ShapeRenderer.ShapeType.Line);
+        shapeR.setColor(1f, 0.95f, 0.55f, 0.80f);
+        shapeR.circle(cx, cy, r, 28);
+        shapeR.end();
     }
 
     private void drawHudBar() {
@@ -5536,14 +5630,39 @@ public class EngineeringLabScreen extends ScreenAdapter {
             float pulse = 0.70f + MathUtils.sin(animTime * 3.5f + i * 1.3f) * 0.30f;
             float scale = 0.92f + MathUtils.sin(animTime * 2.6f + i * 0.8f) * 0.08f + hitT * 0.25f;
 
-            // On-hit burst: white-yellow ring that expands outward and fades
+            // On-hit burst: expanding ring + spark streaks + white flash
             if (hitT > 0.01f) {
-                float burstD = BUMPER_W * (2.6f + (1f - hitT) * 2.8f);  // starts tight, expands
-                batch.setColor(1f, 0.85f + hitT * 0.15f, hitT * 0.5f, hitT * 0.80f);
+                // Expanding cyan ring
+                float burstD = BUMPER_W * (2.2f + (1f - hitT) * 3.4f);
+                batch.setColor(0.3f, 0.9f + hitT * 0.1f, 1f, hitT * 0.85f);
                 batch.draw(texGravField,
                     px - burstD * 0.5f, py - burstD * 0.5f,
                     burstD * 0.5f, burstD * 0.5f, burstD, burstD, 1f, 1f, animTime * 90f,
                     0, 0, texGravField.getWidth(), texGravField.getHeight(), false, false);
+                // 8 spark streaks shooting outward
+                float sparkDist = (1f - hitT) * 40f;
+                float sparkLen  = hitT * 18f + 4f;
+                for (int s = 0; s < 8; s++) {
+                    float angle = s * 45f;
+                    float radA  = angle * MathUtils.degreesToRadians;
+                    float sx    = px + MathUtils.cos(radA) * (BUMPER_W * 0.5f + sparkDist);
+                    float sy    = py + MathUtils.sin(radA) * (BUMPER_W * 0.5f + sparkDist);
+                    batch.setColor(0.5f + hitT * 0.5f, 0.88f, 1f, hitT * 0.90f);
+                    batch.draw(texPixel,
+                        sx - 1.5f, sy - sparkLen * 0.5f,
+                        1.5f, sparkLen * 0.5f,
+                        3f, sparkLen,
+                        1f, 1f, angle + 90f,
+                        0, 0, 1, 1, false, false);
+                }
+                // White flash overlay on bumper at peak impact
+                if (hitT > 0.55f) {
+                    float flashA = (hitT - 0.55f) / 0.45f;
+                    float fd = BUMPER_W * (scale + 0.15f);
+                    batch.setColor(1f, 1f, 1f, flashA * 0.75f);
+                    batch.draw(texParticle,
+                        px - fd * 0.5f, py - fd * 0.5f, fd, fd);
+                }
             }
 
             // Pulsing magenta outer glow — flares brighter on hit
@@ -5955,7 +6074,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         // Background dim rect to improve legibility
         floatFont.getData().setScale(0.98f);
         floatFont.setColor(1.00f, 0.78f, 0.15f, 0.95f * pulse);
-        drawFontCentered("hire more -> ring spins faster", nx, 200f);
+        drawFontCentered("hire more → ring spins faster", nx, 200f);
         floatFont.getData().setScale(1.10f);
         floatFont.setColor(1.00f, 0.65f, 0.10f, 0.80f * pulse);
         drawFontCentered("v", nx, 178f);
@@ -6847,6 +6966,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
     }
 
     private void fullReset() {
+        int pidx = ShipData.get().currentPlanetIndex;
+        currentDef   = ShipData.PLANET_DEFS[pidx];
+        currentState = ShipData.get().getState(pidx);
+
         // Restore any captured orbs to Dynamic before destroying bodies
         for (int c = 0; c < spiralCaptures.size; c++)
             spiralCaptures.get(c).orb.setType(com.badlogic.gdx.physics.box2d.BodyDef.BodyType.DynamicBody);
@@ -7421,7 +7544,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 emberPerk3 = true; milestoneAchieved[2] = true;
                 if (!sdp.emberPerksEarned[2]) {
                     sdp.emberPerksEarned[2] = true;
-                    showCeleb("GRAVITY SHIFT", "Tap the centre area to redirect gravity");
+                    showCeleb("GRAVITY SHIFT", "Tap the center area to redirect gravity");
                     SoundManager.get().playMilestone(); triggerShake(4f, 0.12f);
                     snapshotState(); sdp.save();
                 }
@@ -7484,7 +7607,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             if (!frostheimArmBumpersActive && targetRPM >= 3.75f) {
                 frostheimArmBumpersActive = true;
                 spawnArmBumpers();
-                showCeleb("ARM BUMPERS ONLINE", "6 repulsors on arm tips · +25 \u2745 per hit");
+                showCeleb("ARM BUMPERS ONLINE", "6 repulsors on arm tips · +25 FS per hit");
                 triggerShake(5f, 0.14f);
                 snapshotState(); ShipData.get().save();
             }
@@ -7493,7 +7616,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             if (!frostheimValleyBladesUnlocked && targetRPM >= 4.5f) {
                 frostheimValleyBladesUnlocked = true;
                 spawnValleyBlades();
-                showCeleb("NOTCH GUARDS", "Rotary deflectors in every small arm · +8 \u2745 per hit");
+                showCeleb("NOTCH GUARDS", "Rotary deflectors in every small arm · +8 FS per hit");
                 triggerShake(5f, 0.14f);
                 snapshotState(); ShipData.get().save();
             }
@@ -7541,7 +7664,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             // PERK C — Merge Burst (6.75 r/s = intern 7)
             if (!frostheimMergeBurstUnlocked && targetRPM >= 6.75f) {
                 frostheimMergeBurstUnlocked = true;
-                showCeleb("MERGE BURST", "Pellets reforming into orb \u00b7 +500 \u26a1 energy per merge");
+                showCeleb("MERGE BURST", "Pellets reforming into orb · +500 energy per merge");
                 triggerShake(5f, 0.14f);
                 snapshotState(); ShipData.get().save();
             }
@@ -8105,7 +8228,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     // ---- Helpers ----------------------------------------------------------------
 
     private boolean isFrostheim() {
-        return ShipData.get().currentPlanetIndex == 2;
+        return "frostheim".equals(currentDef.id());
     }
 
     private boolean isFrostheimPerkUnlocked(int slot) {
@@ -8120,7 +8243,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     }
 
     private boolean isEmberIV() {
-        return ShipData.get().currentPlanetIndex == 1;
+        return "nova_terra".equals(currentDef.id());
     }
 
     private void setGravShiftVisible(boolean visible) {
@@ -8276,10 +8399,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     }
 
     private float nextCheckpointEnergyCost() {
-        float[] energies;
-        if (isEmberIV())        energies = EMBER_CP_ENERGIES;
-        else if (isFrostheim()) energies = FROSTHEIM_CP_ENERGIES;
-        else                    energies = SOLARA_CP_ENERGIES;
+        float[] energies = currentDef.cpEnergies();
         int nextIdx = ShipData.get().sectorReached + 1;
         if (nextIdx < 0) nextIdx = 0;
         return nextIdx < energies.length ? energies[nextIdx] : energies[energies.length - 1];
@@ -8450,6 +8570,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         texBlade2.dispose();
         texBlade3.dispose();
         texRocket.dispose();
+        texHandDrag.dispose();
         texLock.dispose();
         texPerkSpeed.dispose();
         texPerkElas.dispose();
@@ -8472,6 +8593,29 @@ public class EngineeringLabScreen extends ScreenAdapter {
         int icicleNodeIdx = -1;  // which icicle node triggered this split; -1 = none
         PelletGroup(float x, float y) { spawnX = x; spawnY = y; }
     }
+
+    // ---- Planet hooks bridge --------------------------------------------------------
+
+    private final PlanetHooks planetHooks = new PlanetHooks() {
+        @Override public PlanetState  state()            { return currentState; }
+        @Override public ShipData     shipData()         { return ShipData.get(); }
+        @Override public com.badlogic.gdx.physics.box2d.World world() { return world; }
+        @Override public com.badlogic.gdx.utils.Array<com.badlogic.gdx.physics.box2d.Body> balls()          { return balls; }
+        @Override public com.badlogic.gdx.utils.Array<com.badlogic.gdx.physics.box2d.Body> bumpers()        { return bumpers; }
+        @Override public com.badlogic.gdx.utils.Array<com.badlogic.gdx.physics.box2d.Body> attractors()     { return attractors; }
+        @Override public com.badlogic.gdx.utils.Array<com.badlogic.gdx.physics.box2d.Body> specialBodiesA() { return kineticBlades; }
+        @Override public com.badlogic.gdx.utils.Array<com.badlogic.gdx.physics.box2d.Body> specialBodiesB() { return springPads; }
+        @Override public com.badlogic.gdx.utils.Array<Float> specialData()                                  { return null; }
+        @Override public float drumCenterX() { return CENTRIFUGE_CX; }
+        @Override public float drumCenterY() { return CENTRIFUGE_CY; }
+        @Override public float drumRadius()  { return CENTRIFUGE_R; }
+        @Override public void showCelebration(String title, String body) { showNotif(title, body); }
+        @Override public void triggerShake(float mag, float dur) {
+            shakeMag      = mag;
+            shakeDuration = dur;
+            shakeTimer    = dur;
+        }
+    };
 
     /** Tracks an orb captured by a Spiral Slingshot — orbits for SPIRAL_DURATION then launches. */
     private static final class SpiralCapture {

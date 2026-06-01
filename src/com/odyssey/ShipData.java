@@ -1,6 +1,14 @@
 package com.odyssey;
 
 import com.odyssey.analytics.AnalyticsService;
+import com.odyssey.planet.FrostheimPlanet;
+import com.odyssey.planet.NovaTerra;
+import com.odyssey.planet.PlanetDefinition;
+import com.odyssey.planet.PlanetState;
+import com.odyssey.planet.SolaraPlanet;
+import com.odyssey.planet.StubPlanet;
+import java.util.HashMap;
+import java.util.Map;
 
 public final class ShipData {
 
@@ -52,6 +60,14 @@ public final class ShipData {
             "Quantum Farm", "Fusion Dock",    250_000f),
         new PlanetProfile("Helios Forge", 12000f, 2.2f, "Volatile", "Overdrive Core",
             "Plasma Refinery", "Orbital Shipyard", 1_000_000f)
+    };
+
+    public static final PlanetDefinition[] PLANET_DEFS = {
+        new SolaraPlanet(),
+        new NovaTerra(),
+        new FrostheimPlanet(),
+        new StubPlanet("cryon_reach"),
+        new StubPlanet("helios_forge")
     };
 
     private static ShipData instance;
@@ -178,6 +194,9 @@ public final class ShipData {
     public boolean unlimitedLives  = false;
 
     // Offline farming
+    public int[]  internsLeftOnPlanet  = new int[PLANETS.length];
+    private final Map<Integer, PlanetState> planetStates = new HashMap<>();
+    public long   lastFarmingTimestamp = 0L;
     public int    pendingNewRecruits   = 0;
 
     // Gem farming — fixed gems/hr per planet index (Solara=1 … Helios Forge=5)
@@ -277,6 +296,7 @@ public final class ShipData {
         for (int i = 0; i < planetCompletionMs.length; i++) planetCompletionMs[i] = 0L;
         pendingRankResult = -1;
         pendingRankPlanet = -1;
+        planetStates.clear();
     }
 
     public void addJoules(float joules) {
@@ -793,6 +813,22 @@ public final class ShipData {
 
     public PlanetProfile getCurrentPlanet()  { return PLANETS[currentPlanetIndex]; }
     public PlanetProfile getSelectedPlanet() { return PLANETS[selectedPlanetIndex]; }
+
+    public PlanetDefinition getCurrentDef() {
+        return PLANET_DEFS[currentPlanetIndex];
+    }
+
+    public PlanetState getState(int idx) {
+        return planetStates.computeIfAbsent(idx, k -> new PlanetState());
+    }
+
+    public void saveReplayBackup(int planetIndex, PlanetState backup) {
+        planetStates.put(-(planetIndex + 1), backup);
+    }
+
+    public PlanetState getReplayBackup(int planetIndex) {
+        return planetStates.get(-(planetIndex + 1));
+    }
 
     public void selectPlanet(int index) {
         selectedPlanetIndex = Math.max(0, Math.min(index, PLANETS.length - 1));

@@ -18,6 +18,7 @@ import com.odyssey.GameState;
 import com.odyssey.OdysseyGame;
 import com.odyssey.OdysseyTheme;
 import com.odyssey.ShipData;
+import com.odyssey.planet.PlanetDefinition;
 import com.odyssey.SoundManager;
 
 public class BridgeFlightScreen extends ScreenAdapter {
@@ -30,7 +31,7 @@ public class BridgeFlightScreen extends ScreenAdapter {
     private static final String[] SECTOR_PERKS = {
         "Elastic Walls",
         "Gravity Wells + Extra Slots",
-        "Wall x3 + Coll x2 + Free Intern",
+        "Wall ×3 + Coll ×2 + Free Intern",
         "Colony Landing"
     };
     private static final String[] SECTOR_PERK_DESCS = {
@@ -207,10 +208,8 @@ public class BridgeFlightScreen extends ScreenAdapter {
     public static float[] buildSectorDistances(float ignored) {
         ShipData _sd = ShipData.get();
         int pidx = _sd.isReplayMode ? _sd.replayPlanetIndex : _sd.currentPlanetIndex;
-        float[] e;
-        if (pidx >= 2)      e = FROSTHEIM_CHECKPOINT_ENERGIES;  // Frostheim+
-        else if (pidx >= 1) e = EMBER_CHECKPOINT_ENERGIES;      // Nova Terra
-        else                e = CHECKPOINT_ENERGIES;             // Solara
+        PlanetDefinition def = ShipData.PLANET_DEFS[pidx];
+        float[] e = def.cpEnergies();
         return new float[]{ e[0], e[0]+e[1], e[0]+e[1]+e[2], e[0]+e[1]+e[2]+e[3] };
     }
 
