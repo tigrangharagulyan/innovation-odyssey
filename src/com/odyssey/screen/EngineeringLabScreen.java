@@ -359,6 +359,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private final com.badlogic.gdx.utils.Array<Float> curlingTimers  = new com.badlogic.gdx.utils.Array<>();
     private static final float CURLING_SETTLE_TIME  = 2.0f;
     private static final float CURLING_SETTLE_SPEED = 0.3f;
+    // Visual flight phase — bumper travels from button to drum before physics takes over
+    private boolean flyingBumperActive = false;
+    private float   flyingBumperWX, flyingBumperWY;  // world pos
+    private float   flyingBumperVX, flyingBumperVY;  // world velocity m/s
     private InputMultiplexer inputMux;
     private float jpsTimer         = 0f;
     private float lastJoules       = 0f;
@@ -3041,18 +3045,21 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     }
                 } else if (!isEmberIV()) {
                     if (bumpers.size < maxBumpersAllowed() && sd2.spendCrystals(bumperCost())) {
-                        // Slingshot: drag away from drum, release fires opposite direction
+                        // Slingshot: pull down = velocity UP toward drum
                         float originWX = dragOriginStageX / PPM;
                         float originWY = (dragOriginStageY + 80f) / PPM;
-                        // Drag vector (release - origin); slingshot velocity = opposite
-                        float dvx = originWX - wx;   // reversed: fires opposite to drag direction
+                        float dvx = originWX - wx;   // opposite of drag = slingshot fire direction
                         float dvy = originWY - wy;
                         float dragDist = (float) Math.sqrt(dvx * dvx + dvy * dvy);
                         if (dragDist < 0.01f) { dvx = 0f; dvy = 1f; dragDist = 1f; }
-                        float launchSpeed = Math.min(dragDist * 4f, 9f) + 2f;
+                        float launchSpeed = Math.min(dragDist * 4f, 9f) + 3f;
                         dvx /= dragDist; dvy /= dragDist;
-                        // Spawn near drum center so body bounces inside drum
-                        launchCurlingBumper(CENTRIFUGE_CX, CENTRIFUGE_CY, dvx * launchSpeed, dvy * launchSpeed);
+                        // Start visual flight from button position upward
+                        flyingBumperWX = originWX;
+                        flyingBumperWY = originWY;
+                        flyingBumperVX = dvx * launchSpeed;
+                        flyingBumperVY = dvy * launchSpeed;
+                        flyingBumperActive = true;
                     }
                 }
             }
@@ -3873,6 +3880,23 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         uptime   += delta;
         animTime += delta;
+        // Flying bumper: travel from button to drum, then hand off to physics
+        if (flyingBumperActive) {
+            flyingBumperWX += flyingBumperVX * delta;
+            flyingBumperWY += flyingBumperVY * delta;
+            float _fdx = flyingBumperWX - CENTRIFUGE_CX;
+            float _fdy = flyingBumperWY - CENTRIFUGE_CY;
+            // Entered drum interior — spawn physics body
+            if (_fdx * _fdx + _fdy * _fdy < (CENTRIFUGE_R * 0.80f) * (CENTRIFUGE_R * 0.80f)) {
+                launchCurlingBumper(flyingBumperWX, flyingBumperWY, flyingBumperVX, flyingBumperVY);
+                flyingBumperActive = false;
+            }
+            // Flew past drum or off world — cancel (crystal cost already paid)
+            else if (flyingBumperWY > WORLD_H + 2f || flyingBumperWY < -1f
+                     || flyingBumperWX < -1f || flyingBumperWX > WORLD_W + 1f) {
+                flyingBumperActive = false;
+            }
+        }
         // Age all pulse-history entries; drop any that have fully faded
         for (int _pi = pulseHistory.size - 1; _pi >= 0; _pi--) {
             pulseHistory.get(_pi)[1] += delta;
@@ -5836,7 +5860,16 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 dw * 0.5f, dh * 0.5f, dw, dh, 1f, 1f, -animTime * 18f,
                 0, 0, texBumper.getWidth(), texBumper.getHeight(), false, false);
         }
-        // Draw in-flight curling bodies — cyan tint so player can see them moving
+        // Draw pre-entry flying bumper (visual flight phase, no physics yet)
+        if (flyingBumperActive) {
+            float _fpx = flyingBumperWX * PPM, _fpy = flyingBumperWY * PPM;
+            float _fsz = BUMPER_W * 1.4f;
+            batch.setColor(0.35f, 1.0f, 0.90f, 0.92f);
+            batch.draw(texBumper, _fpx - _fsz * 0.5f, _fpy - _fsz * 0.5f,
+                _fsz * 0.5f, _fsz * 0.5f, _fsz, _fsz, 1f, 1f, animTime * 50f,
+                0, 0, texBumper.getWidth(), texBumper.getHeight(), false, false);
+        }
+        // Draw in-flight curling bodies (physics phase, inside drum)
         for (int _i = 0; _i < curlingBodies.size; _i++) {
             com.badlogic.gdx.physics.box2d.Body _cb = curlingBodies.get(_i);
             float _px = _cb.getPosition().x * PPM;
