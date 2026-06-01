@@ -9163,26 +9163,20 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 _fBody2.setLinearVelocity(
                     -MathUtils.sin(frostAttachAngle) * _or * _drumAngVel,
                      MathUtils.cos(frostAttachAngle) * _or * _drumAngVel);
-                // Continuously damage ring 0 if it still exists
-                if (rings[0] != null) {
-                    frostAttachHitTimer -= delta;
-                    if (frostAttachHitTimer <= 0f) {
-                        frostAttachHitTimer = 0.15f;
-                        if (rings[0].getUserData() instanceof ShipData.RingHitData) {
-                            ShipData.RingHitData _ard = (ShipData.RingHitData) rings[0].getUserData();
+                // Damage outermost alive ring every 150ms
+                frostAttachHitTimer -= delta;
+                if (frostAttachHitTimer <= 0f) {
+                    frostAttachHitTimer = 0.15f;
+                    for (int _ri = 0; _ri < 6; _ri++) {
+                        if (rings[_ri] != null && rings[_ri].getUserData() instanceof ShipData.RingHitData) {
+                            ShipData.RingHitData _ard = (ShipData.RingHitData) rings[_ri].getUserData();
                             if (!_ard.readyToDestroy) { _ard.hitsRemaining -= 3; if (_ard.hitsRemaining <= 0) _ard.readyToDestroy = true; }
+                            break;
                         }
                     }
                 }
             }
-            // Detach only via ICE RUSH (frostIcePending) or ring 0 destroyed
-            if (rings[0] == null && frostAttachRingIdx == 0) {
-                frostAttachActive = false; skillActiveTimer[2][0] = 0f;
-                if (_fBody2 != null) {
-                    if (!_fBody2.getFixtureList().isEmpty()) _fBody2.getFixtureList().first().setSensor(false);
-                    float _ka = MathUtils.random(MathUtils.PI2); _fBody2.setLinearVelocity(MathUtils.cos(_ka) * 5f, MathUtils.sin(_ka) * 5f);
-                }
-            }
+            // Only ICE RUSH detaches (handled in activateSkill case 1)
         }
         // ---- FROST skill 3: GRAVITY — alternating pull/push ----
         if (skillActiveTimer[2][3] > 0) {
