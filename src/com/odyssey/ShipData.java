@@ -244,6 +244,9 @@ public final class ShipData {
     public int  pendingRankPlanet = -1;   // planet index of the pending rank
 
     public final com.badlogic.gdx.utils.Array<float[]> pendingContactEvents = new com.badlogic.gdx.utils.Array<>();
+    // BLAZE active skill flags — set by EngineeringLabScreen, read by EnergyContactListener
+    public boolean blazeDoubleDamage = false;  // skill 0: RING DMG+
+    public boolean blazeBurnActive   = false;  // skill 3: BURN
     public int pendingBumperSounds    = 0;
     public int pendingCollisionSounds = 0;
 

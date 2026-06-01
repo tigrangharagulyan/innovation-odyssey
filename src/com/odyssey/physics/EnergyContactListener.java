@@ -44,18 +44,23 @@ public class EnergyContactListener implements ContactListener {
                              || "PELLET".equals(bodyB.getUserData())));
             if (_aInt || _bInt) {
                 long _now = System.currentTimeMillis();
+                boolean _isBlaze = (_aInt && "INTERN_BLAZE".equals(bodyA.getUserData()))
+                                || (_bInt && "INTERN_BLAZE".equals(bodyB.getUserData()));
+                int _dmg = (_isBlaze && ShipData.get().blazeDoubleDamage) ? 2 : 1;
                 if (aIsRing) {
                     ShipData.RingHitData _rhd = (ShipData.RingHitData) bodyA.getUserData();
                     if (!_rhd.readyToDestroy && _now - _rhd.lastHitMs > 120L) {
                         _rhd.lastHitMs = _now;
-                        if (--_rhd.hitsRemaining <= 0) _rhd.readyToDestroy = true;
+                        _rhd.hitsRemaining -= _dmg;
+                        if (_rhd.hitsRemaining <= 0) _rhd.readyToDestroy = true;
                     }
                 }
                 if (bIsRing) {
                     ShipData.RingHitData _rhd = (ShipData.RingHitData) bodyB.getUserData();
                     if (!_rhd.readyToDestroy && _now - _rhd.lastHitMs > 120L) {
                         _rhd.lastHitMs = _now;
-                        if (--_rhd.hitsRemaining <= 0) _rhd.readyToDestroy = true;
+                        _rhd.hitsRemaining -= _dmg;
+                        if (_rhd.hitsRemaining <= 0) _rhd.readyToDestroy = true;
                     }
                 }
                 if (aIsCenter) {
@@ -240,6 +245,13 @@ public class EnergyContactListener implements ContactListener {
             // Perk 2 (Wall Energy, wallEnergyMult >= 2): also generate energy
             if (sd.wallEnergyMult >= 2f) {
                 sd.addJoules(8f);
+            }
+            // BLAZE skill 3 BURN: +8 SP per wall/ring bounce
+            boolean _burnBlaze = (aIsIntern && "INTERN_BLAZE".equals(bodyA.getUserData()))
+                              || (bIsIntern && "INTERN_BLAZE".equals(bodyB.getUserData()));
+            if (_burnBlaze && sd.blazeBurnActive) {
+                sd.addCrystals(8f);
+                queueFloatNum(contact, bodyA, bodyB, 8f, 1, sd);
             }
         }
     }

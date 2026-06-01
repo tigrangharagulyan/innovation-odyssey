@@ -337,12 +337,21 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private Table        rightPerksTable;
     private enum OrbType { SPARK, BLAZE, FROST }
     private OrbType selectedOrbType = OrbType.SPARK;
-    private Label[] orbSkillLabels;
+    private Label[]      orbSkillLabels;
+    private TextButton[] skillBtns;
     private float mana    = 100f;
     private static final float MAX_MANA         = 100f;
     private static final float MANA_REGEN       = 8f;    // per second
     private static final float MANA_LAUNCH_COST = 25f;   // per orb launch
     private Label manaLabel;
+    // Active skill state (4 slots, indexed by skill slot)
+    private static final float[] SKILL_MANA_COST = {20f, 15f, 25f, 20f};  // per skill
+    private static final float[] SKILL_COOLDOWN  = {12f,  8f, 15f, 10f};  // seconds
+    private static final float[] SKILL_DURATION  = { 8f,  5f,  0f, 10f};  // 0 = instant
+    private final float[] skillCooldownTimer = {0f, 0f, 0f, 0f};
+    private final float[] skillActiveTimer   = {0f, 0f, 0f, 0f};
+    private boolean blazeHeatPending = false;   // skill 1: apply impulse next physics step
+    private boolean blazeBlastPending = false;  // skill 2: radial burst next physics step
     private static final String[][] ORB_SKILLS = {
         {"ENERGY+", "CHAIN", "SURGE", "STATIC"},
         {"RING DMG+", "HEAT", "BLAST", "BURN"},
@@ -2953,13 +2962,27 @@ public class EngineeringLabScreen extends ScreenAdapter {
         orbSkillRow.setBackground(new NinePatchDrawable(game.skin.get("rounded_dark", NinePatch.class)));
         orbSkillRow.defaults().padTop(2f).padBottom(2f);
         orbSkillLabels = new Label[4];
+        skillBtns = new TextButton[4];
+        TextButton.TextButtonStyle _skillStyle = new TextButton.TextButtonStyle();
+        _skillStyle.font     = game.skin.getFont("font");
+        _skillStyle.up       = game.skin.newDrawable("white", new com.badlogic.gdx.graphics.Color(0.08f, 0.05f, 0.18f, 0.90f));
+        _skillStyle.down     = game.skin.newDrawable("white", new com.badlogic.gdx.graphics.Color(0.25f, 0.10f, 0.50f, 1.00f));
+        _skillStyle.over     = _skillStyle.down;
+        _skillStyle.fontColor = com.badlogic.gdx.graphics.Color.WHITE;
         for (int _oi = 0; _oi < 4; _oi++) {
             if (_oi > 0) orbSkillRow.add(makeDotSep()).width(4f);
-            Label _sl = new Label("", game.skin);
-            _sl.setFontScale(0.52f);
-            _sl.setAlignment(com.badlogic.gdx.utils.Align.center);
-            orbSkillLabels[_oi] = _sl;
-            orbSkillRow.add(_sl).expandX().center();
+            final int _si = _oi;
+            TextButton _sb = new TextButton("", _skillStyle);
+            _sb.getLabel().setFontScale(0.48f);
+            _sb.getLabel().setAlignment(com.badlogic.gdx.utils.Align.center);
+            _sb.addListener(new com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
+                @Override public void clicked(com.badlogic.gdx.scenes.scene2d.InputEvent e, float x, float y) {
+                    activateSkill(_si);
+                }
+            });
+            skillBtns[_oi] = _sb;
+            orbSkillLabels[_oi] = _sb.getLabel(); // keep label ref for text updates
+            orbSkillRow.add(_sb).expandX().fillX().height(36f);
         }
         updateOrbSkillRow();
         panel.add(orbSkillRow).growX().padBottom(3f).row();
@@ -3740,6 +3763,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
         // Maze mode — orb type buttons visible, flight/placement buttons hidden
         selectedOrbType = OrbType.SPARK;
         mana = MAX_MANA;
+        for (int _i = 0; _i < 4; _i++) { skillCooldownTimer[_i] = 0; skillActiveTimer[_i] = 0; }
+        blazeHeatPending = false; blazeBlastPending = false;
+        ShipData.get().blazeDoubleDamage = false; ShipData.get().blazeBurnActive = false;
         if (orbSkillLabels != null) updateOrbSkillRow();
         if (btnBumper      != null) btnBumper.setVisible(true);
         if (btnGravityWell != null) btnGravityWell.setVisible(true);
@@ -4008,6 +4034,14 @@ public class EngineeringLabScreen extends ScreenAdapter {
         uptime   += delta;
         animTime += delta;
         mana = Math.min(MAX_MANA, mana + MANA_REGEN * delta);
+        // Tick skill cooldowns and active durations
+        ShipData _ssd = ShipData.get();
+        for (int _si = 0; _si < 4; _si++) {
+            if (skillCooldownTimer[_si] > 0) skillCooldownTimer[_si] = Math.max(0, skillCooldownTimer[_si] - delta);
+            if (skillActiveTimer[_si]   > 0) skillActiveTimer[_si]   = Math.max(0, skillActiveTimer[_si]   - delta);
+        }
+        _ssd.blazeDoubleDamage = skillActiveTimer[0] > 0;
+        _ssd.blazeBurnActive   = skillActiveTimer[3] > 0;
         // Flying bumper: travel from button to drum, then hand off to physics
         if (flyingBumperActive) {
             flyingBumperWX += flyingBumperVX * delta;
@@ -4183,6 +4217,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             float _mf = mana / MAX_MANA;
             manaLabel.setColor(0.35f + 0.20f * (1f - _mf), 0.55f + 0.40f * _mf, 1.00f, 1f);
         }
+        if (skillBtns != null) updateOrbSkillRow();
         jpsLabel.setText("");
 
         // ---- Lives / Gems HUD tick ----
@@ -8732,6 +8767,46 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 triggerPlanetWin();
             }
         }
+        // ---- BLAZE skill 1: HEAT — strong impulse on the BLAZE orb ----
+        if (blazeHeatPending) {
+            blazeHeatPending = false;
+            for (int _bi = 0; _bi < balls.size; _bi++) {
+                Body _bb = balls.get(_bi);
+                if ("INTERN_BLAZE".equals(_bb.getUserData())) {
+                    com.badlogic.gdx.math.Vector2 _bv = _bb.getLinearVelocity();
+                    float _bspd = _bv.len();
+                    float _bax = _bspd > 0.1f ? _bv.x / _bspd : 1f;
+                    float _bay = _bspd > 0.1f ? _bv.y / _bspd : 0f;
+                    _bb.applyLinearImpulse(_bax * 3.5f, _bay * 3.5f,
+                        _bb.getPosition().x, _bb.getPosition().y, true);
+                }
+            }
+        }
+        // ---- BLAZE skill 2: BLAST — radial burst from BLAZE position ----
+        if (blazeBlastPending) {
+            blazeBlastPending = false;
+            com.badlogic.gdx.math.Vector2 _blazePos = null;
+            for (int _bi = 0; _bi < balls.size; _bi++) {
+                if ("INTERN_BLAZE".equals(balls.get(_bi).getUserData())) {
+                    _blazePos = balls.get(_bi).getPosition();
+                    break;
+                }
+            }
+            if (_blazePos != null) {
+                for (int _bi = 0; _bi < balls.size; _bi++) {
+                    Body _ob = balls.get(_bi);
+                    if ("INTERN_BLAZE".equals(_ob.getUserData())) continue;
+                    com.badlogic.gdx.math.Vector2 _op = _ob.getPosition();
+                    float _dx = _op.x - _blazePos.x, _dy = _op.y - _blazePos.y;
+                    float _dl = (float) Math.sqrt(_dx*_dx + _dy*_dy);
+                    if (_dl < 0.001f) { _dx = 1f; _dy = 0f; _dl = 1f; }
+                    _ob.applyLinearImpulse(
+                        _dx / _dl * 4.5f, _dy / _dl * 4.5f,
+                        _op.x, _op.y, true);
+                }
+                triggerShake(3f, 0.06f);
+            }
+        }
     }
 
     private void triggerPlanetWin() {
@@ -9157,14 +9232,44 @@ public class EngineeringLabScreen extends ScreenAdapter {
     }
 
     private void updateOrbSkillRow() {
-        if (orbSkillLabels == null) return;
+        if (skillBtns == null) return;
         int _idx = selectedOrbType.ordinal();
         float[] _fc = ORB_COLORS[_idx];
-        com.badlogic.gdx.graphics.Color _c = new com.badlogic.gdx.graphics.Color(_fc[0], _fc[1], _fc[2], 1f);
+        com.badlogic.gdx.graphics.Color _active = new com.badlogic.gdx.graphics.Color(_fc[0], _fc[1], _fc[2], 1f);
+        com.badlogic.gdx.graphics.Color _cd     = new com.badlogic.gdx.graphics.Color(0.5f, 0.5f, 0.5f, 1f);
+        com.badlogic.gdx.graphics.Color _ready  = new com.badlogic.gdx.graphics.Color(1f, 1f, 1f, 0.85f);
         for (int _i = 0; _i < 4; _i++) {
-            orbSkillLabels[_i].setText(ORB_SKILLS[_idx][_i]);
-            orbSkillLabels[_i].setColor(_c);
+            String _name = ORB_SKILLS[_idx][_i];
+            if (skillActiveTimer[_i] > 0) {
+                skillBtns[_i].setText(_name + "\n" + (int) skillActiveTimer[_i] + "s");
+                skillBtns[_i].getLabel().setColor(_active);
+            } else if (skillCooldownTimer[_i] > 0) {
+                skillBtns[_i].setText(_name + "\n" + (int) Math.ceil(skillCooldownTimer[_i]) + "s");
+                skillBtns[_i].getLabel().setColor(_cd);
+            } else {
+                float _cost = SKILL_MANA_COST[_i];
+                skillBtns[_i].setText(_name + "\n" + (int)_cost + "M");
+                skillBtns[_i].getLabel().setColor(mana >= _cost ? _ready : _cd);
+            }
         }
+    }
+
+    private void activateSkill(int slot) {
+        if (skillCooldownTimer[slot] > 0) return;            // on cooldown
+        if (mana < SKILL_MANA_COST[slot]) return;            // no mana
+        if (selectedOrbType != OrbType.BLAZE) return;        // only BLAZE skills for now
+        if (countOrbType(OrbType.BLAZE) == 0) return;        // BLAZE not in drum
+        mana -= SKILL_MANA_COST[slot];
+        skillCooldownTimer[slot] = SKILL_COOLDOWN[slot];
+        skillActiveTimer[slot]   = SKILL_DURATION[slot];
+        switch (slot) {
+            case 0: /* RING DMG+ — flag set in render tick */ break;
+            case 1: blazeHeatPending  = true; break;
+            case 2: blazeBlastPending = true; skillActiveTimer[2] = 0; break;
+            case 3: /* BURN — flag set in render tick */ break;
+        }
+        SoundManager.get().playMilestone();
+        updateOrbSkillRow();
     }
 
     /** Tracks an orb captured by a Spiral Slingshot — orbits for SPIRAL_DURATION then launches. */
