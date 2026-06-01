@@ -3888,6 +3888,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         drawInterns();
         drawRelayNodes();
         drawPortals();
+        drawHarvestGlows();
         drawInternCountBadge();
         drawHireIdleNudge();
         drawFloatNumbers();
@@ -5611,6 +5612,57 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 0, 0, texGravCenter.getWidth(), texGravCenter.getHeight(), false, false);
         }
         batch.setColor(1f, 1f, 1f, 1f);
+    }
+
+    private void drawHarvestGlows() {
+        boolean hasCharged = false;
+        for (int _i = 0; _i < bumpers.size; _i++) {
+            Body _b = bumpers.items[_i];
+            if (_b.getUserData() instanceof ShipData.BumperHitData
+                    && ((ShipData.BumperHitData) _b.getUserData()).harvestPending) {
+                hasCharged = true; break;
+            }
+        }
+        if (!hasCharged) {
+            for (int _i = 0; _i < attractors.size; _i++) {
+                Body _b = attractors.items[_i];
+                if (_b.getUserData() instanceof ShipData.AttractorHitData
+                        && ((ShipData.AttractorHitData) _b.getUserData()).harvestPending) {
+                    hasCharged = true; break;
+                }
+            }
+        }
+        if (!hasCharged) return;
+
+        batch.end();
+
+        Gdx.gl.glLineWidth(2.5f);
+        shapeR.setProjectionMatrix(renderCam.combined);
+        shapeR.begin(ShapeRenderer.ShapeType.Line);
+        float _pulse = 0.55f + 0.45f * MathUtils.sin(animTime * 4f);
+
+        for (int _i = 0; _i < bumpers.size; _i++) {
+            Body _b = bumpers.items[_i];
+            if (!(_b.getUserData() instanceof ShipData.BumperHitData)) continue;
+            if (!((ShipData.BumperHitData) _b.getUserData()).harvestPending) continue;
+            float _bx = _b.getPosition().x * PPM;
+            float _by = _b.getPosition().y * PPM;
+            shapeR.setColor(1.0f, 0.82f, 0.1f, _pulse);
+            shapeR.circle(_bx, _by, BUMPER_RADIUS * PPM * 1.6f, 20);
+        }
+        for (int _i = 0; _i < attractors.size; _i++) {
+            Body _b = attractors.items[_i];
+            if (!(_b.getUserData() instanceof ShipData.AttractorHitData)) continue;
+            if (!((ShipData.AttractorHitData) _b.getUserData()).harvestPending) continue;
+            float _bx = _b.getPosition().x * PPM;
+            float _by = _b.getPosition().y * PPM;
+            shapeR.setColor(1.0f, 0.82f, 0.1f, _pulse);
+            shapeR.circle(_bx, _by, BUMPER_RADIUS * PPM * 2.0f, 24);
+        }
+        shapeR.end();
+        Gdx.gl.glLineWidth(1f);
+
+        batch.begin();
     }
 
     private void drawBumpers() {
