@@ -4099,6 +4099,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         if (!isEmberIV()) {
             drawAttractors();
             drawBumpers();
+            drawRings();
         }
         drawSpringPads();      // Ember IV spring-pads along ring wall
         drawTeslaCoils();
@@ -5776,6 +5777,64 @@ public class EngineeringLabScreen extends ScreenAdapter {
         }
 
         batch.setColor(1f, 1f, 1f, 1f);
+    }
+
+    private void drawRings() {
+        long _now = System.currentTimeMillis();
+        batch.end();
+
+        Gdx.gl.glLineWidth(3f);
+        shapeR.setProjectionMatrix(renderCam.combined);
+        shapeR.begin(com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType.Line);
+
+        for (int _ri = 0; _ri < 3; _ri++) {
+            if (rings[_ri] == null) continue;
+            ShipData.RingHitData _rhd = (ShipData.RingHitData) rings[_ri].getUserData();
+            float _frac    = Math.max(0f, (float) _rhd.hitsRemaining / _rhd.maxHits);
+            float _hitAge  = Math.min(1f, (float)(_now - _rhd.lastHitMs) / 300f);
+            float _rC = _frac < 0.5f ? 1f : 2f - _frac * 2f;
+            float _gC = _frac < 0.5f ? _frac * 2f : 1f;
+            float _wht = 1f - _hitAge;
+            shapeR.setColor(
+                Math.min(1f, _rC + _wht * 0.8f),
+                Math.min(1f, _gC + _wht * 0.8f),
+                Math.min(1f, 0.8f + _wht * 0.2f),
+                0.85f);
+            shapeR.circle(CENTRIFUGE_CX * PPM, CENTRIFUGE_CY * PPM, RING_RADII[_ri] * PPM, 48);
+        }
+
+        if (centerBody != null && centerBody.getUserData() instanceof ShipData.CenterHitData) {
+            shapeR.end();
+            shapeR.begin(com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType.Filled);
+            ShipData.CenterHitData _chd = (ShipData.CenterHitData) centerBody.getUserData();
+            float _cfrac   = Math.max(0f, (float) _chd.hitsRemaining / ShipData.CenterHitData.MAX_HITS);
+            float _chitAge = Math.min(1f, (float)(_now - _chd.lastHitMs) / 200f);
+            float _pulse2  = 0.55f + 0.45f * com.badlogic.gdx.math.MathUtils.sin(animTime * 5f);
+            float _wht2    = 1f - _chitAge;
+            shapeR.setColor(
+                Math.min(1f, (1f - _cfrac * 0.5f) + _wht2 * 0.5f),
+                Math.min(1f, _cfrac + _wht2 * 0.3f),
+                Math.min(1f, _cfrac * 0.5f + 0.5f),
+                0.85f * _pulse2);
+            shapeR.circle(CENTRIFUGE_CX * PPM, CENTRIFUGE_CY * PPM, 0.30f * PPM, 24);
+        }
+
+        shapeR.end();
+        Gdx.gl.glLineWidth(1f);
+        batch.begin();
+
+        // Center hit counter text
+        if (centerBody != null && centerBody.getUserData() instanceof ShipData.CenterHitData) {
+            ShipData.CenterHitData _chd = (ShipData.CenterHitData) centerBody.getUserData();
+            floatFont.getData().setScale(0.80f);
+            floatFont.setColor(1f, 0.85f, 0.20f, 0.90f);
+            String _txt = String.valueOf(_chd.hitsRemaining);
+            floatLayout.setText(floatFont, _txt);
+            floatFont.draw(batch, _txt,
+                CENTRIFUGE_CX * PPM - floatLayout.width * 0.5f,
+                CENTRIFUGE_CY * PPM + floatLayout.height * 0.5f);
+            floatFont.getData().setScale(1f);
+        }
     }
 
     private void drawAttractors() {
