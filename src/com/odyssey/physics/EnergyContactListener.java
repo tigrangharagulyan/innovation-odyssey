@@ -52,8 +52,8 @@ public class EnergyContactListener implements ContactListener {
                                 || (_bInt && "INTERN_FROST".equals(bodyB.getUserData()));
                 int _dmg = 1;
                 if (_isBlaze && _sd0.blazeOverloadHits > 0) { _dmg = 3; _sd0.blazeOverloadHits--; }
-                if (_isFrost && _sd0.frostAvalancheActive) _dmg = Math.max(_dmg, 5);
-                boolean _skipSlow = _isFrost && (_sd0.frostShatterActive || _sd0.frostAvalancheActive);
+                if (_isFrost && _sd0.frostBigActive) _dmg = Math.max(_dmg, 2);
+                boolean _skipSlow = _isFrost && _sd0.frostBigActive;
                 if (aIsRing) {
                     ShipData.RingHitData _rhd = (ShipData.RingHitData) bodyA.getUserData();
                     if (!_rhd.readyToDestroy && _now - _rhd.lastHitMs > _cooldown) {
@@ -65,7 +65,6 @@ public class EnergyContactListener implements ContactListener {
                         if ("INTERN_SPARK".equals(bodyB.getUserData()) && _sd0.sparkMarkedRing == _rhd.ringIndex) {
                             _sd0.sparkMarkedRing = -1; _sd0.sparkMarkerDashPending = true;
                         }
-                        if (_isFrost && _sd0.frostBlizzardActive) _sd0.frostBlizzardPendingRing = _rhd.ringIndex;
                     }
                 }
                 if (bIsRing) {
@@ -75,11 +74,9 @@ public class EnergyContactListener implements ContactListener {
                         _rhd.hitsRemaining -= _dmg;
                         if (_rhd.hitsRemaining <= 0) _rhd.readyToDestroy = true;
                         if (_aInt && !_skipSlow) { Vector2 _sv = bodyA.getLinearVelocity(); bodyA.setLinearVelocity(_sv.x * 0.60f, _sv.y * 0.60f); }
-                        // MARKER: if SPARK hits its marked ring, trigger dash
                         if ("INTERN_SPARK".equals(bodyA.getUserData()) && _sd0.sparkMarkedRing == _rhd.ringIndex) {
                             _sd0.sparkMarkedRing = -1; _sd0.sparkMarkerDashPending = true;
                         }
-                        if (_isFrost && _sd0.frostBlizzardActive) _sd0.frostBlizzardPendingRing = _rhd.ringIndex;
                     }
                 }
                 if (aIsCenter) {

@@ -255,10 +255,13 @@ public final class ShipData {
     public int     sparkMarkedRing       = -1;     // MARKER: which ring is marked (-1=none)
     public boolean sparkMarkerDashPending = false; // set true when marked ring is hit
     // FROST active skill flags
-    public boolean frostShatterActive  = false;   // FROST slot 0: SHATTER — immune to ring slowdown
-    public boolean frostBlizzardActive = false;   // FROST slot 2: BLIZZARD — AoE ring damage
-    public boolean frostAvalancheActive= false;   // FROST slot 3: AVALANCHE — 5× ring damage
-    public int     frostBlizzardPendingRing = -1; // ring index that was hit (propagate AoE in stepPhysics)
+    public boolean frostBigActive       = false;   // FROST slot 2: BIG — 2× damage
+    public boolean frostGravityActive  = false;   // FROST slot 3: GRAVITY — pull/push
+    // Legacy (kept so EnergyContactListener compiles)
+    public boolean frostShatterActive  = false;
+    public boolean frostBlizzardActive = false;
+    public boolean frostAvalancheActive= false;
+    public int     frostBlizzardPendingRing = -1;
     // Legacy — keep for reference but no longer used
     public boolean frostCryoActive    = false;
     public boolean frostFreezeActive  = false;
