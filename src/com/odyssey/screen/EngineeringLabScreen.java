@@ -3720,26 +3720,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             world.setGravity(new Vector2(0f, GRAVITY * gMult));
         }
 
-        if (balls.size == 0) {
-            ShipData sdInit = ShipData.get();
-            int needed = sdInit.savedBallCount > 0
-                ? sdInit.savedBallCount
-                : (sdInit.arrivalsCompleted > 0 ? 2 : 1);
-            needed = Math.max(0, needed - sdInit.pendingNewRecruits);
-            float[][] initSpots = {
-                {CENTRIFUGE_CX - 0.6f, CENTRIFUGE_CY + 0.4f},
-                {CENTRIFUGE_CX + 0.6f, CENTRIFUGE_CY - 0.4f},
-                {CENTRIFUGE_CX - 0.8f, CENTRIFUGE_CY - 0.3f},
-                {CENTRIFUGE_CX + 0.8f, CENTRIFUGE_CY + 0.3f},
-                {CENTRIFUGE_CX,        CENTRIFUGE_CY + 0.7f},
-                {CENTRIFUGE_CX - 0.4f, CENTRIFUGE_CY - 0.7f},
-                {CENTRIFUGE_CX + 0.4f, CENTRIFUGE_CY + 0.7f},
-                {CENTRIFUGE_CX - 0.7f, CENTRIFUGE_CY + 0.1f},
-            };
-            for (int i = 0; i < needed && i < initSpots.length; i++) {
-                spawnBall(initSpots[i][0], initSpots[i][1]);
-            }
-        }
+        // Maze mode: no auto-spawned orbs — player launches via type buttons
 
         if (didFullReset) {
             restorePortalsAndRelays();
