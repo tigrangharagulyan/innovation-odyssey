@@ -3688,6 +3688,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
         claimGemFarming();
         claimPendingRecruits();
         spawnRings();
+        // Maze mode — structure placement buttons not used
+        if (btnBumper      != null) btnBumper.setVisible(false);
+        if (btnGravityWell != null) btnGravityWell.setVisible(false);
+        if (btnFlight      != null) btnFlight.setVisible(false);
+        if (btnJumpReady   != null) btnJumpReady.setVisible(false);
     }
 
     private void savePortalState(ShipData sd) {
