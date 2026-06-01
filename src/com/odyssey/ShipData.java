@@ -249,6 +249,12 @@ public final class ShipData {
     public boolean blazeBurnActive    = false;  // legacy — kept
     public boolean blazeShieldActive  = false;  // skill 0: SHIELD — fast ring hits
     public int     blazeOverloadHits  = 0;      // skill 2: OVERLOAD — hits left at 3×
+    // SPARK active skill flags
+    public boolean sparkChainActive    = false;  // SPARK slot 2: CHAIN — 8s adjacent ring damage
+    public int     sparkChainPendingRing = -1;   // ring index to chain-damage (processed in stepPhysics)
+    // FROST active skill flags
+    public boolean frostCryoActive    = false;   // FROST slot 2: CRYO — 8s 2× ring damage
+    public boolean frostFreezeActive  = false;   // FROST slot 3: FREEZE — 3s nearly stop other orbs
     public int pendingBumperSounds    = 0;
     public int pendingCollisionSounds = 0;
 

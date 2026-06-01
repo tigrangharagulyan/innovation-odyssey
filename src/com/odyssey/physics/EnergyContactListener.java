@@ -50,6 +50,9 @@ public class EnergyContactListener implements ContactListener {
                 long _cooldown = (_isBlaze && _sd0.blazeShieldActive) ? 30L : 120L;
                 int  _dmg = 1;
                 if (_isBlaze && _sd0.blazeOverloadHits > 0) { _dmg = 3; _sd0.blazeOverloadHits--; }
+                boolean _isFrost = (_aInt && "INTERN_FROST".equals(bodyA.getUserData()))
+                                || (_bInt && "INTERN_FROST".equals(bodyB.getUserData()));
+                if (_isFrost && _sd0.frostCryoActive) _dmg = Math.max(_dmg, 2);
                 if (aIsRing) {
                     ShipData.RingHitData _rhd = (ShipData.RingHitData) bodyA.getUserData();
                     if (!_rhd.readyToDestroy && _now - _rhd.lastHitMs > _cooldown) {
@@ -59,6 +62,12 @@ public class EnergyContactListener implements ContactListener {
                         // Slow the orb on ring contact
                         Body _slow = _aInt ? bodyB : bodyA; // the intern is the non-ring body
                         if (_bInt) { Vector2 _sv = _slow.getLinearVelocity(); _slow.setLinearVelocity(_sv.x * 0.60f, _sv.y * 0.60f); }
+                        // SPARK CHAIN: mark adjacent ring for damage
+                        if ("INTERN_SPARK".equals(bodyB.getUserData()) && _sd0.sparkChainActive) {
+                            int _nxt = _rhd.ringIndex + 1;
+                            if (_nxt > 5) _nxt = _rhd.ringIndex - 1;
+                            if (_nxt >= 0) _sd0.sparkChainPendingRing = _nxt;
+                        }
                     }
                 }
                 if (bIsRing) {
@@ -69,6 +78,12 @@ public class EnergyContactListener implements ContactListener {
                         if (_rhd.hitsRemaining <= 0) _rhd.readyToDestroy = true;
                         // Slow the orb on ring contact
                         if (_aInt) { Vector2 _sv = bodyA.getLinearVelocity(); bodyA.setLinearVelocity(_sv.x * 0.60f, _sv.y * 0.60f); }
+                        // SPARK CHAIN: mark adjacent ring for damage
+                        if ("INTERN_SPARK".equals(bodyA.getUserData()) && _sd0.sparkChainActive) {
+                            int _nxt = _rhd.ringIndex + 1;
+                            if (_nxt > 5) _nxt = _rhd.ringIndex - 1;
+                            if (_nxt >= 0) _sd0.sparkChainPendingRing = _nxt;
+                        }
                     }
                 }
                 if (aIsCenter) {
