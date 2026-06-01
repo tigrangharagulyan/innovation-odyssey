@@ -372,10 +372,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private final ObjectMap<Body, Long>  ballLastHitMs   = new ObjectMap<>();
     private final Array<Body> bumpers      = new Array<>();   // Level 1: Solara standard bumpers
     // Maze rings — 3 concentric ring bodies + center target
-    private final Body[]   rings        = new Body[3];
+    private final Body[]   rings        = new Body[6];
     private Body           centerBody   = null;
-    private static final float[] RING_RADII    = {2.0f, 1.3f, 0.7f};
-    private static final int[]   RING_MAX_HITS = {100, 200, 300};
+    private static final float[] RING_RADII    = {2.30f, 1.90f, 1.55f, 1.20f, 0.82f, 0.46f};
+    private static final int[]   RING_MAX_HITS = { 60,   80,   100,   120,   150,   180};
+    private static final int[]   RING_SIDES    = { 20,    8,     6,     5,     4,     3};  // 20=circle
     private final Array<Body> attractors   = new Array<>();   // Level 1: Solara / Ember IV gravity wells
     private final Array<Body> icicleNodes     = new Array<>();   // Level 3: Frostheim Icicle Nodes (orb-splitters)
     private final Array<Float> icicleAngOffsets = new Array<>(); // angle offsets for icicle co-rotation
@@ -2134,13 +2135,15 @@ public class EngineeringLabScreen extends ScreenAdapter {
     }
 
     private void spawnRings() {
-        for (int _ri = 0; _ri < 3; _ri++) {
+        for (int _ri = 0; _ri < 6; _ri++) {
             if (rings[_ri] != null) { world.destroyBody(rings[_ri]); rings[_ri] = null; }
-            float _r = RING_RADII[_ri];
-            int _seg = 36;
+            float _r   = RING_RADII[_ri];
+            int   _seg = RING_SIDES[_ri];
+            // Slight rotation offset per ring so polygons look distinct
+            float _rot = _ri * com.badlogic.gdx.math.MathUtils.PI / (2f * _seg);
             float[] _verts = new float[_seg * 2];
             for (int _s = 0; _s < _seg; _s++) {
-                float _ang = _s * com.badlogic.gdx.math.MathUtils.PI2 / _seg;
+                float _ang = _rot + _s * com.badlogic.gdx.math.MathUtils.PI2 / _seg;
                 _verts[_s * 2]     = CENTRIFUGE_CX + com.badlogic.gdx.math.MathUtils.cos(_ang) * _r;
                 _verts[_s * 2 + 1] = CENTRIFUGE_CY + com.badlogic.gdx.math.MathUtils.sin(_ang) * _r;
             }
@@ -2150,8 +2153,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
             _bd.type = com.badlogic.gdx.physics.box2d.BodyDef.BodyType.StaticBody;
             com.badlogic.gdx.physics.box2d.FixtureDef _fd = new com.badlogic.gdx.physics.box2d.FixtureDef();
             _fd.shape       = _chain;
-            _fd.restitution = 1.20f;
-            _fd.friction    = 0f;
+            _fd.restitution = 0.55f;  // low — orbs lose speed on contact
+            _fd.friction    = 0.4f;   // friction adds to slowdown
             Body _b = world.createBody(_bd);
             _b.createFixture(_fd);
             _b.setUserData(new ShipData.RingHitData(_ri, RING_MAX_HITS[_ri]));
@@ -5802,11 +5805,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
         shapeR.setProjectionMatrix(renderCam.combined);
         shapeR.begin(com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType.Line);
 
-        for (int _ri = 0; _ri < 3; _ri++) {
+        for (int _ri = 0; _ri < 6; _ri++) {
             if (rings[_ri] == null) continue;
             ShipData.RingHitData _rhd = (ShipData.RingHitData) rings[_ri].getUserData();
-            float _frac    = Math.max(0f, (float) _rhd.hitsRemaining / _rhd.maxHits);
-            float _hitAge  = Math.min(1f, (float)(_now - _rhd.lastHitMs) / 300f);
+            float _frac   = Math.max(0f, (float) _rhd.hitsRemaining / _rhd.maxHits);
+            float _hitAge = Math.min(1f, (float)(_now - _rhd.lastHitMs) / 300f);
             float _rC = _frac < 0.5f ? 1f : 2f - _frac * 2f;
             float _gC = _frac < 0.5f ? _frac * 2f : 1f;
             float _wht = 1f - _hitAge;
@@ -5815,7 +5818,18 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 Math.min(1f, _gC + _wht * 0.8f),
                 Math.min(1f, 0.8f + _wht * 0.2f),
                 0.85f);
-            shapeR.circle(CENTRIFUGE_CX * PPM, CENTRIFUGE_CY * PPM, RING_RADII[_ri] * PPM, 48);
+            int   _seg = RING_SIDES[_ri];
+            float _r   = RING_RADII[_ri] * PPM;
+            float _rot = _ri * com.badlogic.gdx.math.MathUtils.PI / (2f * _seg);
+            float _cx  = CENTRIFUGE_CX * PPM, _cy = CENTRIFUGE_CY * PPM;
+            for (int _s = 0; _s < _seg; _s++) {
+                float _a1 = _rot + _s       * com.badlogic.gdx.math.MathUtils.PI2 / _seg;
+                float _a2 = _rot + (_s + 1) * com.badlogic.gdx.math.MathUtils.PI2 / _seg;
+                shapeR.line(_cx + com.badlogic.gdx.math.MathUtils.cos(_a1) * _r,
+                            _cy + com.badlogic.gdx.math.MathUtils.sin(_a1) * _r,
+                            _cx + com.badlogic.gdx.math.MathUtils.cos(_a2) * _r,
+                            _cy + com.badlogic.gdx.math.MathUtils.sin(_a2) * _r);
+            }
         }
 
         if (centerBody != null && centerBody.getUserData() instanceof ShipData.CenterHitData) {
@@ -7389,7 +7403,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         for (int _ci = 0; _ci < curlingBodies.size; _ci++) world.destroyBody(curlingBodies.get(_ci));
         curlingBodies.clear();
         curlingTimers.clear();
-        for (int _ri = 0; _ri < 3; _ri++) { if (rings[_ri] != null) { world.destroyBody(rings[_ri]); rings[_ri] = null; } }
+        for (int _ri = 0; _ri < 6; _ri++) { if (rings[_ri] != null) { world.destroyBody(rings[_ri]); rings[_ri] = null; } }
         if (centerBody != null) { world.destroyBody(centerBody); centerBody = null; }
         for (int i = 0; i < bumpers.size;       i++) world.destroyBody(bumpers.get(i));
         for (int i = 0; i < attractors.size;    i++) world.destroyBody(attractors.get(i));
@@ -7490,7 +7504,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         for (int _ci = 0; _ci < curlingBodies.size; _ci++) world.destroyBody(curlingBodies.get(_ci));
         curlingBodies.clear();
         curlingTimers.clear();
-        for (int _ri = 0; _ri < 3; _ri++) { if (rings[_ri] != null) { world.destroyBody(rings[_ri]); rings[_ri] = null; } }
+        for (int _ri = 0; _ri < 6; _ri++) { if (rings[_ri] != null) { world.destroyBody(rings[_ri]); rings[_ri] = null; } }
         if (centerBody != null) { world.destroyBody(centerBody); centerBody = null; }
         for (int i = 0; i < bumpers.size;       i++) world.destroyBody(bumpers.get(i));
         for (int i = 0; i < attractors.size;    i++) world.destroyBody(attractors.get(i));
@@ -8840,7 +8854,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             }
         }
         // ---- Ring destruction ----
-        for (int _ri = 0; _ri < 3; _ri++) {
+        for (int _ri = 0; _ri < 6; _ri++) {
             if (rings[_ri] == null) continue;
             Object _ud = rings[_ri].getUserData();
             if (_ud instanceof ShipData.RingHitData

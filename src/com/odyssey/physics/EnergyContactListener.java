@@ -56,6 +56,9 @@ public class EnergyContactListener implements ContactListener {
                         _rhd.lastHitMs = _now;
                         _rhd.hitsRemaining -= _dmg;
                         if (_rhd.hitsRemaining <= 0) _rhd.readyToDestroy = true;
+                        // Slow the orb on ring contact
+                        Body _slow = _aInt ? bodyB : bodyA; // the intern is the non-ring body
+                        if (_bInt) { Vector2 _sv = _slow.getLinearVelocity(); _slow.setLinearVelocity(_sv.x * 0.60f, _sv.y * 0.60f); }
                     }
                 }
                 if (bIsRing) {
@@ -64,6 +67,8 @@ public class EnergyContactListener implements ContactListener {
                         _rhd.lastHitMs = _now;
                         _rhd.hitsRemaining -= _dmg;
                         if (_rhd.hitsRemaining <= 0) _rhd.readyToDestroy = true;
+                        // Slow the orb on ring contact
+                        if (_aInt) { Vector2 _sv = bodyA.getLinearVelocity(); bodyA.setLinearVelocity(_sv.x * 0.60f, _sv.y * 0.60f); }
                     }
                 }
                 if (aIsCenter) {
