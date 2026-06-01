@@ -5891,9 +5891,13 @@ public class EngineeringLabScreen extends ScreenAdapter {
         }
 
         // SPARK MARKER: pulsing purple highlight on marked ring
+        // Switch back to Line mode (center drawing uses Filled)
+        shapeR.end();
+        shapeR.begin(com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType.Line);
+        Gdx.gl.glLineWidth(3f);
         int _mri = ShipData.get().sparkMarkedRing;
         if (_mri >= 0 && _mri < 6 && rings[_mri] != null) {
-            float _ma = 0.5f + 0.5f * com.badlogic.gdx.math.MathUtils.sin(animTime * 10f);
+            float _ma = 0.6f + 0.4f * com.badlogic.gdx.math.MathUtils.sin(animTime * 10f);
             shapeR.setColor(0.75f, 0.20f, 1f, _ma);
             int _mseg = RING_SIDES[_mri];
             float _mr = RING_RADII[_mri] * PPM * 1.06f; // slightly larger than ring
@@ -9645,7 +9649,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                         Body _split = world.createBody(_sbd); _split.setBullet(true); _split.createFixture(_sfd);
                         _split.setUserData("INTERN_SPARK_SPLIT");
                         float _sa = MathUtils.random(MathUtils.PI2);
-                        _split.setLinearVelocity(MathUtils.cos(_sa) * 10f, MathUtils.sin(_sa) * 10f);
+                        _split.setLinearVelocity(MathUtils.cos(_sa) * 4f, MathUtils.sin(_sa) * 4f);
                         _sc.dispose(); sparkSplitBodies.add(_split);
                     }
                     triggerShake(3f, 0.07f);
