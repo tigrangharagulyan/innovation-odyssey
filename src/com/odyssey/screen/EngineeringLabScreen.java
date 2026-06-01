@@ -341,7 +341,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private TextButton[] skillBtns;
     private float mana    = 100f;
     private static final float MAX_MANA         = 100f;
-    private static final float MANA_REGEN       = 8f;    // per second
+    private static final float MANA_REGEN       = 3f;    // per second (slow regen)
     private static final float MANA_LAUNCH_COST = 25f;   // per orb launch
     private Label manaLabel;
     // Active skill state (3 orb types × 4 slots)
@@ -377,9 +377,14 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private boolean frostIcePending    = false;  // slot 1: ice spike burst
     private float   frostFreezeGlow    = 0f;     // slot 3: freeze animation
     private static final String[][] ORB_SKILLS = {
-        {"DASH", "OVERDRIVE", "CHAIN", "STATIC"},   // SPARK — fast/small
-        {"SHIELD", "MAGNET", "OVERLOAD", "RALLY"},     // BLAZE — normal
-        {"SHATTER", "ICE RUSH", "BLIZZARD", "AVALANCHE"}  // FROST — big/slow
+        {"DASH", "OVERDRIVE", "CHAIN", "STATIC"},
+        {"SHIELD", "MAGNET", "OVERLOAD", "RALLY"},
+        {"SHATTER", "ICE RUSH", "BLIZZARD", "AVALANCHE"}
+    };
+    private static final String[][] ORB_SKILL_DESC = {
+        {"Speed burst\nfwd", "Min speed\n8 m/s", "Hit adj.\nring too", "Push all\norbs away"},
+        {"3x ring\nhit rate", "Pull orbs\nto BLAZE", "10 hits\n3x dmg", "+30 mana\ninstant"},
+        {"No ring\nslowdown", "Rush to\nring", "Hit all\nrings +2", "5x dmg\nno slow"},
     };
     private static final float[][] ORB_COLORS = {
         {0.75f, 0.20f, 1.00f},  // SPARK — purple
@@ -3000,7 +3005,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             if (_oi > 0) orbSkillRow.add(makeDotSep()).width(4f);
             final int _si = _oi;
             TextButton _sb = new TextButton("", _skillStyle);
-            _sb.getLabel().setFontScale(0.48f);
+            _sb.getLabel().setFontScale(0.55f);
             _sb.getLabel().setAlignment(com.badlogic.gdx.utils.Align.center);
             _sb.addListener(new com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
                 @Override public void clicked(com.badlogic.gdx.scenes.scene2d.InputEvent e, float x, float y) {
@@ -3009,7 +3014,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             });
             skillBtns[_oi] = _sb;
             orbSkillLabels[_oi] = _sb.getLabel(); // keep label ref for text updates
-            orbSkillRow.add(_sb).expandX().fillX().height(36f);
+            orbSkillRow.add(_sb).expandX().fillX().height(58f);
         }
         updateOrbSkillRow();
         panel.add(orbSkillRow).growX().padBottom(3f).row();
@@ -9585,14 +9590,15 @@ public class EngineeringLabScreen extends ScreenAdapter {
         for (int _i = 0; _i < 4; _i++) {
             String _name = ORB_SKILLS[_ti][_i];
             if (skillActiveTimer[_ti][_i] > 0) {
-                skillBtns[_i].setText(_name + "\n" + (int) skillActiveTimer[_ti][_i] + "s");
+                skillBtns[_i].setText(_name + "\nACTIVE " + (int) skillActiveTimer[_ti][_i] + "s\n" + ORB_SKILL_DESC[_ti][_i]);
                 skillBtns[_i].getLabel().setColor(_active);
             } else if (skillCooldownTimer[_ti][_i] > 0) {
-                skillBtns[_i].setText(_name + "\n" + (int) Math.ceil(skillCooldownTimer[_ti][_i]) + "s");
+                skillBtns[_i].setText(_name + "\nCD " + (int) Math.ceil(skillCooldownTimer[_ti][_i]) + "s\n...");
                 skillBtns[_i].getLabel().setColor(_cd);
             } else {
                 float _mc = SKILL_MANA_COST[_ti][_i];
-                skillBtns[_i].setText(_name + "\n" + (_mc > 0 ? (int)_mc + "M" : "FREE"));
+                String _cost = _mc > 0 ? (int)_mc + "M" : "FREE";
+                skillBtns[_i].setText(_name + "\n" + _cost + "\n" + ORB_SKILL_DESC[_ti][_i]);
                 skillBtns[_i].getLabel().setColor(mana >= _mc ? _ready : _cd);
             }
         }
