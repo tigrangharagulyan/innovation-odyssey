@@ -36,12 +36,12 @@ public class EnergyContactListener implements ContactListener {
         boolean bIsCenter = bodyB.getUserData() instanceof ShipData.CenterHitData;
 
         if (aIsRing || bIsRing || aIsCenter || bIsCenter) {
-            boolean _aInt = (bodyA.getUserData() instanceof ShipData.InternBallData)
-                         || "PELLET".equals(bodyA.getUserData())
-                         || (bodyA.getUserData() instanceof String && ((String) bodyA.getUserData()).startsWith("INTERN"));
-            boolean _bInt = (bodyB.getUserData() instanceof ShipData.InternBallData)
-                         || "PELLET".equals(bodyB.getUserData())
-                         || (bodyB.getUserData() instanceof String && ((String) bodyB.getUserData()).startsWith("INTERN"));
+            boolean _aInt = (bodyA.getUserData() instanceof String
+                         && (((String) bodyA.getUserData()).startsWith("INTERN")
+                             || "PELLET".equals(bodyA.getUserData())));
+            boolean _bInt = (bodyB.getUserData() instanceof String
+                         && (((String) bodyB.getUserData()).startsWith("INTERN")
+                             || "PELLET".equals(bodyB.getUserData())));
             if (_aInt || _bInt) {
                 long _now = System.currentTimeMillis();
                 if (aIsRing) {
