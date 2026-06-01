@@ -3041,18 +3041,18 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     }
                 } else if (!isEmberIV()) {
                     if (bumpers.size < maxBumpersAllowed() && sd2.spendCrystals(bumperCost())) {
-                        // Spawn at drop position (already inside drum); fire toward drum center
-                        float tvx = CENTRIFUGE_CX - wx;
-                        float tvy = CENTRIFUGE_CY - wy;
-                        float tlen = (float) Math.sqrt(tvx * tvx + tvy * tvy);
-                        // Use drag distance for power: longer drag = faster launch, cap at 8 m/s
+                        // Slingshot: drag away from drum, release fires opposite direction
                         float originWX = dragOriginStageX / PPM;
                         float originWY = (dragOriginStageY + 80f) / PPM;
-                        float dragDist = (float) Math.sqrt(
-                            (wx - originWX) * (wx - originWX) + (wy - originWY) * (wy - originWY));
-                        float launchSpeed = Math.min(dragDist * 3f, 8f) + 2f;
-                        if (tlen > 0.01f) { tvx /= tlen; tvy /= tlen; }
-                        launchCurlingBumper(wx, wy, tvx * launchSpeed, tvy * launchSpeed);
+                        // Drag vector (release - origin); slingshot velocity = opposite
+                        float dvx = originWX - wx;   // reversed: fires opposite to drag direction
+                        float dvy = originWY - wy;
+                        float dragDist = (float) Math.sqrt(dvx * dvx + dvy * dvy);
+                        if (dragDist < 0.01f) { dvx = 0f; dvy = 1f; dragDist = 1f; }
+                        float launchSpeed = Math.min(dragDist * 4f, 9f) + 2f;
+                        dvx /= dragDist; dvy /= dragDist;
+                        // Spawn near drum center so body bounces inside drum
+                        launchCurlingBumper(CENTRIFUGE_CX, CENTRIFUGE_CY, dvx * launchSpeed, dvy * launchSpeed);
                     }
                 }
             }
@@ -3459,7 +3459,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 ShipData _hsd = ShipData.get();
                 float _tapR2 = (BUMPER_RADIUS * 2.5f) * (BUMPER_RADIUS * 2.5f);
                 for (int _i = 0; _i < bumpers.size; _i++) {
-                    Body _b = bumpers.items[_i];
+                    Body _b = bumpers.get(_i);
                     if (!(_b.getUserData() instanceof ShipData.BumperHitData)) continue;
                     ShipData.BumperHitData _bhd = (ShipData.BumperHitData) _b.getUserData();
                     if (!_bhd.harvestPending) continue;
@@ -3476,7 +3476,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     }
                 }
                 for (int _i = 0; _i < attractors.size; _i++) {
-                    Body _b = attractors.items[_i];
+                    Body _b = attractors.get(_i);
                     if (!(_b.getUserData() instanceof ShipData.AttractorHitData)) continue;
                     ShipData.AttractorHitData _ahd = (ShipData.AttractorHitData) _b.getUserData();
                     if (!_ahd.harvestPending) continue;
@@ -5717,7 +5717,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private void drawHarvestGlows() {
         boolean hasCharged = false;
         for (int _i = 0; _i < bumpers.size; _i++) {
-            Body _b = bumpers.items[_i];
+            Body _b = bumpers.get(_i);
             if (_b.getUserData() instanceof ShipData.BumperHitData
                     && ((ShipData.BumperHitData) _b.getUserData()).harvestPending) {
                 hasCharged = true; break;
@@ -5725,7 +5725,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         }
         if (!hasCharged) {
             for (int _i = 0; _i < attractors.size; _i++) {
-                Body _b = attractors.items[_i];
+                Body _b = attractors.get(_i);
                 if (_b.getUserData() instanceof ShipData.AttractorHitData
                         && ((ShipData.AttractorHitData) _b.getUserData()).harvestPending) {
                     hasCharged = true; break;
@@ -5742,7 +5742,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         float _pulse = 0.55f + 0.45f * MathUtils.sin(animTime * 4f);
 
         for (int _i = 0; _i < bumpers.size; _i++) {
-            Body _b = bumpers.items[_i];
+            Body _b = bumpers.get(_i);
             if (!(_b.getUserData() instanceof ShipData.BumperHitData)) continue;
             if (!((ShipData.BumperHitData) _b.getUserData()).harvestPending) continue;
             float _bx = _b.getPosition().x * PPM;
@@ -5751,7 +5751,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             shapeR.circle(_bx, _by, BUMPER_RADIUS * PPM * 1.6f, 20);
         }
         for (int _i = 0; _i < attractors.size; _i++) {
-            Body _b = attractors.items[_i];
+            Body _b = attractors.get(_i);
             if (!(_b.getUserData() instanceof ShipData.AttractorHitData)) continue;
             if (!((ShipData.AttractorHitData) _b.getUserData()).harvestPending) continue;
             float _bx = _b.getPosition().x * PPM;
@@ -5838,7 +5838,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         }
         // Draw in-flight curling bodies — cyan tint so player can see them moving
         for (int _i = 0; _i < curlingBodies.size; _i++) {
-            com.badlogic.gdx.physics.box2d.Body _cb = curlingBodies.items[_i];
+            com.badlogic.gdx.physics.box2d.Body _cb = curlingBodies.get(_i);
             float _px = _cb.getPosition().x * PPM;
             float _py = _cb.getPosition().y * PPM;
             float _t  = curlingTimers.get(_i) / CURLING_SETTLE_TIME;
@@ -7044,7 +7044,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             spiralCaptures.get(c).orb.setType(com.badlogic.gdx.physics.box2d.BodyDef.BodyType.DynamicBody);
         spiralCaptures.clear();
         // Destroy every placed construction body — pause menu is visible so world is not stepping
-        for (int _ci = 0; _ci < curlingBodies.size; _ci++) world.destroyBody(curlingBodies.items[_ci]);
+        for (int _ci = 0; _ci < curlingBodies.size; _ci++) world.destroyBody(curlingBodies.get(_ci));
         curlingBodies.clear();
         curlingTimers.clear();
         for (int i = 0; i < bumpers.size;       i++) world.destroyBody(bumpers.get(i));
@@ -7143,7 +7143,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             spiralCaptures.get(c).orb.setType(com.badlogic.gdx.physics.box2d.BodyDef.BodyType.DynamicBody);
         spiralCaptures.clear();
         // Destroy every placed body and all interns
-        for (int _ci = 0; _ci < curlingBodies.size; _ci++) world.destroyBody(curlingBodies.items[_ci]);
+        for (int _ci = 0; _ci < curlingBodies.size; _ci++) world.destroyBody(curlingBodies.get(_ci));
         curlingBodies.clear();
         curlingTimers.clear();
         for (int i = 0; i < bumpers.size;       i++) world.destroyBody(bumpers.get(i));
@@ -8384,7 +8384,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         }
         // ---- Settle curling bodies ----
         for (int _ci = curlingBodies.size - 1; _ci >= 0; _ci--) {
-            com.badlogic.gdx.physics.box2d.Body _cb = curlingBodies.items[_ci];
+            com.badlogic.gdx.physics.box2d.Body _cb = curlingBodies.get(_ci);
             float _ct = curlingTimers.get(_ci) + delta;
             curlingTimers.set(_ci, _ct);
             float _speed = _cb.getLinearVelocity().len();
