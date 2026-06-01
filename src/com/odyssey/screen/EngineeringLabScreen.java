@@ -7166,7 +7166,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             boolean _isSplit = _udTag.contains("SPLIT");
             // Draw size scales with actual physics radius
             float _r   = _blaze ? ORB_RADIUS[1] : _frost ? ORB_RADIUS[2] : ORB_RADIUS[0];
-            float _dSz = _r * PPM * 5.5f * (_frost && frostBigActive ? 2.0f : 1.0f);
+            float _dSz = _r * PPM * 5.5f * (_frost && frostBigActive ? 3.0f : 1.0f);
             float hw = _dSz * 0.5f, hh = _dSz * 0.5f;
             float coreW = _dSz * 0.42f, coreH = _dSz * 0.42f;
             float chw = coreW * 0.5f, chh = coreH * 0.5f;
@@ -9143,33 +9143,33 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 triggerShake(2f, 0.05f);
             }
         }
-        // ---- FROST skill 0: ATTACH — pin FROST to ring surface, hammer it ----
-        if (frostAttachActive && frostAttachRingIdx >= 0 && rings[frostAttachRingIdx] != null) {
+        // ---- FROST skill 0: ATTACH — orbit outer ring at 4 loops/6s ----
+        if (frostAttachActive) {
             Body _fBody2 = null;
             for (int _bi = 0; _bi < balls.size; _bi++) { if ("INTERN_FROST".equals(balls.get(_bi).getUserData())) { _fBody2 = balls.get(_bi); break; } }
-            if (_fBody2 != null) {
-                float _r = RING_RADII[frostAttachRingIdx] - ORB_RADIUS[2] - 0.02f;
-                float _ax = CENTRIFUGE_CX + MathUtils.cos(frostAttachAngle) * _r;
-                float _ay = CENTRIFUGE_CY + MathUtils.sin(frostAttachAngle) * _r;
-                // Pull FROST strongly toward attach point (impulse-based, no setTransform)
-                com.badlogic.gdx.math.Vector2 _fPos2 = _fBody2.getPosition();
-                float _pdx = _ax - _fPos2.x, _pdy = _ay - _fPos2.y;
-                float _pdist = (float) Math.sqrt(_pdx*_pdx + _pdy*_pdy);
-                _fBody2.setLinearVelocity(0f, 0f);
-                if (_pdist > 0.05f) _fBody2.applyLinearImpulse(_pdx * 8f, _pdy * 8f, _fPos2.x, _fPos2.y, true);
-                // Damage the ring every 150ms
+            if (_fBody2 != null && rings[0] != null) {
+                float _angVel = 4f * MathUtils.PI2 / SKILL_DURATION[2][0]; // 4 loops in duration
+                frostAttachAngle += delta * _angVel;
+                float _or = RING_RADII[0] - ORB_RADIUS[2] - 0.05f; // just inside outer ring
+                float _ox = CENTRIFUGE_CX + MathUtils.cos(frostAttachAngle) * _or;
+                float _oy = CENTRIFUGE_CY + MathUtils.sin(frostAttachAngle) * _or;
+                _fBody2.setTransform(_ox, _oy, 0f);
+                // Tangential velocity so physics feels natural
+                _fBody2.setLinearVelocity(
+                    -MathUtils.sin(frostAttachAngle) * _or * _angVel,
+                     MathUtils.cos(frostAttachAngle) * _or * _angVel);
+                // Damage outer ring every 150ms
                 frostAttachHitTimer -= delta;
                 if (frostAttachHitTimer <= 0f) {
                     frostAttachHitTimer = 0.15f;
-                    if (rings[frostAttachRingIdx].getUserData() instanceof ShipData.RingHitData) {
-                        ShipData.RingHitData _ard = (ShipData.RingHitData) rings[frostAttachRingIdx].getUserData();
-                        if (!_ard.readyToDestroy) { _ard.hitsRemaining -= 2; if (_ard.hitsRemaining <= 0) _ard.readyToDestroy = true; }
+                    if (rings[0].getUserData() instanceof ShipData.RingHitData) {
+                        ShipData.RingHitData _ard = (ShipData.RingHitData) rings[0].getUserData();
+                        if (!_ard.readyToDestroy) { _ard.hitsRemaining -= 3; if (_ard.hitsRemaining <= 0) _ard.readyToDestroy = true; }
                     }
                 }
             }
-            if (skillActiveTimer[2][0] <= 0) {
+            if (skillActiveTimer[2][0] <= 0 || (rings[0] == null)) {
                 frostAttachActive = false;
-                // Give FROST a kick when detaching
                 if (_fBody2 != null) { float _ka = MathUtils.random(MathUtils.PI2); _fBody2.setLinearVelocity(MathUtils.cos(_ka) * 5f, MathUtils.sin(_ka) * 5f); }
             }
         }
@@ -9698,18 +9698,33 @@ public class EngineeringLabScreen extends ScreenAdapter {
             }
         } else { // FROST
             switch (slot) {
-                case 0: // ATTACH — pin to nearest ring
-                    frostAttachRingIdx = -1;
-                    for (int _ri = 5; _ri >= 0; _ri--) { if (rings[_ri] != null) { frostAttachRingIdx = _ri; break; } }
-                    if (frostAttachRingIdx >= 0) {
+                case 0: // ATTACH — orbit outer ring (index 0)
+                    if (rings[0] != null) {
                         Body _fAt = null;
                         for (int _bi = 0; _bi < balls.size; _bi++) { if ("INTERN_FROST".equals(balls.get(_bi).getUserData())) { _fAt = balls.get(_bi); break; } }
-                        if (_fAt != null) { frostAttachAngle = (float) Math.atan2(_fAt.getPosition().y - CENTRIFUGE_CY, _fAt.getPosition().x - CENTRIFUGE_CX); }
+                        frostAttachAngle = _fAt != null ? (float) Math.atan2(_fAt.getPosition().y - CENTRIFUGE_CY, _fAt.getPosition().x - CENTRIFUGE_CX) : 0f;
+                        frostAttachRingIdx = 0;
                         frostAttachActive = true; frostAttachHitTimer = 0f;
                     } else { mana += SKILL_MANA_COST[2][0]; skillCooldownTimer[2][0] = 0; }
                     break;
-                case 1: frostIcePending = true; break; // ICE RUSH
-                case 2: break; // BIG — frostBigActive set in tick
+                case 1: frostIcePending = true; frostAttachActive = false; break; // ICE RUSH breaks attach
+                case 2: { // BIG — shockwave push + visual
+                    Body _fBig = null;
+                    for (int _bi = 0; _bi < balls.size; _bi++) { if ("INTERN_FROST".equals(balls.get(_bi).getUserData())) { _fBig = balls.get(_bi); break; } }
+                    if (_fBig != null) {
+                        com.badlogic.gdx.math.Vector2 _fp = _fBig.getPosition();
+                        for (int _bi = 0; _bi < balls.size; _bi++) {
+                            Body _ob = balls.get(_bi); if ("INTERN_FROST".equals(_ob.getUserData())) continue;
+                            com.badlogic.gdx.math.Vector2 _op = _ob.getPosition();
+                            float _bdx = _op.x-_fp.x, _bdy = _op.y-_fp.y;
+                            float _bdl = (float)Math.sqrt(_bdx*_bdx+_bdy*_bdy);
+                            if (_bdl < 0.01f) continue;
+                            _ob.applyLinearImpulse(_bdx/_bdl*5f, _bdy/_bdl*5f, _op.x, _op.y, true);
+                        }
+                    }
+                    triggerShake(4f, 0.09f);
+                    break;
+                }
                 case 3: frostFreezeGlow = 10.0f; triggerShake(3f, 0.08f); break; // GRAVITY
             }
         }

@@ -52,7 +52,7 @@ public class EnergyContactListener implements ContactListener {
                                 || (_bInt && "INTERN_FROST".equals(bodyB.getUserData()));
                 int _dmg = 1;
                 if (_isBlaze && _sd0.blazeOverloadHits > 0) { _dmg = 3; _sd0.blazeOverloadHits--; }
-                if (_isFrost && _sd0.frostBigActive) _dmg = Math.max(_dmg, 2);
+                if (_isFrost && _sd0.frostBigActive) _dmg = Math.max(_dmg, 3);
                 boolean _skipSlow = _isFrost && _sd0.frostBigActive;
                 if (aIsRing) {
                     ShipData.RingHitData _rhd = (ShipData.RingHitData) bodyA.getUserData();
