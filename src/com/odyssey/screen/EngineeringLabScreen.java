@@ -7035,9 +7035,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
             Vector2 pos   = body.getPosition();
             Vector2 vel   = body.getLinearVelocity();
             String _udTag = body.getUserData() instanceof String ? (String) body.getUserData() : "";
-            boolean _blaze = _udTag.contains("BLAZE") || _udTag.contains("NORMAL");
+            boolean _blaze = _udTag.contains("BLAZE");
             boolean _frost = _udTag.contains("FROST");
-            boolean _spark = !_blaze && !_frost;
+            boolean _spark = !_blaze && !_frost; // includes SPARK and NORMAL
 
             float speed = vel.len();
             float px    = pos.x * PPM;
