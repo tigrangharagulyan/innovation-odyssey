@@ -9131,28 +9131,24 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 frostIceCharged = false;
             }
         }
-        // ---- FROST skill 0: ATTACH — clamp orb to drum wall and spin with it ----
+        // ---- FROST skill 0: ATTACH — orbit drum wall (kinematic) ----
         if (frostAttachActive) {
             Body _fBody2 = null;
             for (int _bi = 0; _bi < balls.size; _bi++) { if ("INTERN_FROST".equals(balls.get(_bi).getUserData())) { _fBody2 = balls.get(_bi); break; } }
             if (_fBody2 != null) {
-                // Spin with drum (min 2.5 rad/s so it's always visibly moving)
                 float _drumAngVel = centrifugeBody != null ? centrifugeBody.getAngularVelocity() : 2.5f;
                 if (Math.abs(_drumAngVel) < 2.5f) _drumAngVel = 2.5f;
                 frostAttachAngle += delta * _drumAngVel;
-                float _or = CENTRIFUGE_R - ORB_RADIUS[2] - 0.05f; // just inside drum wall
+                float _or = CENTRIFUGE_R - ORB_RADIUS[2] - 0.05f;
                 float _ox = CENTRIFUGE_CX + MathUtils.cos(frostAttachAngle) * _or;
                 float _oy = CENTRIFUGE_CY + MathUtils.sin(frostAttachAngle) * _or;
-                _fBody2.setAwake(true);
                 _fBody2.setTransform(_ox, _oy, 0f);
-                _fBody2.setLinearVelocity(0f, 0f);
-                // No damage while attached — orb just orbits the wall
             }
             // Detach when 60s timer expires (ICE RUSH detaches in activateSkill)
             if (skillActiveTimer[2][0] <= 0f) {
                 frostAttachActive = false;
                 if (_fBody2 != null) {
-                    if (!_fBody2.getFixtureList().isEmpty()) _fBody2.getFixtureList().first().setSensor(false);
+                    _fBody2.setType(com.badlogic.gdx.physics.box2d.BodyDef.BodyType.DynamicBody);
                     float _ka = MathUtils.random(MathUtils.PI2);
                     _fBody2.setLinearVelocity(MathUtils.cos(_ka) * 5f, MathUtils.sin(_ka) * 5f);
                 }
@@ -9683,19 +9679,19 @@ public class EngineeringLabScreen extends ScreenAdapter {
             }
         } else { // FROST
             switch (slot) {
-                case 0: // ATTACH — orbit outer ring (index 0)
-                    if (rings[0] != null) {
-                        Body _fAt = null;
-                        for (int _bi = 0; _bi < balls.size; _bi++) { if ("INTERN_FROST".equals(balls.get(_bi).getUserData())) { _fAt = balls.get(_bi); break; } }
-                        frostAttachAngle = _fAt != null ? (float) Math.atan2(_fAt.getPosition().y - CENTRIFUGE_CY, _fAt.getPosition().x - CENTRIFUGE_CX) : 0f;
+                case 0: { // ATTACH — orbit drum wall (kinematic body)
+                    Body _fAt = null;
+                    for (int _bi = 0; _bi < balls.size; _bi++) { if ("INTERN_FROST".equals(balls.get(_bi).getUserData())) { _fAt = balls.get(_bi); break; } }
+                    if (_fAt != null) {
+                        frostAttachAngle = (float) Math.atan2(_fAt.getPosition().y - CENTRIFUGE_CY, _fAt.getPosition().x - CENTRIFUGE_CX);
                         frostAttachRingIdx = 0;
                         frostAttachActive = true; frostAttachHitTimer = 0f;
-                        // Disable ring collisions for FROST so it stays on drum wall
-                        // Make FROST a sensor — nothing can push it off the wall
-                        if (_fAt != null && !_fAt.getFixtureList().isEmpty())
-                            _fAt.getFixtureList().first().setSensor(true);
+                        // Kinematic = pure position control, ignores all forces/collisions
+                        _fAt.setType(com.badlogic.gdx.physics.box2d.BodyDef.BodyType.KinematicBody);
+                        _fAt.setLinearVelocity(0f, 0f);
                     } else { mana += SKILL_MANA_COST[2][0]; skillCooldownTimer[2][0] = 0; }
                     break;
+                }
                 case 1: // ICE RUSH — detach FROST and fire inward
                     frostIcePending = true;
                     if (frostAttachActive) {
@@ -9704,10 +9700,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
                         // Charged strike: next 6 ring hits deal 4× damage
                         ShipData.get().frostChargedHits = 6;
                         frostIceCharged = true;
-                        // Restore normal ring collisions
+                        // Restore dynamic body so it can fly + collide
                         for (int _bi = 0; _bi < balls.size; _bi++) {
                             if ("INTERN_FROST".equals(balls.get(_bi).getUserData())) {
-                                if (!balls.get(_bi).getFixtureList().isEmpty()) balls.get(_bi).getFixtureList().first().setSensor(false);
+                                balls.get(_bi).setType(com.badlogic.gdx.physics.box2d.BodyDef.BodyType.DynamicBody);
                                 break;
                             }
                         }
