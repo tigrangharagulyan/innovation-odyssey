@@ -9642,20 +9642,15 @@ public class EngineeringLabScreen extends ScreenAdapter {
                         if (_sparkMain == null) break;
                         com.badlogic.gdx.physics.box2d.BodyDef _sbd = new com.badlogic.gdx.physics.box2d.BodyDef();
                         _sbd.type = com.badlogic.gdx.physics.box2d.BodyDef.BodyType.DynamicBody;
-                        // Spawn on sides of SPARK (perpendicular to velocity), clamped inside drum
+                        // Spawn beside SPARK, perpendicular to its velocity
                         com.badlogic.gdx.math.Vector2 _spVel = _sparkMain.getLinearVelocity();
                         float _pxS = -_spVel.y, _pyS = _spVel.x;
                         float _pLS = (float) Math.sqrt(_pxS*_pxS + _pyS*_pyS);
                         if (_pLS < 0.001f) { _pxS = 1f; _pyS = 0f; _pLS = 1f; }
                         _pxS /= _pLS; _pyS /= _pLS;
                         float _side = _sb == 0 ? 0.30f : -0.30f;
-                        float _sx2 = _sparkMain.getPosition().x + _pxS * _side;
-                        float _sy2 = _sparkMain.getPosition().y + _pyS * _side;
-                        float _sdx = _sx2 - CENTRIFUGE_CX, _sdy = _sy2 - CENTRIFUGE_CY;
-                        float _sdr = (float) Math.sqrt(_sdx*_sdx + _sdy*_sdy);
-                        float _maxR = CENTRIFUGE_R * 0.65f;
-                        if (_sdr > _maxR) { _sx2 = CENTRIFUGE_CX + _sdx/_sdr*_maxR; _sy2 = CENTRIFUGE_CY + _sdy/_sdr*_maxR; }
-                        _sbd.position.set(_sx2, _sy2);
+                        _sbd.position.set(_sparkMain.getPosition().x + _pxS * _side,
+                                          _sparkMain.getPosition().y + _pyS * _side);
                         CircleShape _sc = new CircleShape(); _sc.setRadius(ORB_RADIUS[0]);
                         com.badlogic.gdx.physics.box2d.FixtureDef _sfd = new com.badlogic.gdx.physics.box2d.FixtureDef();
                         _sfd.shape = _sc; _sfd.density = BALL_DENSITY; _sfd.restitution = 0.85f; _sfd.friction = 0.1f;
