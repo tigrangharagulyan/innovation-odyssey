@@ -9642,10 +9642,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
                         if (_sparkMain == null) break;
                         com.badlogic.gdx.physics.box2d.BodyDef _sbd = new com.badlogic.gdx.physics.box2d.BodyDef();
                         _sbd.type = com.badlogic.gdx.physics.box2d.BodyDef.BodyType.DynamicBody;
-                        _sbd.position.set(_sparkMain.getPosition().x + (_sb == 0 ? 0.1f : -0.1f), _sparkMain.getPosition().y);
+                        // Spawn near drum center so they start well inside all rings
+                        float _spawnOff = (_sb == 0 ? 0.25f : -0.25f);
+                        _sbd.position.set(CENTRIFUGE_CX + _spawnOff, CENTRIFUGE_CY + _spawnOff * 0.5f);
                         CircleShape _sc = new CircleShape(); _sc.setRadius(ORB_RADIUS[0]);
                         com.badlogic.gdx.physics.box2d.FixtureDef _sfd = new com.badlogic.gdx.physics.box2d.FixtureDef();
-                        _sfd.shape = _sc; _sfd.density = BALL_DENSITY; _sfd.restitution = ORB_REST[0]; _sfd.friction = 0.1f;
+                        _sfd.shape = _sc; _sfd.density = BALL_DENSITY; _sfd.restitution = 0.85f; _sfd.friction = 0.1f;
                         Body _split = world.createBody(_sbd); _split.setBullet(true); _split.createFixture(_sfd);
                         _split.setUserData("INTERN_SPARK_SPLIT");
                         float _sa = MathUtils.random(MathUtils.PI2);
