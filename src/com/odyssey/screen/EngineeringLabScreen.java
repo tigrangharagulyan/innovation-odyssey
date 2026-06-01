@@ -9127,21 +9127,21 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 triggerShake(2f, 0.05f);
             }
         }
-        // ---- FROST skill 0: ATTACH — orbit outer ring at 4 loops/6s ----
+        // ---- FROST skill 0: ATTACH — clamp orb to drum wall and spin with it ----
         if (frostAttachActive) {
             Body _fBody2 = null;
             for (int _bi = 0; _bi < balls.size; _bi++) { if ("INTERN_FROST".equals(balls.get(_bi).getUserData())) { _fBody2 = balls.get(_bi); break; } }
             if (_fBody2 != null) {
-                // Spin with the centrifuge drum angular velocity
-                float _drumAngVel = centrifugeBody != null ? centrifugeBody.getAngularVelocity() : 2.0f;
+                // Spin with drum (min 2.5 rad/s so it's always visibly moving)
+                float _drumAngVel = centrifugeBody != null ? centrifugeBody.getAngularVelocity() : 2.5f;
+                if (Math.abs(_drumAngVel) < 2.5f) _drumAngVel = 2.5f;
                 frostAttachAngle += delta * _drumAngVel;
                 float _or = CENTRIFUGE_R - ORB_RADIUS[2] - 0.05f; // just inside drum wall
                 float _ox = CENTRIFUGE_CX + MathUtils.cos(frostAttachAngle) * _or;
                 float _oy = CENTRIFUGE_CY + MathUtils.sin(frostAttachAngle) * _or;
+                _fBody2.setAwake(true);
                 _fBody2.setTransform(_ox, _oy, 0f);
-                _fBody2.setLinearVelocity(
-                    -MathUtils.sin(frostAttachAngle) * _or * _drumAngVel,
-                     MathUtils.cos(frostAttachAngle) * _or * _drumAngVel);
+                _fBody2.setLinearVelocity(0f, 0f);
                 // Damage outermost alive ring every 150ms
                 frostAttachHitTimer -= delta;
                 if (frostAttachHitTimer <= 0f) {
@@ -9155,7 +9155,15 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     }
                 }
             }
-            // Only ICE RUSH detaches (handled in activateSkill case 1)
+            // Detach when 60s timer expires (ICE RUSH detaches in activateSkill)
+            if (skillActiveTimer[2][0] <= 0f) {
+                frostAttachActive = false;
+                if (_fBody2 != null) {
+                    if (!_fBody2.getFixtureList().isEmpty()) _fBody2.getFixtureList().first().setSensor(false);
+                    float _ka = MathUtils.random(MathUtils.PI2);
+                    _fBody2.setLinearVelocity(MathUtils.cos(_ka) * 5f, MathUtils.sin(_ka) * 5f);
+                }
+            }
         }
         // ---- FROST skill 3: GRAVITY — alternating pull/push ----
         if (skillActiveTimer[2][3] > 0) {
