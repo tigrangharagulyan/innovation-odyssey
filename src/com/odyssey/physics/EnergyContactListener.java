@@ -161,6 +161,27 @@ public class EnergyContactListener implements ContactListener {
                 if (bodyB.getUserData() instanceof ShipData.AttractorHitData)
                     ((ShipData.AttractorHitData) bodyB.getUserData()).lastHitMs = ts;
             }
+            // Harvest node: increment hitCount up to 10 for standard bumpers and attractors
+            if (aIsIntern || bIsIntern) {
+                if (aIsStdBumper) {
+                    ShipData.BumperHitData bhd = (ShipData.BumperHitData) bodyA.getUserData();
+                    if (!bhd.harvestPending && ++bhd.hitCount >= 10) bhd.harvestPending = true;
+                }
+                if (bIsStdBumper) {
+                    ShipData.BumperHitData bhd = (ShipData.BumperHitData) bodyB.getUserData();
+                    if (!bhd.harvestPending && ++bhd.hitCount >= 10) bhd.harvestPending = true;
+                }
+                if (attractorHit) {
+                    if (bodyA.getUserData() instanceof ShipData.AttractorHitData) {
+                        ShipData.AttractorHitData ahd = (ShipData.AttractorHitData) bodyA.getUserData();
+                        if (!ahd.harvestPending && ++ahd.hitCount >= 10) ahd.harvestPending = true;
+                    }
+                    if (bodyB.getUserData() instanceof ShipData.AttractorHitData) {
+                        ShipData.AttractorHitData ahd = (ShipData.AttractorHitData) bodyB.getUserData();
+                        if (!ahd.harvestPending && ++ahd.hitCount >= 10) ahd.harvestPending = true;
+                    }
+                }
+            }
 
         } else if (aIsIntern || bIsIntern) {
             // ---- Wall / ring contact ----
