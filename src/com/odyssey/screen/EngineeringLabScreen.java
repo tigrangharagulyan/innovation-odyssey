@@ -3413,10 +3413,47 @@ public class EngineeringLabScreen extends ScreenAdapter {
         inputMux = new InputMultiplexer(ui, new InputAdapter() {
             @Override public boolean touchDown(int sx, int sy, int ptr, int btn) {
                 if (btn == 1) { placementMode = PLACE_NONE; return true; }
-                if (btn != 0 || placementMode == PLACE_NONE) return false;
+                // ---- Harvest tap: check charged structures before placement ----
                 touchWorld.set(sx, sy, 0);
                 physViewport.unproject(touchWorld);
                 float wx = touchWorld.x, wy = touchWorld.y;
+                ShipData _hsd = ShipData.get();
+                float _tapR2 = (BUMPER_RADIUS * 2.5f) * (BUMPER_RADIUS * 2.5f);
+                for (int _i = 0; _i < bumpers.size; _i++) {
+                    Body _b = bumpers.items[_i];
+                    if (!(_b.getUserData() instanceof ShipData.BumperHitData)) continue;
+                    ShipData.BumperHitData _bhd = (ShipData.BumperHitData) _b.getUserData();
+                    if (!_bhd.harvestPending) continue;
+                    float _dx = _b.getPosition().x - wx, _dy = _b.getPosition().y - wy;
+                    if (_dx * _dx + _dy * _dy < _tapR2) {
+                        float _joules = Math.max(10f, _hsd.currentJPS * 30f);
+                        int   _gems   = 1 + _i / 5;
+                        _hsd.addJoules(_joules);
+                        _hsd.diamonds += _gems;
+                        _bhd.harvestPending = false;
+                        _bhd.hitCount = 0;
+                        queueHarvestPop(_b.getPosition().x * PPM, _b.getPosition().y * PPM, _joules, _gems);
+                        return true;
+                    }
+                }
+                for (int _i = 0; _i < attractors.size; _i++) {
+                    Body _b = attractors.items[_i];
+                    if (!(_b.getUserData() instanceof ShipData.AttractorHitData)) continue;
+                    ShipData.AttractorHitData _ahd = (ShipData.AttractorHitData) _b.getUserData();
+                    if (!_ahd.harvestPending) continue;
+                    float _dx = _b.getPosition().x - wx, _dy = _b.getPosition().y - wy;
+                    if (_dx * _dx + _dy * _dy < _tapR2) {
+                        float _joules = Math.max(10f, _hsd.currentJPS * 30f);
+                        int   _gems   = 1 + _i / 5;
+                        _hsd.addJoules(_joules);
+                        _hsd.diamonds += _gems;
+                        _ahd.harvestPending = false;
+                        _ahd.hitCount = 0;
+                        queueHarvestPop(_b.getPosition().x * PPM, _b.getPosition().y * PPM, _joules, _gems);
+                        return true;
+                    }
+                }
+                if (btn != 0 || placementMode == PLACE_NONE) return false;
                 float dx = wx - CENTRIFUGE_CX, dy = wy - CENTRIFUGE_CY;
                 if (dx * dx + dy * dy >= CENTRIFUGE_R * CENTRIFUGE_R) return false;
                 ShipData sd = ShipData.get();
@@ -5182,6 +5219,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 case 0  -> OdysseyTheme.FLOAT_E;
                 case 1  -> OdysseyTheme.FLOAT_SP;
                 case 2  -> OdysseyTheme.FLOAT_SPECIAL;
+                case 4  -> new com.badlogic.gdx.graphics.Color(1.0f, 0.85f, 0.10f, 1f);
+                case 5  -> new com.badlogic.gdx.graphics.Color(0.35f, 1.00f, 0.90f, 1f);
                 default -> OdysseyTheme.FLOAT_BUMPER;
             };
 
@@ -5190,7 +5229,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
             floatFont.getData().setScale(scale);
             floatFont.setColor(c.r, c.g, c.b, alpha);
-            String text = "+" + (int) fe.value;
+            String text = fe.colorType == 5
+                ? "+" + (int) fe.value + "◆"
+                : "+" + (int) fe.value;
             floatLayout.setText(floatFont, text);
             floatFont.draw(batch, text, sx - floatLayout.width * 0.5f, sy);
         }
@@ -5612,6 +5653,26 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 0, 0, texGravCenter.getWidth(), texGravCenter.getHeight(), false, false);
         }
         batch.setColor(1f, 1f, 1f, 1f);
+    }
+
+    /** Add floating "+NJ" and "+N◆" harvest reward labels directly to activeFloats. */
+    private void queueHarvestPop(float px, float py, float joules, int gems) {
+        FloatEntry fe = new FloatEntry();
+        fe.wx        = px / PPM;
+        fe.wy        = py / PPM;
+        fe.value     = joules;
+        fe.colorType = 4;
+        fe.age       = 0f;
+        fe.driftX    = 0f;
+        activeFloats.add(fe);
+        FloatEntry fe2 = new FloatEntry();
+        fe2.wx        = px / PPM + 0.3f;
+        fe2.wy        = py / PPM - 0.2f;
+        fe2.value     = gems;
+        fe2.colorType = 5;
+        fe2.age       = 0f;
+        fe2.driftX    = 0.05f;
+        activeFloats.add(fe2);
     }
 
     private void drawHarvestGlows() {
