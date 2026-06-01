@@ -349,17 +349,17 @@ public class EngineeringLabScreen extends ScreenAdapter {
     // BLAZE: SHIELD=0, MAGNET=1, OVERLOAD=2, RALLY=3
     // FROST: SLOW=0, ICE SPIKE=1, CRYO=2, FREEZE=3
     private static final float[][] SKILL_MANA_COST = {
-        {20f, 20f, 25f, 15f},  // SPARK: DASH, OVERDRIVE, CHAIN, STATIC
+        {10f, 20f, 30f, 50f},  // SPARK: DASH, MARKER, OVERDRIVE, SPLIT
         {20f, 20f, 25f,  0f},  // BLAZE: SHIELD, MAGNET, OVERLOAD, RALLY
         {20f, 25f, 30f, 30f},  // FROST: SHATTER, ICE RUSH, BLIZZARD, AVALANCHE
     };
     private static final float[][] SKILL_COOLDOWN = {
-        { 8f, 14f, 16f, 10f},  // SPARK
+        { 6f, 12f, 14f, 25f},  // SPARK: DASH, MARKER, OVERDRIVE, SPLIT
         {14f, 12f, 16f, 18f},  // BLAZE
         {14f,  8f, 18f, 16f},  // FROST
     };
     private static final float[][] SKILL_DURATION = {
-        { 0f,  6f,  8f,  0f},  // SPARK
+        { 0f,  0f,  6f,  6f},  // SPARK: DASH instant, MARKER until-hit, OVERDRIVE 6s, SPLIT 6s
         { 6f,  6f,  0f,  0f},  // BLAZE
         { 8f,  0f,  6f,  5f},  // FROST: SHATTER 8s, ICE RUSH instant, BLIZZARD 6s, AVALANCHE 5s
     };
@@ -371,18 +371,19 @@ public class EngineeringLabScreen extends ScreenAdapter {
     // Animation state
     private float   blazeShieldAngle   = 0f;     // skill 0: rotating shield arc angle
     // SPARK skill state
-    private boolean sparkDashPending   = false;  // slot 0: instant burst
-    private boolean sparkStaticPending = false;  // slot 3: radial push
+    private boolean sparkDashPending    = false;  // slot 0 + marker trigger
+    private boolean sparkMarkerPending  = false;  // slot 1: waiting for ring hit
+    private final com.badlogic.gdx.utils.Array<com.badlogic.gdx.physics.box2d.Body> sparkSplitBodies = new com.badlogic.gdx.utils.Array<>();
     // FROST skill state
     private boolean frostIcePending    = false;  // slot 1: ice spike burst
     private float   frostFreezeGlow    = 0f;     // slot 3: freeze animation
     private static final String[][] ORB_SKILLS = {
-        {"DASH", "OVERDRIVE", "CHAIN", "STATIC"},
+        {"DASH", "MARKER", "OVERDRIVE", "SPLIT"},
         {"SHIELD", "MAGNET", "OVERLOAD", "RALLY"},
         {"SHATTER", "ICE RUSH", "BLIZZARD", "AVALANCHE"}
     };
     private static final String[][] ORB_SKILL_DESC = {
-        {"Speed burst\nfwd", "Min speed\n8 m/s", "Hit adj.\nring too", "Push all\norbs away"},
+        {"Burst fwd\ninstant", "Next hit\nauto-dash", "6s min\nspd 8m/s", "6s split\n3 orbs"},
         {"3x ring\nhit rate", "Pull orbs\nto BLAZE", "10 hits\n3x dmg", "+30 mana\ninstant"},
         {"No ring\nslowdown", "Rush to\nring", "Hit all\nrings +2", "5x dmg\nno slow"},
     };
@@ -3797,11 +3798,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
         mana = MAX_MANA;
         for (int _ti = 0; _ti < 3; _ti++) { java.util.Arrays.fill(skillCooldownTimer[_ti], 0); java.util.Arrays.fill(skillActiveTimer[_ti], 0); }
         blazeMagnetActive = false; blazeRallyFlash = 0f; blazeOverloadFlash = 0f; blazeShieldAngle = 0f;
-        sparkDashPending = false; sparkStaticPending = false;
+        sparkDashPending = false; sparkMarkerPending = false;
+        for (int _si2 = 0; _si2 < sparkSplitBodies.size; _si2++) { try { world.destroyBody(sparkSplitBodies.get(_si2)); } catch (Exception _ign) {} } sparkSplitBodies.clear();
         frostIcePending = false; frostFreezeGlow = 0f;
         ShipData _sk = ShipData.get();
         _sk.blazeShieldActive = false; _sk.blazeOverloadHits = 0;
-        _sk.sparkChainActive = false; _sk.sparkChainPendingRing = -1;
+        _sk.sparkMarkedRing = -1; _sk.sparkMarkerDashPending = false;
         _sk.frostShatterActive = false; _sk.frostBlizzardActive = false;
         _sk.frostAvalancheActive = false; _sk.frostBlizzardPendingRing = -1;
         if (orbSkillLabels != null) updateOrbSkillRow();
@@ -4081,7 +4083,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             }
         }
         // SPARK skill states
-        _ssd.sparkChainActive  = skillActiveTimer[0][2] > 0;
+        sparkMarkerPending = ShipData.get().sparkMarkedRing >= 0;
         // BLAZE skill states
         _ssd.blazeShieldActive = skillActiveTimer[1][0] > 0;
         blazeMagnetActive      = skillActiveTimer[1][1] > 0;
@@ -5888,6 +5890,23 @@ public class EngineeringLabScreen extends ScreenAdapter {
             shapeR.circle(CENTRIFUGE_CX * PPM, CENTRIFUGE_CY * PPM, 0.30f * PPM, 24);
         }
 
+        // SPARK MARKER: pulsing purple highlight on marked ring
+        int _mri = ShipData.get().sparkMarkedRing;
+        if (_mri >= 0 && _mri < 6 && rings[_mri] != null) {
+            float _ma = 0.5f + 0.5f * com.badlogic.gdx.math.MathUtils.sin(animTime * 10f);
+            shapeR.setColor(0.75f, 0.20f, 1f, _ma);
+            int _mseg = RING_SIDES[_mri];
+            float _mr = RING_RADII[_mri] * PPM * 1.06f; // slightly larger than ring
+            float _mrot = _mri * com.badlogic.gdx.math.MathUtils.PI / (2f * _mseg);
+            float _mcx = CENTRIFUGE_CX * PPM, _mcy = CENTRIFUGE_CY * PPM;
+            for (int _ms = 0; _ms < _mseg; _ms++) {
+                float _a1 = _mrot + _ms       * com.badlogic.gdx.math.MathUtils.PI2 / _mseg;
+                float _a2 = _mrot + (_ms + 1) * com.badlogic.gdx.math.MathUtils.PI2 / _mseg;
+                shapeR.line(_mcx + com.badlogic.gdx.math.MathUtils.cos(_a1) * _mr, _mcy + com.badlogic.gdx.math.MathUtils.sin(_a1) * _mr,
+                            _mcx + com.badlogic.gdx.math.MathUtils.cos(_a2) * _mr, _mcy + com.badlogic.gdx.math.MathUtils.sin(_a2) * _mr);
+            }
+        }
+
         shapeR.end();
         Gdx.gl.glLineWidth(1f);
         batch.begin();
@@ -7134,7 +7153,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
             String _udTag = body.getUserData() instanceof String ? (String) body.getUserData() : "";
             boolean _blaze = _udTag.contains("BLAZE");
             boolean _frost = _udTag.contains("FROST");
-            boolean _spark = !_blaze && !_frost; // includes SPARK and NORMAL
+            boolean _spark = !_blaze && !_frost; // includes SPARK, SPARK_SPLIT, NORMAL
+            boolean _isSplit = _udTag.contains("SPLIT");
             // Draw size scales with actual physics radius
             float _r   = _blaze ? ORB_RADIUS[1] : _frost ? ORB_RADIUS[2] : ORB_RADIUS[0];
             float _dSz = _r * PPM * 5.5f;
@@ -7166,7 +7186,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     0, 0, texEmberIntern.getWidth(), texEmberIntern.getHeight(), false, false);
             } else {
                 // Outer glow layer — color by orb type
-                if (_spark)      batch.setColor(0.75f * glow, 0.20f * glow, 1.00f * glow, 0.65f); // purple
+                if (_spark)      batch.setColor(0.75f * glow, 0.20f * glow, 1.00f * glow, _isSplit ? 0.40f : 0.65f); // purple
                 else if (_blaze) batch.setColor(1.00f * glow, 0.42f * glow, 0.10f * glow, 0.65f);
                 else             batch.setColor(0.25f * glow, 0.92f * glow, 1.00f * glow, 0.65f); // frost
                 batch.draw(texParticle, px - hw, py - hh, hw, hh,
@@ -7188,6 +7208,18 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     batch.draw(texParticle, px - _ohw, py - _ohw, _ox, _ox);
                 }
             }
+        }
+        // SPARK split orbs
+        for (int _ssi = 0; _ssi < sparkSplitBodies.size; _ssi++) {
+            Body _ssb = sparkSplitBodies.get(_ssi);
+            float _sx = _ssb.getPosition().x * PPM, _sy = _ssb.getPosition().y * PPM;
+            float _sGlow = 0.45f + 0.35f * MathUtils.sin(animTime * 8f + _ssi * 2.1f);
+            float _sSz = ORB_RADIUS[0] * PPM * 5.0f;
+            batch.setColor(0.75f * _sGlow, 0.20f * _sGlow, 1.00f * _sGlow, 0.50f);
+            batch.draw(texParticle, _sx - _sSz * 0.5f, _sy - _sSz * 0.5f, _sSz, _sSz);
+            float _sCoreS = _sSz * 0.38f;
+            batch.setColor(0.88f, 0.55f, 1f, 0.70f);
+            batch.draw(texParticleCore, _sx - _sCoreS * 0.5f, _sy - _sCoreS * 0.5f, _sCoreS, _sCoreS);
         }
         // Flying intern sprite (visual slingshot phase before entering drum)
         if (flyingInternActive) {
@@ -9058,8 +9090,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 }
             }
         }
-        // ---- SPARK skill 1: OVERDRIVE — maintain min speed ----
-        if (skillActiveTimer[0][1] > 0) {
+        // ---- SPARK skill 2: OVERDRIVE — maintain min speed ----
+        if (skillActiveTimer[0][2] > 0) {
             for (int _bi = 0; _bi < balls.size; _bi++) {
                 Body _sb = balls.get(_bi);
                 if (!"INTERN_SPARK".equals(_sb.getUserData())) continue;
@@ -9072,40 +9104,16 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 }
             }
         }
-        // ---- SPARK skill 2: CHAIN — propagate ring damage ----
-        if (ShipData.get().sparkChainPendingRing >= 0) {
-            int _cri = ShipData.get().sparkChainPendingRing;
-            ShipData.get().sparkChainPendingRing = -1;
-            if (_cri < 6 && rings[_cri] != null && rings[_cri].getUserData() instanceof ShipData.RingHitData) {
-                ShipData.RingHitData _crhd = (ShipData.RingHitData) rings[_cri].getUserData();
-                if (!_crhd.readyToDestroy) {
-                    _crhd.hitsRemaining -= 1;
-                    if (_crhd.hitsRemaining <= 0) _crhd.readyToDestroy = true;
-                }
-            }
+        // ---- SPARK skill 1: MARKER — trigger dash when marked ring is hit ----
+        if (ShipData.get().sparkMarkerDashPending) {
+            ShipData.get().sparkMarkerDashPending = false;
+            sparkDashPending = true; // reuse dash logic
+            triggerShake(2f, 0.04f);
         }
-        // ---- SPARK skill 3: STATIC — push all non-SPARK orbs away ----
-        if (sparkStaticPending) {
-            sparkStaticPending = false;
-            com.badlogic.gdx.math.Vector2 _spPos = null;
-            for (int _bi = 0; _bi < balls.size; _bi++) {
-                if ("INTERN_SPARK".equals(balls.get(_bi).getUserData())) {
-                    _spPos = balls.get(_bi).getPosition(); break;
-                }
-            }
-            if (_spPos != null) {
-                for (int _bi = 0; _bi < balls.size; _bi++) {
-                    Body _ob = balls.get(_bi);
-                    if ("INTERN_SPARK".equals(_ob.getUserData())) continue;
-                    com.badlogic.gdx.math.Vector2 _op = _ob.getPosition();
-                    float _dx = _op.x - _spPos.x, _dy = _op.y - _spPos.y;
-                    float _dl = (float) Math.sqrt(_dx*_dx + _dy*_dy);
-                    if (_dl < 0.001f) { _dx = 1f; _dy = 0f; _dl = 1f; }
-                    _ob.applyLinearImpulse(_dx / _dl * 4.0f, _dy / _dl * 4.0f,
-                        _op.x, _op.y, true);
-                }
-                triggerShake(2f, 0.05f);
-            }
+        // ---- SPARK skill 3: SPLIT — manage split orb lifetime ----
+        if (skillActiveTimer[0][3] <= 0 && !sparkSplitBodies.isEmpty()) {
+            for (int _si = 0; _si < sparkSplitBodies.size; _si++) world.destroyBody(sparkSplitBodies.get(_si));
+            sparkSplitBodies.clear();
         }
         // ---- FROST skill 1: ICE RUSH — fire toward innermost active ring ----
         if (frostIcePending) {
@@ -9615,10 +9623,33 @@ public class EngineeringLabScreen extends ScreenAdapter {
         skillActiveTimer[_ti][slot]   = SKILL_DURATION[_ti][slot];
         if (selectedOrbType == OrbType.SPARK) {
             switch (slot) {
-                case 0: sparkDashPending   = true; break;
-                case 1: break; // OVERDRIVE — active via skillActiveTimer
-                case 2: break; // CHAIN — active via ShipData.sparkChainActive
-                case 3: sparkStaticPending = true; break;
+                case 0: sparkDashPending = true; break; // DASH
+                case 1: // MARKER — pick innermost alive ring
+                    ShipData.get().sparkMarkedRing = -1;
+                    for (int _ri = 5; _ri >= 0; _ri--) { if (rings[_ri] != null) { ShipData.get().sparkMarkedRing = _ri; break; } }
+                    sparkMarkerPending = ShipData.get().sparkMarkedRing >= 0;
+                    if (!sparkMarkerPending) { mana += SKILL_MANA_COST[0][1]; skillCooldownTimer[0][1] = 0; } // refund if no rings
+                    break;
+                case 2: break; // OVERDRIVE — active via skillActiveTimer
+                case 3: // SPLIT — spawn 2 extra SPARK bodies
+                    for (int _sb = 0; _sb < 2; _sb++) {
+                        Body _sparkMain = null;
+                        for (int _bi = 0; _bi < balls.size; _bi++) { if ("INTERN_SPARK".equals(balls.get(_bi).getUserData())) { _sparkMain = balls.get(_bi); break; } }
+                        if (_sparkMain == null) break;
+                        com.badlogic.gdx.physics.box2d.BodyDef _sbd = new com.badlogic.gdx.physics.box2d.BodyDef();
+                        _sbd.type = com.badlogic.gdx.physics.box2d.BodyDef.BodyType.DynamicBody;
+                        _sbd.position.set(_sparkMain.getPosition().x + (_sb == 0 ? 0.1f : -0.1f), _sparkMain.getPosition().y);
+                        CircleShape _sc = new CircleShape(); _sc.setRadius(ORB_RADIUS[0]);
+                        com.badlogic.gdx.physics.box2d.FixtureDef _sfd = new com.badlogic.gdx.physics.box2d.FixtureDef();
+                        _sfd.shape = _sc; _sfd.density = BALL_DENSITY; _sfd.restitution = ORB_REST[0]; _sfd.friction = 0.1f;
+                        Body _split = world.createBody(_sbd); _split.setBullet(true); _split.createFixture(_sfd);
+                        _split.setUserData("INTERN_SPARK_SPLIT");
+                        float _sa = MathUtils.random(MathUtils.PI2);
+                        _split.setLinearVelocity(MathUtils.cos(_sa) * 10f, MathUtils.sin(_sa) * 10f);
+                        _sc.dispose(); sparkSplitBodies.add(_split);
+                    }
+                    triggerShake(3f, 0.07f);
+                    break;
             }
         } else if (selectedOrbType == OrbType.BLAZE) {
             switch (slot) {

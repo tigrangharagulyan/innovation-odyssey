@@ -61,9 +61,9 @@ public class EnergyContactListener implements ContactListener {
                         _rhd.hitsRemaining -= _dmg;
                         if (_rhd.hitsRemaining <= 0) _rhd.readyToDestroy = true;
                         if (_bInt && !_skipSlow) { Vector2 _sv = bodyB.getLinearVelocity(); bodyB.setLinearVelocity(_sv.x * 0.60f, _sv.y * 0.60f); }
-                        if ("INTERN_SPARK".equals(bodyB.getUserData()) && _sd0.sparkChainActive) {
-                            int _nxt = _rhd.ringIndex + 1; if (_nxt > 5) _nxt = _rhd.ringIndex - 1;
-                            if (_nxt >= 0) _sd0.sparkChainPendingRing = _nxt;
+                        // MARKER: if SPARK hits its marked ring, trigger dash
+                        if ("INTERN_SPARK".equals(bodyB.getUserData()) && _sd0.sparkMarkedRing == _rhd.ringIndex) {
+                            _sd0.sparkMarkedRing = -1; _sd0.sparkMarkerDashPending = true;
                         }
                         if (_isFrost && _sd0.frostBlizzardActive) _sd0.frostBlizzardPendingRing = _rhd.ringIndex;
                     }
@@ -75,9 +75,9 @@ public class EnergyContactListener implements ContactListener {
                         _rhd.hitsRemaining -= _dmg;
                         if (_rhd.hitsRemaining <= 0) _rhd.readyToDestroy = true;
                         if (_aInt && !_skipSlow) { Vector2 _sv = bodyA.getLinearVelocity(); bodyA.setLinearVelocity(_sv.x * 0.60f, _sv.y * 0.60f); }
-                        if ("INTERN_SPARK".equals(bodyA.getUserData()) && _sd0.sparkChainActive) {
-                            int _nxt = _rhd.ringIndex + 1; if (_nxt > 5) _nxt = _rhd.ringIndex - 1;
-                            if (_nxt >= 0) _sd0.sparkChainPendingRing = _nxt;
+                        // MARKER: if SPARK hits its marked ring, trigger dash
+                        if ("INTERN_SPARK".equals(bodyA.getUserData()) && _sd0.sparkMarkedRing == _rhd.ringIndex) {
+                            _sd0.sparkMarkedRing = -1; _sd0.sparkMarkerDashPending = true;
                         }
                         if (_isFrost && _sd0.frostBlizzardActive) _sd0.frostBlizzardPendingRing = _rhd.ringIndex;
                     }

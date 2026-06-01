@@ -250,8 +250,10 @@ public final class ShipData {
     public boolean blazeShieldActive  = false;  // skill 0: SHIELD — fast ring hits
     public int     blazeOverloadHits  = 0;      // skill 2: OVERLOAD — hits left at 3×
     // SPARK active skill flags
-    public boolean sparkChainActive    = false;  // SPARK slot 2: CHAIN — 8s adjacent ring damage
-    public int     sparkChainPendingRing = -1;   // ring index to chain-damage (processed in stepPhysics)
+    public boolean sparkChainActive      = false;  // legacy
+    public int     sparkChainPendingRing = -1;     // legacy
+    public int     sparkMarkedRing       = -1;     // MARKER: which ring is marked (-1=none)
+    public boolean sparkMarkerDashPending = false; // set true when marked ring is hit
     // FROST active skill flags
     public boolean frostShatterActive  = false;   // FROST slot 0: SHATTER — immune to ring slowdown
     public boolean frostBlizzardActive = false;   // FROST slot 2: BLIZZARD — AoE ring damage
