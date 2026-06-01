@@ -9147,29 +9147,31 @@ public class EngineeringLabScreen extends ScreenAdapter {
         if (frostAttachActive) {
             Body _fBody2 = null;
             for (int _bi = 0; _bi < balls.size; _bi++) { if ("INTERN_FROST".equals(balls.get(_bi).getUserData())) { _fBody2 = balls.get(_bi); break; } }
-            if (_fBody2 != null && rings[0] != null) {
-                float _angVel = 4f * MathUtils.PI2 / SKILL_DURATION[2][0]; // 4 loops in duration
-                frostAttachAngle += delta * _angVel;
-                float _or = RING_RADII[0] - ORB_RADIUS[2] - 0.05f; // just inside outer ring
+            if (_fBody2 != null) {
+                // Spin with the centrifuge drum angular velocity
+                float _drumAngVel = centrifugeBody != null ? centrifugeBody.getAngularVelocity() : 2.0f;
+                frostAttachAngle += delta * _drumAngVel;
+                float _or = CENTRIFUGE_R - ORB_RADIUS[2] - 0.05f; // just inside drum wall
                 float _ox = CENTRIFUGE_CX + MathUtils.cos(frostAttachAngle) * _or;
                 float _oy = CENTRIFUGE_CY + MathUtils.sin(frostAttachAngle) * _or;
                 _fBody2.setTransform(_ox, _oy, 0f);
-                // Tangential velocity so physics feels natural
                 _fBody2.setLinearVelocity(
-                    -MathUtils.sin(frostAttachAngle) * _or * _angVel,
-                     MathUtils.cos(frostAttachAngle) * _or * _angVel);
-                // Damage outer ring every 150ms
-                frostAttachHitTimer -= delta;
-                if (frostAttachHitTimer <= 0f) {
-                    frostAttachHitTimer = 0.15f;
-                    if (rings[0].getUserData() instanceof ShipData.RingHitData) {
-                        ShipData.RingHitData _ard = (ShipData.RingHitData) rings[0].getUserData();
-                        if (!_ard.readyToDestroy) { _ard.hitsRemaining -= 3; if (_ard.hitsRemaining <= 0) _ard.readyToDestroy = true; }
+                    -MathUtils.sin(frostAttachAngle) * _or * _drumAngVel,
+                     MathUtils.cos(frostAttachAngle) * _or * _drumAngVel);
+                // Continuously damage ring 0 if it still exists
+                if (rings[0] != null) {
+                    frostAttachHitTimer -= delta;
+                    if (frostAttachHitTimer <= 0f) {
+                        frostAttachHitTimer = 0.15f;
+                        if (rings[0].getUserData() instanceof ShipData.RingHitData) {
+                            ShipData.RingHitData _ard = (ShipData.RingHitData) rings[0].getUserData();
+                            if (!_ard.readyToDestroy) { _ard.hitsRemaining -= 3; if (_ard.hitsRemaining <= 0) _ard.readyToDestroy = true; }
+                        }
                     }
                 }
             }
-            // Detach only if outer ring destroyed (ICE RUSH handles detach via frostIcePending)
-            if (rings[0] == null) {
+            // Detach only via ICE RUSH (frostIcePending) or ring 0 destroyed
+            if (rings[0] == null && frostAttachRingIdx == 0) {
                 frostAttachActive = false;
                 skillActiveTimer[2][0] = 0f;
                 if (_fBody2 != null) { float _ka = MathUtils.random(MathUtils.PI2); _fBody2.setLinearVelocity(MathUtils.cos(_ka) * 5f, MathUtils.sin(_ka) * 5f); }
