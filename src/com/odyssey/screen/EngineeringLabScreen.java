@@ -9151,10 +9151,14 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 float _r = RING_RADII[frostAttachRingIdx] - ORB_RADIUS[2] - 0.02f;
                 float _ax = CENTRIFUGE_CX + MathUtils.cos(frostAttachAngle) * _r;
                 float _ay = CENTRIFUGE_CY + MathUtils.sin(frostAttachAngle) * _r;
-                _fBody2.setTransform(_ax, _ay, 0f);
+                // Pull FROST strongly toward attach point (impulse-based, no setTransform)
+                com.badlogic.gdx.math.Vector2 _fPos2 = _fBody2.getPosition();
+                float _pdx = _ax - _fPos2.x, _pdy = _ay - _fPos2.y;
+                float _pdist = (float) Math.sqrt(_pdx*_pdx + _pdy*_pdy);
                 _fBody2.setLinearVelocity(0f, 0f);
+                if (_pdist > 0.05f) _fBody2.applyLinearImpulse(_pdx * 8f, _pdy * 8f, _fPos2.x, _fPos2.y, true);
                 // Damage the ring every 150ms
-                frostAttachHitTimer -= (1f / 60f);
+                frostAttachHitTimer -= delta;
                 if (frostAttachHitTimer <= 0f) {
                     frostAttachHitTimer = 0.15f;
                     if (rings[frostAttachRingIdx].getUserData() instanceof ShipData.RingHitData) {
@@ -9184,7 +9188,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     float _gdx = _gp.x - _op.x, _gdy = _gp.y - _op.y;
                     float _gdl = (float) Math.sqrt(_gdx*_gdx + _gdy*_gdy);
                     if (_gdl < 0.1f) continue;
-                    float _str = 0.12f;
+                    float _str = 0.35f;
                     if (_pulling) { _ob.applyLinearImpulse( _gdx/_gdl*_str,  _gdy/_gdl*_str, _op.x, _op.y, true); }
                     else          { _ob.applyLinearImpulse(-_gdx/_gdl*_str, -_gdy/_gdl*_str, _op.x, _op.y, true); }
                 }
