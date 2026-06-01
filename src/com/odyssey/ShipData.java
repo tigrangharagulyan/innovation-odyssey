@@ -29,6 +29,26 @@ public final class ShipData {
         public boolean harvestPending = false;
     }
 
+    public static final class RingHitData {
+        public final int ringIndex;   // 0=outer, 1=middle, 2=inner
+        public final int maxHits;
+        public int       hitsRemaining;
+        public boolean   readyToDestroy = false;
+        public long      lastHitMs      = 0L;
+        public RingHitData(int ringIndex, int maxHits) {
+            this.ringIndex     = ringIndex;
+            this.maxHits       = maxHits;
+            this.hitsRemaining = maxHits;
+        }
+    }
+
+    public static final class CenterHitData {
+        public static final int MAX_HITS = 200;
+        public int     hitsRemaining = MAX_HITS;
+        public boolean readyToDestroy = false;
+        public long    lastHitMs     = 0L;
+    }
+
     public static final class PlanetProfile {
         public final String name;
         public final float  distance;
