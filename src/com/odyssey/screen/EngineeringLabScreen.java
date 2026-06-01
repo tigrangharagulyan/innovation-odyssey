@@ -331,6 +331,19 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private TextButton[] perkButtons;
     private Label[]      perkDescLabels;
     private Table        rightPerksTable;
+    private enum OrbType { SPARK, BLAZE, FROST }
+    private OrbType selectedOrbType = OrbType.SPARK;
+    private Label[] orbSkillLabels;
+    private static final String[][] ORB_SKILLS = {
+        {"ENERGY+", "CHAIN", "SURGE", "STATIC"},
+        {"RING DMG+", "HEAT", "BLAST", "BURN"},
+        {"SLOW", "ICE SPIKE", "CRYO", "FREEZE"}
+    };
+    private static final float[][] ORB_COLORS = {
+        {0.35f, 0.65f, 1.00f},  // SPARK — blue
+        {1.00f, 0.42f, 0.10f},  // BLAZE — orange
+        {0.25f, 0.92f, 1.00f},  // FROST — cyan
+    };
 
     // Bookkeeping
     private final Array<Body>            balls           = new Array<>();
@@ -340,7 +353,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private final Body[]   rings        = new Body[3];
     private Body           centerBody   = null;
     private static final float[] RING_RADII    = {2.0f, 1.3f, 0.7f};
-    private static final int[]   RING_MAX_HITS = {30, 50, 80};
+    private static final int[]   RING_MAX_HITS = {100, 200, 300};
     private final Array<Body> attractors   = new Array<>();   // Level 1: Solara / Ember IV gravity wells
     private final Array<Body> icicleNodes     = new Array<>();   // Level 3: Frostheim Icicle Nodes (orb-splitters)
     private final Array<Float> icicleAngOffsets = new Array<>(); // angle offsets for icicle co-rotation
@@ -2919,7 +2932,21 @@ public class EngineeringLabScreen extends ScreenAdapter {
             perkStrip.add(makeDotSep()).width(24f);
             perkStrip.add(makePerkSlot(perkIconBump,  lockBumpImg,  4)).expandX().padRight(4f);
         }
-        panel.add(perkStrip).growX().padBottom(3f).row();
+        // perkStrip kept in memory for planet-specific perk icon references but not shown
+        Table orbSkillRow = new Table();
+        orbSkillRow.setBackground(new NinePatchDrawable(game.skin.get("rounded_dark", NinePatch.class)));
+        orbSkillRow.defaults().padTop(2f).padBottom(2f);
+        orbSkillLabels = new Label[4];
+        for (int _oi = 0; _oi < 4; _oi++) {
+            if (_oi > 0) orbSkillRow.add(makeDotSep()).width(4f);
+            Label _sl = new Label("", game.skin);
+            _sl.setFontScale(0.52f);
+            _sl.setAlignment(com.badlogic.gdx.utils.Align.center);
+            orbSkillLabels[_oi] = _sl;
+            orbSkillRow.add(_sl).expandX().center();
+        }
+        updateOrbSkillRow();
+        panel.add(orbSkillRow).growX().padBottom(3f).row();
 
         panel.add(statsRow).width(420f).padBottom(3).row();
 
@@ -2936,9 +2963,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
         // Apply proper style + label setup to btnFlight (created early for layout insertion)
         btnFlight.setStyle(tileStyleGo);
 
-        btnAdd         = new TextButton("HIRE ORB\n0 SP",  tileStyleLock);
-        btnBumper      = new TextButton("BUMPER\nCP I",    tileStyleLock);
-        btnGravityWell = new TextButton("GRAVITY\nCP II",  tileStyleLock);
+        btnAdd         = new TextButton("SPARK\n0/1",  tileStyleNorm);
+        btnBumper      = new TextButton("BLAZE\n0/1",  tileStyleNorm);
+        btnGravityWell = new TextButton("FROST\n0/1",  tileStyleNorm);
 
         for (TextButton btn : new TextButton[]{btnAdd, btnBumper, btnGravityWell}) {
             btn.getLabel().setFontScale(0.80f);
@@ -2984,6 +3011,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 // During step 1: always capture touch so card hides immediately
                 if (tutorialStep == 1) tutorialInternDragging = true;
                 // Check capacity and affordability before starting actual drag
+                selectedOrbType = OrbType.SPARK;
+                if (orbSkillLabels != null) updateOrbSkillRow();
                 boolean normalHire  = (balls.size + pelletGroups.size) < internCap() && sd2.crystals >= internCost();
                 if (!normalHire) return tutorialStep == 1; // capture for step 1 even if not affordable
                 dragMode         = PLACE_INTERN;
@@ -3043,29 +3072,17 @@ public class EngineeringLabScreen extends ScreenAdapter {
             public boolean touchDown(com.badlogic.gdx.scenes.scene2d.InputEvent event,
                                      float x, float y, int pointer, int button) {
                 if (button != 0) return false;
+                // Maze mode: BLAZE orb selector + launcher
                 ShipData sd2 = ShipData.get();
-                boolean eligible;
-                if (isFrostheim()) {
-                    eligible = icicleNodes.size < maxIcicleNodesAllowed() && sd2.crystals >= icicileCost();
-                } else if (isEmberIV()) {
-                    eligible = emberCpI && portalPairs.size < maxPortalPairsNow() && sd2.crystals >= portalCost();
-                } else {
-                    eligible = bumpers.size < maxBumpersAllowed() && sd2.crystals >= bumperCost();
-                }
-                if (!eligible) return false;
-                if (isEmberIV()) {
-                    dragMode   = PLACE_PORTAL;
-                    dragStageX = event.getStageX();
-                    dragStageY = event.getStageY();
-                    ShipData.get().placingStructure = true;
-                    return true;
-                }
-                dragMode         = PLACE_BUMPER;
+                int blazeInDrum = countOrbType(OrbType.BLAZE);
+                if (blazeInDrum >= 1 || sd2.crystals < internCost() || (balls.size + pelletGroups.size) >= internCap()) return false;
+                selectedOrbType = OrbType.BLAZE;
+                if (orbSkillLabels != null) updateOrbSkillRow();
+                dragMode         = PLACE_INTERN;
                 dragStageX       = event.getStageX();
                 dragStageY       = event.getStageY();
                 dragOriginStageX = event.getStageX();
                 dragOriginStageY = event.getStageY();
-                ShipData.get().placingStructure = true;
                 return true;
             }
             @Override
@@ -3080,6 +3097,23 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 int dm = dragMode;
                 dragMode = PLACE_NONE;
                 ShipData.get().placingStructure = false;
+                // Maze mode: BLAZE orb launch
+                if (dm == PLACE_INTERN) {
+                    ShipData sd2b = ShipData.get();
+                    if ((balls.size + pelletGroups.size) < internCap() && countOrbType(OrbType.BLAZE) < 1 && sd2b.spendCrystals(internCost())) {
+                        float _oWX = dragOriginStageX / PPM, _oWY = (dragOriginStageY + 80f) / PPM;
+                        float _rWX = dragStageX / PPM,       _rWY = (dragStageY + 80f) / PPM;
+                        float _dvx = _oWX - _rWX, _dvy = _oWY - _rWY;
+                        float _dd  = (float) Math.sqrt(_dvx * _dvx + _dvy * _dvy);
+                        if (_dd < 0.01f) { _dvx = 0f; _dvy = 1f; _dd = 1f; }
+                        float _spd = Math.min(_dd * 4f, 9f) + 3f; _dvx /= _dd; _dvy /= _dd;
+                        flyingInternWX = _oWX; flyingInternWY = _oWY;
+                        flyingInternVX = _dvx * _spd; flyingInternVY = _dvy * _spd;
+                        flyingInternActive = true;
+                        internAddedOldSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
+                    }
+                    return;
+                }
                 if (dm == PLACE_NONE) return;
                 float wx = dragStageX / PPM, wy = (dragStageY + 80f) / PPM;
                 ShipData sd2 = ShipData.get();
@@ -3136,23 +3170,13 @@ public class EngineeringLabScreen extends ScreenAdapter {
             public boolean touchDown(com.badlogic.gdx.scenes.scene2d.InputEvent event,
                                      float x, float y, int pointer, int button) {
                 if (button != 0) return false;
+                // Maze mode: FROST orb selector + launcher
                 ShipData sd2 = ShipData.get();
-                if (isFrostheim()) {
-                    if (teslaCoils.size >= maxTeslaCoilsAllowed()) return false;
-                    if (sd2.crystals < teslaCost()) return false;
-                } else if (isEmberIV()) {
-                    if (!emberCpII || relayNodes.size >= maxRelayNodesNow()) return false;
-                    if (sd2.crystals < relayCost()) return false;
-                    dragMode   = PLACE_RELAY;
-                    dragStageX = event.getStageX();
-                    dragStageY = event.getStageY();
-                    ShipData.get().placingStructure = true;
-                    return true;
-                } else {
-                    if (!gravityUnlocked() || attractors.size >= maxGravityAllowed()) return false;
-                    if (sd2.crystals < gravityCost()) return false;
-                }
-                dragMode         = PLACE_GRAVITY;
+                int frostInDrum = countOrbType(OrbType.FROST);
+                if (frostInDrum >= 1 || sd2.crystals < internCost() || (balls.size + pelletGroups.size) >= internCap()) return false;
+                selectedOrbType = OrbType.FROST;
+                if (orbSkillLabels != null) updateOrbSkillRow();
+                dragMode         = PLACE_INTERN;
                 dragStageX       = event.getStageX();
                 dragStageY       = event.getStageY();
                 dragOriginStageX = event.getStageX();
@@ -3168,9 +3192,27 @@ public class EngineeringLabScreen extends ScreenAdapter {
             @Override
             public void touchUp(com.badlogic.gdx.scenes.scene2d.InputEvent event,
                                 float x, float y, int pointer, int button) {
-                int dm = dragMode;
+                int _dmG = dragMode;
                 dragMode = PLACE_NONE;
                 ShipData.get().placingStructure = false;
+                // Maze mode: FROST orb launch
+                if (_dmG == PLACE_INTERN) {
+                    ShipData sd2g = ShipData.get();
+                    if ((balls.size + pelletGroups.size) < internCap() && countOrbType(OrbType.FROST) < 1 && sd2g.spendCrystals(internCost())) {
+                        float _oWX = dragOriginStageX / PPM, _oWY = (dragOriginStageY + 80f) / PPM;
+                        float _rWX = dragStageX / PPM,       _rWY = (dragStageY + 80f) / PPM;
+                        float _dvx = _oWX - _rWX, _dvy = _oWY - _rWY;
+                        float _dd  = (float) Math.sqrt(_dvx * _dvx + _dvy * _dvy);
+                        if (_dd < 0.01f) { _dvx = 0f; _dvy = 1f; _dd = 1f; }
+                        float _spd = Math.min(_dd * 4f, 9f) + 3f; _dvx /= _dd; _dvy /= _dd;
+                        flyingInternWX = _oWX; flyingInternWY = _oWY;
+                        flyingInternVX = _dvx * _spd; flyingInternVY = _dvy * _spd;
+                        flyingInternActive = true;
+                        internAddedOldSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
+                    }
+                    return;
+                }
+                int dm = _dmG;
                 if (dm == PLACE_NONE) return;
                 float wx = dragStageX / PPM, wy = (dragStageY + 80f) / PPM;
                 ShipData sd2 = ShipData.get();
@@ -3688,9 +3730,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
         claimGemFarming();
         claimPendingRecruits();
         spawnRings();
-        // Maze mode — structure placement buttons not used
-        if (btnBumper      != null) btnBumper.setVisible(false);
-        if (btnGravityWell != null) btnGravityWell.setVisible(false);
+        // Maze mode — orb type buttons visible, flight/placement buttons hidden
+        selectedOrbType = OrbType.SPARK;
+        if (orbSkillLabels != null) updateOrbSkillRow();
+        if (btnBumper      != null) btnBumper.setVisible(true);
+        if (btnGravityWell != null) btnGravityWell.setVisible(true);
         if (btnFlight      != null) btnFlight.setVisible(false);
         if (btnJumpReady   != null) btnJumpReady.setVisible(false);
     }
@@ -3994,9 +4038,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
             float _idy = flyingInternWY - CENTRIFUGE_CY;
             if (_idx * _idx + _idy * _idy < (CENTRIFUGE_R * 0.80f) * (CENTRIFUGE_R * 0.80f)) {
                 spawnBall(flyingInternWX, flyingInternWY);
-                // Override random kick with entry velocity
+                // Override random kick with entry velocity; tag with selected orb type
                 if (!balls.isEmpty()) {
-                    balls.get(balls.size - 1).setLinearVelocity(flyingInternVX * 0.6f, flyingInternVY * 0.6f);
+                    Body _nb = balls.get(balls.size - 1);
+                    _nb.setUserData("INTERN_" + selectedOrbType.name());
+                    _nb.setLinearVelocity(flyingInternVX * 0.6f, flyingInternVY * 0.6f);
                 }
                 internAddedNewSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
                 internAddedTimer    = INTERN_ADDED_HOLD;
@@ -4222,96 +4268,28 @@ public class EngineeringLabScreen extends ScreenAdapter {
         // Ring speed label turns coral whenever more orbs can still be purchased — visual causal link
         ringSpeedLabel.setColor(orbCanBuy ? OdysseyTheme.ACCENT_WARN : new Color(0.70f, 0.72f, 0.82f, 1f));
 
-        // ---- ADD ORB / Intern button text ----
-        if (effectiveCount >= cap) {
-            String nxt;
-            if (fh) {
-                nxt = cap == 4  ? "Req: CP I"   : cap == 7  ? "Req: CP II"
-                    : cap == 9  ? "Req: CP III" : "MAX";
-            } else if (ember) {
-                nxt = cap == 4  ? "Req: CP I"   : cap == 7  ? "Req: CP II"
-                    : cap == 9  ? "Req: CP III" : cap == 10 ? "Req: LAND!" : "MAX";
-            } else {
-                nxt = cap == 4  ? "Req: CP I"   : cap == 6  ? "Req: CP II"
-                    : cap == 10 ? "Req: CP III" : "MAX";
-            }
-            btnAdd.setText(cap < MAX_INTERNS
-                ? String.format("%d/%d CAP\n%s", effectiveCount, cap, nxt)
-                : String.format("%d/%d\nFULL CAP", effectiveCount, cap));
-        } else {
-            btnAdd.setText(String.format(
-                "%d/%d HIRE\n%.0f %s", effectiveCount, cap, internCost(), sparkSym));
+        // ---- ADD ORB → SPARK orb button text ----
+        {
+            int _sparkC = countOrbType(OrbType.SPARK);
+            btnAdd.setText(_sparkC >= 1
+                ? "SPARK\nIN DRUM"
+                : String.format("SPARK\n%.0f SP", internCost()));
         }
 
-        // ---- Bumper / Icicle Node / Blade button ----
-        if (fh) {
-            int maxCV = maxIcicleNodesAllowed();
-            if (maxCV == 0) {
-                btnBumper.setText("ICICLE\nReq: CP I");
-            } else if (icicleNodes.size >= maxCV) {
-                btnBumper.setText(String.format("ICICLE\n%d/%d FULL", icicleNodes.size, maxCV));
-            } else if (placementMode == PLACE_BUMPER) {
-                btnBumper.setText("ICICLE\nTap Ring");
-            } else {
-                btnBumper.setText(String.format("ICICLE %d/%d\n%.0f FS", icicleNodes.size, maxCV, icicileCost()));
-            }
-        } else if (ember) {
-            if (!emberCpI) {
-                btnBumper.setText("PORTAL\nReq: CP I");
-            } else if (portalPairs.size >= maxPortalPairsNow()) {
-                btnBumper.setText(String.format("PORTAL\n%d/%d FULL", portalPairs.size, maxPortalPairsNow()));
-            } else if (dragMode == PLACE_PORTAL) {
-                btnBumper.setText("PORTAL\nDrag to Wall");
-            } else {
-                btnBumper.setText(String.format("PORTAL %d/%d\n%.0f SP", portalPairs.size, maxPortalPairsNow(), portalCost()));
-            }
-        } else {
-            int maxB = maxBumpersAllowed();
-            if (maxB == 0) {
-                btnBumper.setText("BUMPER\nReq: CP I");
-            } else if (bumpers.size >= maxB) {
-                btnBumper.setText(String.format("BUMPER\n%d/%d FULL", bumpers.size, maxB));
-            } else if (placementMode == PLACE_BUMPER) {
-                btnBumper.setText("BUMPER\nTap Ring");
-            } else {
-                btnBumper.setText(String.format("BUMPER %d/%d\n%.0f SP", bumpers.size, maxB, bumperCost()));
-            }
+        // ---- Bumper → BLAZE orb button ----
+        {
+            int _blazeC = countOrbType(OrbType.BLAZE);
+            btnBumper.setText(_blazeC >= 1
+                ? "BLAZE\nIN DRUM"
+                : String.format("BLAZE\n%.0f SP", internCost()));
         }
 
-        // ---- Gravity Well / Tesla Coil button ----
-        if (fh) {
-            int maxTC = maxTeslaCoilsAllowed();
-            if (maxTC == 0) {
-                btnGravityWell.setText("SPIRAL\nReq: CP II");
-            } else if (teslaCoils.size >= maxTC) {
-                btnGravityWell.setText(String.format("SPIRAL\n%d/%d FULL", teslaCoils.size, maxTC));
-            } else if (placementMode == PLACE_GRAVITY) {
-                btnGravityWell.setText("SPIRAL\nTap Ring");
-            } else {
-                btnGravityWell.setText(String.format("SPIRAL %d/%d\n%.0f FS",
-                    teslaCoils.size, maxTC, teslaCost()));
-            }
-        } else if (ember) {
-            if (!emberCpII) {
-                btnGravityWell.setText("RELAY\nReq: CP II");
-            } else if (relayNodes.size >= maxRelayNodesNow()) {
-                btnGravityWell.setText(String.format("RELAY\n%d/%d FULL", relayNodes.size, maxRelayNodesNow()));
-            } else if (dragMode == PLACE_RELAY) {
-                btnGravityWell.setText("RELAY\nDrag to Ring");
-            } else {
-                btnGravityWell.setText(String.format("RELAY %d/%d\n%.0f SP", relayNodes.size, maxRelayNodesNow(), relayCost()));
-            }
-        } else {
-            if (!gravityUnlocked()) {
-                btnGravityWell.setText("GRAVITY\nReq: CP II");
-            } else if (attractors.size >= maxGravityAllowed()) {
-                btnGravityWell.setText(String.format("GRAVITY\n%d/%d FULL", attractors.size, maxGravityAllowed()));
-            } else if (placementMode == PLACE_GRAVITY) {
-                btnGravityWell.setText("GRAVITY\nTap Ring");
-            } else {
-                btnGravityWell.setText(String.format("GRAVITY %d/%d\n%.0f SP",
-                    attractors.size, maxGravityAllowed(), gravityCost()));
-            }
+        // ---- GravityWell → FROST orb button ----
+        {
+            int _frostC = countOrbType(OrbType.FROST);
+            btnGravityWell.setText(_frostC >= 1
+                ? "FROST\nIN DRUM"
+                : String.format("FROST\n%.0f SP", internCost()));
         }
 
         if (isEmberIV() && btnGravCenter != null) {
@@ -4340,35 +4318,21 @@ public class EngineeringLabScreen extends ScreenAdapter {
         btnJumpReady.setVisible(false); // replaced by launch button under energy bar
 
         // ---- Button tints ----
-        // ADD ORB: buyable when purchasable, locked when capped
-        btnAdd.setStyle(
-            balls.size >= cap ? LOCK :
-            orbCanBuy         ? CORAL : NORM);
+        // ADD ORB → SPARK type tint
+        {
+            int _sparkC = countOrbType(OrbType.SPARK);
+            boolean _sparkFull = _sparkC >= 1 || (balls.size + pelletGroups.size) >= cap;
+            btnAdd.setStyle(_sparkFull ? LOCK : orbCanBuy ? CORAL : NORM);
+        }
 
-        if (fh) {
-            int maxCV = maxIcicleNodesAllowed();
-            btnBumper.setStyle(placementMode == PLACE_BUMPER        ? ACT
-                : maxCV == 0 || icicleNodes.size >= maxCV           ? LOCK
-                : sd.crystals >= icicileCost()                      ? BUY : NORM);
-            int maxTC = maxTeslaCoilsAllowed();
-            btnGravityWell.setStyle(placementMode == PLACE_GRAVITY  ? ACT
-                : teslaCoils.size >= maxTC        ? LOCK
-                : sd.crystals >= teslaCost()      ? BUY : NORM);
-        } else if (ember) {
-            btnBumper.setStyle(!emberCpI || portalPairs.size >= maxPortalPairsNow() ? LOCK
-                : dragMode == PLACE_PORTAL ? ACT
-                : sd.crystals >= portalCost() ? BUY : NORM);
-            btnGravityWell.setStyle(!emberCpII || relayNodes.size >= maxRelayNodesNow() ? LOCK
-                : dragMode == PLACE_RELAY ? ACT
-                : sd.crystals >= relayCost() ? BUY : NORM);
-        } else {
-            int maxB = maxBumpersAllowed();
-            btnBumper.setStyle(placementMode == PLACE_BUMPER             ? ACT
-                : maxB == 0 || bumpers.size >= maxB ? LOCK
-                : sd.crystals >= bumperCost()       ? BUY : NORM);
-            btnGravityWell.setStyle(placementMode == PLACE_GRAVITY ? ACT
-                : !gravityUnlocked() || attractors.size >= maxGravityAllowed() ? LOCK
-                : sd.crystals >= gravityCost()      ? BUY : NORM);
+        // Maze mode: BLAZE / FROST type tints
+        {
+            int _blazeC = countOrbType(OrbType.BLAZE);
+            boolean _blazeOk = _blazeC < 1 && sd.crystals >= internCost() && (balls.size + pelletGroups.size) < internCap();
+            btnBumper.setStyle(_blazeC >= 1 ? LOCK : _blazeOk ? CORAL : NORM);
+            int _frostC = countOrbType(OrbType.FROST);
+            boolean _frostOk = _frostC < 1 && sd.crystals >= internCost() && (balls.size + pelletGroups.size) < internCap();
+            btnGravityWell.setStyle(_frostC >= 1 ? LOCK : _frostOk ? CORAL : NORM);
         }
         // Launch button appears below energy bar only when fully ready
         boolean launchReady = jumpReady && !workforceGated;
@@ -7070,7 +7034,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
             Body    body  = balls.get(i);
             Vector2 pos   = body.getPosition();
             Vector2 vel   = body.getLinearVelocity();
-            boolean cyber = "INTERN_CYBER".equals(body.getUserData());
+            String _udTag = body.getUserData() instanceof String ? (String) body.getUserData() : "";
+            boolean _blaze = _udTag.contains("BLAZE") || _udTag.contains("NORMAL");
+            boolean _frost = _udTag.contains("FROST");
+            boolean _spark = !_blaze && !_frost;
 
             float speed = vel.len();
             float px    = pos.x * PPM;
@@ -7093,16 +7060,18 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     EMBER_INTERN_DRAW, EMBER_INTERN_DRAW, scaleX, scaleY, drawAngle,
                     0, 0, texEmberIntern.getWidth(), texEmberIntern.getHeight(), false, false);
             } else {
-                // Outer glow layer
-                if (cyber) batch.setColor(0.20f * glow, 0.75f * glow, 1.00f * glow, 0.65f);
-                else       batch.setColor(1.00f * glow, 0.55f * glow, 0.10f * glow, 0.65f);
+                // Outer glow layer — color by orb type
+                if (_spark)      batch.setColor(0.35f * glow, 0.65f * glow, 1.00f * glow, 0.65f);
+                else if (_blaze) batch.setColor(1.00f * glow, 0.42f * glow, 0.10f * glow, 0.65f);
+                else             batch.setColor(0.25f * glow, 0.92f * glow, 1.00f * glow, 0.65f); // frost
                 batch.draw(texParticle, px - hw, py - hh, hw, hh,
                     INTERN_W, INTERN_H, scaleX, scaleY, drawAngle,
                     0, 0, texParticle.getWidth(), texParticle.getHeight(), false, false);
 
-                // Bright inner core
-                if (cyber) batch.setColor(0.70f, 0.95f, 1.00f, 0.90f);
-                else       batch.setColor(1.00f, 0.88f, 0.50f, 0.90f);
+                // Bright inner core — color by orb type
+                if (_spark)      batch.setColor(0.70f, 0.88f, 1.00f, 0.90f);
+                else if (_blaze) batch.setColor(1.00f, 0.85f, 0.45f, 0.90f);
+                else             batch.setColor(0.85f, 0.98f, 1.00f, 0.90f); // frost
                 batch.draw(texParticleCore, px - chw, py - chh, chw, chh,
                     coreW, coreH, scaleX, scaleY, drawAngle,
                     0, 0, texParticleCore.getWidth(), texParticleCore.getHeight(), false, false);
@@ -7112,7 +7081,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
         if (flyingInternActive) {
             float _ipx = flyingInternWX * PPM, _ipy = flyingInternWY * PPM;
             float _id  = BALL_RADIUS * PPM * 5.5f;
-            batch.setColor(0.35f, 0.85f, 1.0f, 0.92f);
+            float[] _fc = ORB_COLORS[selectedOrbType.ordinal()];
+            batch.setColor(_fc[0], _fc[1], _fc[2], 0.92f);
             batch.draw(texParticle, _ipx - _id * 0.5f, _ipy - _id * 0.5f, _id, _id);
             float _ic = _id * 0.42f;
             batch.setColor(1f, 1f, 1f, 0.88f);
@@ -9172,6 +9142,26 @@ public class EngineeringLabScreen extends ScreenAdapter {
             shakeTimer    = dur;
         }
     };
+
+    private int countOrbType(OrbType t) {
+        String _tag = "INTERN_" + t.name();
+        int _c = 0;
+        for (int _i = 0; _i < balls.size; _i++) {
+            if (_tag.equals(balls.get(_i).getUserData())) _c++;
+        }
+        return _c;
+    }
+
+    private void updateOrbSkillRow() {
+        if (orbSkillLabels == null) return;
+        int _idx = selectedOrbType.ordinal();
+        float[] _fc = ORB_COLORS[_idx];
+        com.badlogic.gdx.graphics.Color _c = new com.badlogic.gdx.graphics.Color(_fc[0], _fc[1], _fc[2], 1f);
+        for (int _i = 0; _i < 4; _i++) {
+            orbSkillLabels[_i].setText(ORB_SKILLS[_idx][_i]);
+            orbSkillLabels[_i].setColor(_c);
+        }
+    }
 
     /** Tracks an orb captured by a Spiral Slingshot — orbits for SPIRAL_DURATION then launches. */
     private static final class SpiralCapture {
