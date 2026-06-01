@@ -76,9 +76,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private static final short CAT_DEFAULT     = 0x0001;
     private static final short CAT_PELLET      = 0x0002;
     private static final short CAT_ARM_BUMPER  = 0x0004;
+    private static final short CAT_RING        = 0x0008;  // maze rings — FROST ignores while ATTACH active
     private static final short MASK_DEFAULT    = ~0;           // collides with everything
     private static final short MASK_PELLET     = (short)(~CAT_ARM_BUMPER);  // skip arm bumpers
     private static final short MASK_ARM_BUMPER = (short)(~CAT_PELLET);      // skip pellets
+    private static final short MASK_NO_RINGS   = (short)(~CAT_RING);        // skip rings (FROST ATTACH)
     private static final float TESLA_COIL_FIELD_R  = 1.5f;    // wider harvest zone than gravity pull radius
     private static final float SPIRAL_CAPTURE_R  = 0.9f;
     private static final float SPIRAL_ORBIT_R    = 0.5f;
@@ -2184,8 +2186,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
             _bd.type = com.badlogic.gdx.physics.box2d.BodyDef.BodyType.StaticBody;
             com.badlogic.gdx.physics.box2d.FixtureDef _fd = new com.badlogic.gdx.physics.box2d.FixtureDef();
             _fd.shape       = _chain;
-            _fd.restitution = 0.55f;  // low — orbs lose speed on contact
-            _fd.friction    = 0.4f;   // friction adds to slowdown
+            _fd.restitution = 0.55f;
+            _fd.friction    = 0.4f;
+            _fd.filter.categoryBits = CAT_RING;
+            _fd.filter.maskBits     = MASK_DEFAULT;
             Body _b = world.createBody(_bd);
             _b.createFixture(_fd);
             _b.setUserData(new ShipData.RingHitData(_ri, RING_MAX_HITS[_ri]));
@@ -9172,9 +9176,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
             }
             // Detach only via ICE RUSH (frostIcePending) or ring 0 destroyed
             if (rings[0] == null && frostAttachRingIdx == 0) {
-                frostAttachActive = false;
-                skillActiveTimer[2][0] = 0f;
-                if (_fBody2 != null) { float _ka = MathUtils.random(MathUtils.PI2); _fBody2.setLinearVelocity(MathUtils.cos(_ka) * 5f, MathUtils.sin(_ka) * 5f); }
+                frostAttachActive = false; skillActiveTimer[2][0] = 0f;
+                if (_fBody2 != null) {
+                    com.badlogic.gdx.physics.box2d.Fixture _ff2 = _fBody2.getFixtureList().isEmpty() ? null : _fBody2.getFixtureList().first();
+                    if (_ff2 != null) { com.badlogic.gdx.physics.box2d.Filter _flt2 = _ff2.getFilterData(); _flt2.maskBits = MASK_DEFAULT; _ff2.setFilterData(_flt2); }
+                    float _ka = MathUtils.random(MathUtils.PI2); _fBody2.setLinearVelocity(MathUtils.cos(_ka) * 5f, MathUtils.sin(_ka) * 5f);
+                }
             }
         }
         // ---- FROST skill 3: GRAVITY — alternating pull/push ----
@@ -9709,14 +9716,25 @@ public class EngineeringLabScreen extends ScreenAdapter {
                         frostAttachAngle = _fAt != null ? (float) Math.atan2(_fAt.getPosition().y - CENTRIFUGE_CY, _fAt.getPosition().x - CENTRIFUGE_CX) : 0f;
                         frostAttachRingIdx = 0;
                         frostAttachActive = true; frostAttachHitTimer = 0f;
+                        // Disable ring collisions for FROST so it stays on drum wall
+                        if (_fAt != null && !_fAt.getFixtureList().isEmpty()) {
+                            com.badlogic.gdx.physics.box2d.Fixture _ff = _fAt.getFixtureList().first();
+                            com.badlogic.gdx.physics.box2d.Filter _flt = _ff.getFilterData(); _flt.maskBits = MASK_NO_RINGS; _ff.setFilterData(_flt);
+                        }
                     } else { mana += SKILL_MANA_COST[2][0]; skillCooldownTimer[2][0] = 0; }
                     break;
                 case 1: // ICE RUSH — detach FROST and fire inward
                     frostIcePending = true;
                     if (frostAttachActive) {
-                        frostAttachActive = false;
-                        skillActiveTimer[2][0] = 0f;
-                        skillCooldownTimer[2][0] = SKILL_COOLDOWN[2][0]; // start ATTACH cooldown now
+                        frostAttachActive = false; skillActiveTimer[2][0] = 0f;
+                        skillCooldownTimer[2][0] = SKILL_COOLDOWN[2][0];
+                        // Restore normal ring collisions
+                        for (int _bi = 0; _bi < balls.size; _bi++) {
+                            if ("INTERN_FROST".equals(balls.get(_bi).getUserData())) {
+                                if (!balls.get(_bi).getFixtureList().isEmpty()) { com.badlogic.gdx.physics.box2d.Fixture _ff3 = balls.get(_bi).getFixtureList().first(); com.badlogic.gdx.physics.box2d.Filter _flt3 = _ff3.getFilterData(); _flt3.maskBits = MASK_DEFAULT; _ff3.setFilterData(_flt3); }
+                                break;
+                            }
+                        }
                     }
                     break;
                 case 2: { // BIG — shockwave push + visual
