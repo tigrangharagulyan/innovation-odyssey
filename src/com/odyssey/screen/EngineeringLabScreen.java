@@ -384,6 +384,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private float   frostAttachAngle     = 0f;
     private float   frostAttachHitTimer  = 0f;
     private boolean frostBigActive       = false;  // slot 2: 2× draw size
+    private boolean frostIceCharged      = false;  // ICE RUSH fired from ATTACH = charged strike
     private static final String[][] ORB_SKILLS = {
         {"DASH", "MARKER", "OVERDRIVE", "SPLIT"},
         {"SHIELD", "MAGNET", "OVERLOAD", "RALLY"},
@@ -392,7 +393,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private static final String[][] ORB_SKILL_DESC = {
         {"Burst fwd\ninstant", "Next hit\nauto-dash", "6s min\nspd 8m/s", "6s split\n3 orbs"},
         {"3x ring\nhit rate", "Pull orbs\nto BLAZE", "10 hits\n3x dmg", "+30 mana\ninstant"},
-        {"Spin outer\nring", "Detach+\nrush in", "3x size\n3x dmg", "Pull/push\n10s"},
+        {"Park+spin\nwall", "Detach\nrush 4x", "3x size\n3x dmg", "Pull/push\n10s"},
     };
     private static final float[][] ORB_COLORS = {
         {0.75f, 0.20f, 1.00f},  // SPARK — purple
@@ -3814,7 +3815,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
         _sk.blazeShieldActive = false; _sk.blazeOverloadHits = 0;
         _sk.sparkMarkedRing = -1; _sk.sparkMarkerDashPending = false;
         if (frostAttachActive) { for (int _bi=0;_bi<balls.size;_bi++) { if ("INTERN_FROST".equals(balls.get(_bi).getUserData()) && !balls.get(_bi).getFixtureList().isEmpty()) { balls.get(_bi).getFixtureList().first().setSensor(false); break; } } }
-        frostAttachActive = false; frostAttachRingIdx = -1; frostBigActive = false;
+        frostAttachActive = false; frostAttachRingIdx = -1; frostBigActive = false; frostIceCharged = false;
+        ShipData.get().frostChargedHits = 0;
         _sk.frostBigActive = false; _sk.frostGravityActive = false;
         if (orbSkillLabels != null) updateOrbSkillRow();
         if (btnBumper      != null) btnBumper.setVisible(true);
@@ -9123,8 +9125,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 }
                 float _dx = _tx - _fPos.x, _dy = _ty - _fPos.y;
                 float _dl = (float) Math.sqrt(_dx*_dx + _dy*_dy);
-                if (_dl > 0.01f) { _fBody.setLinearVelocity(_dx / _dl * 9f, _dy / _dl * 9f); }
-                triggerShake(2f, 0.05f);
+                float _rushSpd = frostIceCharged ? 16f : 9f;  // charged from ATTACH = faster
+                if (_dl > 0.01f) { _fBody.setLinearVelocity(_dx / _dl * _rushSpd, _dy / _dl * _rushSpd); }
+                triggerShake(frostIceCharged ? 4f : 2f, frostIceCharged ? 0.09f : 0.05f);
+                frostIceCharged = false;
             }
         }
         // ---- FROST skill 0: ATTACH — clamp orb to drum wall and spin with it ----
@@ -9697,6 +9701,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     if (frostAttachActive) {
                         frostAttachActive = false; skillActiveTimer[2][0] = 0f;
                         skillCooldownTimer[2][0] = SKILL_COOLDOWN[2][0];
+                        // Charged strike: next 6 ring hits deal 4× damage
+                        ShipData.get().frostChargedHits = 6;
+                        frostIceCharged = true;
                         // Restore normal ring collisions
                         for (int _bi = 0; _bi < balls.size; _bi++) {
                             if ("INTERN_FROST".equals(balls.get(_bi).getUserData())) {
@@ -9704,6 +9711,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
                                 break;
                             }
                         }
+                    } else {
+                        frostIceCharged = false;
                     }
                     break;
                 case 2: { // BIG — shockwave push + visual

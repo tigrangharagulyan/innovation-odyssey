@@ -256,6 +256,7 @@ public final class ShipData {
     public boolean sparkMarkerDashPending = false; // set true when marked ring is hit
     // FROST active skill flags
     public boolean frostBigActive       = false;   // FROST slot 2: BIG — 2× damage
+    public int     frostChargedHits     = 0;       // ICE RUSH from ATTACH: next N hits deal 4× damage
     public boolean frostGravityActive  = false;   // FROST slot 3: GRAVITY — pull/push
     // Legacy (kept so EnergyContactListener compiles)
     public boolean frostShatterActive  = false;
