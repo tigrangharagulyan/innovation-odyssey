@@ -253,8 +253,13 @@ public final class ShipData {
     public boolean sparkChainActive    = false;  // SPARK slot 2: CHAIN — 8s adjacent ring damage
     public int     sparkChainPendingRing = -1;   // ring index to chain-damage (processed in stepPhysics)
     // FROST active skill flags
-    public boolean frostCryoActive    = false;   // FROST slot 2: CRYO — 8s 2× ring damage
-    public boolean frostFreezeActive  = false;   // FROST slot 3: FREEZE — 3s nearly stop other orbs
+    public boolean frostShatterActive  = false;   // FROST slot 0: SHATTER — immune to ring slowdown
+    public boolean frostBlizzardActive = false;   // FROST slot 2: BLIZZARD — AoE ring damage
+    public boolean frostAvalancheActive= false;   // FROST slot 3: AVALANCHE — 5× ring damage
+    public int     frostBlizzardPendingRing = -1; // ring index that was hit (propagate AoE in stepPhysics)
+    // Legacy — keep for reference but no longer used
+    public boolean frostCryoActive    = false;
+    public boolean frostFreezeActive  = false;
     public int pendingBumperSounds    = 0;
     public int pendingCollisionSounds = 0;
 

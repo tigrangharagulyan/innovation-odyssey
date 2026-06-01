@@ -351,17 +351,17 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private static final float[][] SKILL_MANA_COST = {
         {20f, 20f, 25f, 15f},  // SPARK: DASH, OVERDRIVE, CHAIN, STATIC
         {20f, 20f, 25f,  0f},  // BLAZE: SHIELD, MAGNET, OVERLOAD, RALLY
-        {20f, 15f, 25f, 25f},  // FROST: SLOW, ICE SPIKE, CRYO, FREEZE
+        {20f, 25f, 30f, 30f},  // FROST: SHATTER, ICE RUSH, BLIZZARD, AVALANCHE
     };
     private static final float[][] SKILL_COOLDOWN = {
         { 8f, 14f, 16f, 10f},  // SPARK
         {14f, 12f, 16f, 18f},  // BLAZE
-        {15f,  8f, 14f, 18f},  // FROST
+        {14f,  8f, 18f, 16f},  // FROST
     };
     private static final float[][] SKILL_DURATION = {
-        { 0f,  6f,  8f,  0f},  // SPARK: DASH instant, OVERDRIVE 6s, CHAIN 8s, STATIC instant
-        { 6f,  6f,  0f,  0f},  // BLAZE (unchanged)
-        { 4f,  0f,  8f,  3f},  // FROST: SLOW 4s, ICE SPIKE instant, CRYO 8s, FREEZE 3s
+        { 0f,  6f,  8f,  0f},  // SPARK
+        { 6f,  6f,  0f,  0f},  // BLAZE
+        { 8f,  0f,  6f,  5f},  // FROST: SHATTER 8s, ICE RUSH instant, BLIZZARD 6s, AVALANCHE 5s
     };
     private final float[][] skillCooldownTimer = new float[3][4];
     private final float[][] skillActiveTimer   = new float[3][4];
@@ -379,7 +379,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private static final String[][] ORB_SKILLS = {
         {"DASH", "OVERDRIVE", "CHAIN", "STATIC"},   // SPARK — fast/small
         {"SHIELD", "MAGNET", "OVERLOAD", "RALLY"},     // BLAZE — normal
-        {"SLOW", "ICE SPIKE", "CRYO", "FREEZE"}      // FROST — big/slow
+        {"SHATTER", "ICE RUSH", "BLIZZARD", "AVALANCHE"}  // FROST — big/slow
     };
     private static final float[][] ORB_COLORS = {
         {0.75f, 0.20f, 1.00f},  // SPARK — purple
@@ -3797,7 +3797,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
         ShipData _sk = ShipData.get();
         _sk.blazeShieldActive = false; _sk.blazeOverloadHits = 0;
         _sk.sparkChainActive = false; _sk.sparkChainPendingRing = -1;
-        _sk.frostCryoActive = false; _sk.frostFreezeActive = false;
+        _sk.frostShatterActive = false; _sk.frostBlizzardActive = false;
+        _sk.frostAvalancheActive = false; _sk.frostBlizzardPendingRing = -1;
         if (orbSkillLabels != null) updateOrbSkillRow();
         if (btnBumper      != null) btnBumper.setVisible(true);
         if (btnGravityWell != null) btnGravityWell.setVisible(true);
@@ -4080,8 +4081,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
         _ssd.blazeShieldActive = skillActiveTimer[1][0] > 0;
         blazeMagnetActive      = skillActiveTimer[1][1] > 0;
         // FROST skill states
-        _ssd.frostCryoActive   = skillActiveTimer[2][2] > 0;
-        _ssd.frostFreezeActive = skillActiveTimer[2][3] > 0;
+        _ssd.frostShatterActive   = skillActiveTimer[2][0] > 0;
+        _ssd.frostBlizzardActive  = skillActiveTimer[2][2] > 0;
+        _ssd.frostAvalancheActive = skillActiveTimer[2][3] > 0;
         if (frostFreezeGlow > 0) frostFreezeGlow -= delta;
         if (blazeRallyFlash    > 0) blazeRallyFlash    -= delta;
         if (blazeOverloadFlash > 0) blazeOverloadFlash -= delta;
@@ -7205,7 +7207,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
             }
         }
         boolean _anyEffect = skillActiveTimer[1][0] > 0 || blazeMagnetActive || blazeRallyFlash > 0
-            || skillActiveTimer[0][1] > 0 || skillActiveTimer[2][3] > 0 || skillActiveTimer[2][0] > 0;
+            || skillActiveTimer[0][1] > 0
+            || skillActiveTimer[2][0] > 0 || skillActiveTimer[2][2] > 0
+            || skillActiveTimer[2][3] > 0 || frostFreezeGlow > 0;
         if (!_anyEffect) return;
 
         batch.end();
@@ -7214,16 +7218,19 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // ── SHIELD: rotating dashed arc around BLAZE ──
         if (_bPos != null && skillActiveTimer[1][0] > 0) {
-            float _sr = ORB_RADIUS[1] * 3.0f;
-            float _sa = 0.55f + MathUtils.sin(animTime * 6f) * 0.25f;
             shapeR.begin(com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType.Line);
-            shapeR.setColor(1f, 0.80f, 0.25f, _sa);
-            int _segs = 24;
-            for (int _si = 0; _si < _segs; _si += 2) {
-                float _a1 = (float) Math.toRadians(blazeShieldAngle + _si       * (360f / _segs));
-                float _a2 = (float) Math.toRadians(blazeShieldAngle + (_si + 1) * (360f / _segs));
-                shapeR.line(_bPos.x + MathUtils.cos((float)_a1) * _sr, _bPos.y + MathUtils.sin((float)_a1) * _sr,
-                            _bPos.x + MathUtils.cos((float)_a2) * _sr, _bPos.y + MathUtils.sin((float)_a2) * _sr);
+            for (int _layer = 0; _layer < 2; _layer++) {
+                float _sr = ORB_RADIUS[1] * (2.8f + _layer * 0.8f);
+                float _sa = (0.70f - _layer * 0.2f) + MathUtils.sin(animTime * 6f + _layer) * 0.20f;
+                float _off = blazeShieldAngle + _layer * 30f;
+                int _segs = 24;
+                for (int _si = 0; _si < _segs; _si += 2) {
+                    float _a1 = (float) Math.toRadians(_off + _si * (360f / _segs));
+                    float _a2 = (float) Math.toRadians(_off + (_si + 1) * (360f / _segs));
+                    shapeR.setColor(1f, 0.80f + _layer * 0.1f, 0.10f + _layer * 0.2f, _sa);
+                    shapeR.line(_bPos.x + MathUtils.cos(_a1) * _sr, _bPos.y + MathUtils.sin(_a1) * _sr,
+                                _bPos.x + MathUtils.cos(_a2) * _sr, _bPos.y + MathUtils.sin(_a2) * _sr);
+                }
             }
             shapeR.end();
         }
@@ -7293,42 +7300,81 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 shapeR.end();
             }
         }
-        // ── FROST FREEZE: blue rings around non-FROST orbs ──
-        if (skillActiveTimer[2][3] > 0) {
-            shapeR.begin(com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType.Line);
+        // ── FROST SHATTER: spinning ice-shard halo around FROST ──
+        if (skillActiveTimer[2][0] > 0) {
+            com.badlogic.gdx.math.Vector2 _frPos = null;
             for (int _bi = 0; _bi < balls.size; _bi++) {
-                Body _fb = balls.get(_bi);
-                if ("INTERN_FROST".equals(_fb.getUserData())) continue;
-                com.badlogic.gdx.math.Vector2 _fp = _fb.getPosition();
-                float _fa = 0.5f + 0.3f * MathUtils.sin(animTime * 4f + _bi);
-                shapeR.setColor(0.5f, 0.9f, 1f, _fa);
-                int _fn = 12;
-                float _fr = ORB_RADIUS[1] * 2.5f;
-                for (int _fi = 0; _fi < _fn; _fi++) {
-                    float _f1 = _fi       * MathUtils.PI2 / _fn;
-                    float _f2 = (_fi + 1) * MathUtils.PI2 / _fn;
-                    shapeR.line(_fp.x + MathUtils.cos(_f1) * _fr, _fp.y + MathUtils.sin(_f1) * _fr,
-                                _fp.x + MathUtils.cos(_f2) * _fr, _fp.y + MathUtils.sin(_f2) * _fr);
+                if ("INTERN_FROST".equals(balls.get(_bi).getUserData())) { _frPos = balls.get(_bi).getPosition(); break; }
+            }
+            if (_frPos != null) {
+                shapeR.begin(com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType.Line);
+                float _rot = animTime * 120f * MathUtils.degreesToRadians;
+                for (int _si = 0; _si < 8; _si++) {
+                    float _base = _rot + _si * MathUtils.PI2 / 8f;
+                    float _r1 = ORB_RADIUS[2] * 2.2f, _r2 = ORB_RADIUS[2] * 3.8f;
+                    float _pa = 0.6f + 0.4f * MathUtils.sin(animTime * 5f + _si * 0.8f);
+                    shapeR.setColor(0.6f, 0.95f, 1f, _pa);
+                    shapeR.line(_frPos.x + MathUtils.cos(_base) * _r1, _frPos.y + MathUtils.sin(_base) * _r1,
+                                _frPos.x + MathUtils.cos(_base) * _r2, _frPos.y + MathUtils.sin(_base) * _r2);
+                    // cross shard
+                    shapeR.setColor(0.4f, 0.85f, 1f, _pa * 0.6f);
+                    float _perp = _base + MathUtils.PI / 2f;
+                    float _mid = (_r1 + _r2) * 0.5f;
+                    shapeR.line(_frPos.x + MathUtils.cos(_base) * _mid - MathUtils.cos(_perp) * 0.12f,
+                                _frPos.y + MathUtils.sin(_base) * _mid - MathUtils.sin(_perp) * 0.12f,
+                                _frPos.x + MathUtils.cos(_base) * _mid + MathUtils.cos(_perp) * 0.12f,
+                                _frPos.y + MathUtils.sin(_base) * _mid + MathUtils.sin(_perp) * 0.12f);
+                }
+                shapeR.end();
+            }
+        }
+        // ── FROST BLIZZARD: snowflake burst on rings ──
+        if (skillActiveTimer[2][2] > 0) {
+            shapeR.begin(com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType.Line);
+            for (int _ri = 0; _ri < 6; _ri++) {
+                if (rings[_ri] == null) continue;
+                float _rr = RING_RADII[_ri] * PPM; // drawing in renderCam space but we're in physCam
+                // Draw blizzard sparkles around ring circumference
+                int _nseg = RING_SIDES[_ri];
+                float _rot2 = animTime * 80f * MathUtils.degreesToRadians;
+                for (int _si = 0; _si < _nseg; _si++) {
+                    float _ang = _rot2 + _si * MathUtils.PI2 / _nseg;
+                    float _cx2 = CENTRIFUGE_CX + MathUtils.cos(_ang) * RING_RADII[_ri];
+                    float _cy2 = CENTRIFUGE_CY + MathUtils.sin(_ang) * RING_RADII[_ri];
+                    float _pa = 0.25f + 0.3f * MathUtils.sin(animTime * 7f + _si + _ri);
+                    shapeR.setColor(0.5f, 0.92f, 1f, _pa);
+                    float _clen = 0.12f;
+                    for (int _sp = 0; _sp < 6; _sp++) {
+                        float _sa = _sp * MathUtils.PI / 3f;
+                        shapeR.line(_cx2, _cy2, _cx2 + MathUtils.cos(_sa) * _clen, _cy2 + MathUtils.sin(_sa) * _clen);
+                    }
                 }
             }
             shapeR.end();
         }
-        // ── FROST SLOW: frost crystals on centrifuge edge ──
-        if (skillActiveTimer[2][0] > 0) {
-            shapeR.begin(com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType.Line);
-            float _fsa = 0.4f + 0.3f * MathUtils.sin(animTime * 3f);
-            shapeR.setColor(0.6f, 0.95f, 1f, _fsa);
-            for (int _ci = 0; _ci < 8; _ci++) {
-                float _ca = animTime * 0.3f + _ci * MathUtils.PI2 / 8f;
-                float _cx = CENTRIFUGE_CX + MathUtils.cos(_ca) * (CENTRIFUGE_R * 0.95f);
-                float _cy = CENTRIFUGE_CY + MathUtils.sin(_ca) * (CENTRIFUGE_R * 0.95f);
-                float _clen = 0.18f;
-                for (int _sp = 0; _sp < 4; _sp++) {
-                    float _sa = _ca + _sp * MathUtils.PI / 2f;
-                    shapeR.line(_cx, _cy, _cx + MathUtils.cos(_sa) * _clen, _cy + MathUtils.sin(_sa) * _clen);
-                }
+        // ── FROST AVALANCHE: pulsing double-ring + glow around FROST ──
+        if (skillActiveTimer[2][3] > 0 || frostFreezeGlow > 0) {
+            com.badlogic.gdx.math.Vector2 _avPos = null;
+            for (int _bi = 0; _bi < balls.size; _bi++) {
+                if ("INTERN_FROST".equals(balls.get(_bi).getUserData())) { _avPos = balls.get(_bi).getPosition(); break; }
             }
-            shapeR.end();
+            if (_avPos != null) {
+                float _at = skillActiveTimer[2][3] > 0 ? skillActiveTimer[2][3] / SKILL_DURATION[2][3] : frostFreezeGlow / 5f;
+                shapeR.begin(com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType.Line);
+                for (int _ring = 0; _ring < 2; _ring++) {
+                    float _ar = ORB_RADIUS[2] * (3.5f + _ring * 1.5f + MathUtils.sin(animTime * 6f + _ring) * 0.3f);
+                    float _aa = _at * (0.6f + 0.3f * MathUtils.sin(animTime * 8f + _ring * 1.5f));
+                    shapeR.setColor(0.25f, 0.92f, 1f, _aa);
+                    int _an = 20;
+                    for (int _ai2 = 0; _ai2 < _an; _ai2++) {
+                        float _a1 = _ai2       * MathUtils.PI2 / _an;
+                        float _a2 = (_ai2 + 1) * MathUtils.PI2 / _an;
+                        shapeR.line(_avPos.x + MathUtils.cos(_a1) * _ar, _avPos.y + MathUtils.sin(_a1) * _ar,
+                                    _avPos.x + MathUtils.cos(_a2) * _ar, _avPos.y + MathUtils.sin(_a2) * _ar);
+                    }
+                }
+                shapeR.end();
+            }
         }
 
         batch.begin();
@@ -9056,31 +9102,53 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 triggerShake(2f, 0.05f);
             }
         }
-        // ---- FROST skill 0: SLOW — halve centrifuge speed ----
-        if (skillActiveTimer[2][0] > 0 && centrifugeBody != null) {
-            float _cv = centrifugeBody.getAngularVelocity();
-            if (Math.abs(_cv) > 0.5f) centrifugeBody.setAngularVelocity(_cv * 0.97f);
-        }
-        // ---- FROST skill 1: ICE SPIKE — burst velocity on FROST ----
+        // ---- FROST skill 1: ICE RUSH — fire toward innermost active ring ----
         if (frostIcePending) {
             frostIcePending = false;
+            Body _fBody = null;
             for (int _bi = 0; _bi < balls.size; _bi++) {
-                Body _fb = balls.get(_bi);
-                if ("INTERN_FROST".equals(_fb.getUserData())) {
-                    float _fa = com.badlogic.gdx.math.MathUtils.random(com.badlogic.gdx.math.MathUtils.PI2);
-                    _fb.applyLinearImpulse(com.badlogic.gdx.math.MathUtils.cos(_fa) * 5.0f,
-                        com.badlogic.gdx.math.MathUtils.sin(_fa) * 5.0f,
-                        _fb.getPosition().x, _fb.getPosition().y, true);
+                if ("INTERN_FROST".equals(balls.get(_bi).getUserData())) { _fBody = balls.get(_bi); break; }
+            }
+            if (_fBody != null) {
+                // Find innermost alive ring
+                int _targetRing = -1;
+                for (int _ri = 5; _ri >= 0; _ri--) { if (rings[_ri] != null) { _targetRing = _ri; break; } }
+                com.badlogic.gdx.math.Vector2 _fPos = _fBody.getPosition();
+                float _tx = CENTRIFUGE_CX, _ty = CENTRIFUGE_CY;
+                if (_targetRing >= 0) {
+                    float _tr = RING_RADII[_targetRing];
+                    float _ang = (float) Math.atan2(_fPos.y - CENTRIFUGE_CY, _fPos.x - CENTRIFUGE_CX);
+                    _tx = CENTRIFUGE_CX + com.badlogic.gdx.math.MathUtils.cos(_ang + com.badlogic.gdx.math.MathUtils.PI) * _tr;
+                    _ty = CENTRIFUGE_CY + com.badlogic.gdx.math.MathUtils.sin(_ang + com.badlogic.gdx.math.MathUtils.PI) * _tr;
+                }
+                float _dx = _tx - _fPos.x, _dy = _ty - _fPos.y;
+                float _dl = (float) Math.sqrt(_dx*_dx + _dy*_dy);
+                if (_dl > 0.01f) { _fBody.setLinearVelocity(_dx / _dl * 9f, _dy / _dl * 9f); }
+                triggerShake(2f, 0.05f);
+            }
+        }
+        // ---- FROST skill 2: BLIZZARD — AoE ring damage ----
+        if (ShipData.get().frostBlizzardPendingRing >= 0) {
+            int _hitRing = ShipData.get().frostBlizzardPendingRing;
+            ShipData.get().frostBlizzardPendingRing = -1;
+            for (int _ri = 0; _ri < 6; _ri++) {
+                if (_ri == _hitRing || rings[_ri] == null) continue;
+                if (rings[_ri].getUserData() instanceof ShipData.RingHitData) {
+                    ShipData.RingHitData _brhd = (ShipData.RingHitData) rings[_ri].getUserData();
+                    if (!_brhd.readyToDestroy) { _brhd.hitsRemaining -= 2; if (_brhd.hitsRemaining <= 0) _brhd.readyToDestroy = true; }
                 }
             }
         }
-        // ---- FROST skill 3: FREEZE — nearly stop all other orbs ----
+        // ---- FROST skill 3: AVALANCHE — handled via frostAvalancheActive flag ----
         if (skillActiveTimer[2][3] > 0) {
+            // Avalanche keeps FROST fast (no slowdown via frostAvalancheActive flag)
+            // Also apply small constant speed boost to FROST
             for (int _bi = 0; _bi < balls.size; _bi++) {
                 Body _fb = balls.get(_bi);
-                if ("INTERN_FROST".equals(_fb.getUserData())) continue;
+                if (!"INTERN_FROST".equals(_fb.getUserData())) continue;
                 com.badlogic.gdx.math.Vector2 _fv = _fb.getLinearVelocity();
-                _fb.setLinearVelocity(_fv.x * 0.92f, _fv.y * 0.92f);
+                float _fspd = _fv.len();
+                if (_fspd < 5f && _fspd > 0.01f) { _fb.applyLinearImpulse(_fv.x / _fspd * 0.1f, _fv.y / _fspd * 0.1f, _fb.getPosition().x, _fb.getPosition().y, true); }
             }
         }
     }
@@ -9555,10 +9623,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
             }
         } else { // FROST
             switch (slot) {
-                case 0: break; // SLOW — active via skillActiveTimer
-                case 1: frostIcePending = true; break;
-                case 2: break; // CRYO — flag set in tick
-                case 3: frostFreezeGlow = 3.0f; break; // FREEZE — active via skillActiveTimer
+                case 0: break; // SHATTER — frostShatterActive set in tick
+                case 1: frostIcePending = true; break; // ICE RUSH
+                case 2: break; // BLIZZARD — frostBlizzardActive set in tick
+                case 3: frostFreezeGlow = 5.0f; triggerShake(3f, 0.08f); break; // AVALANCHE
             }
         }
         SoundManager.get().playMilestone();
