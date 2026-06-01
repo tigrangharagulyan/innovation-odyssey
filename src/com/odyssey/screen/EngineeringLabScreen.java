@@ -7618,77 +7618,70 @@ public class EngineeringLabScreen extends ScreenAdapter {
             float px = ghostWx * PPM, py = ghostWy * PPM;
 
             if (dragMode == PLACE_INTERN) {
-                // Slingshot: orb at button, rubber band to finger, dots toward drum
-                float ox = dragOriginStageX, oy = dragOriginStageY + 80f;
+                float ox  = dragOriginStageX, oy  = dragOriginStageY + 80f;
+                float fx2 = dragStageX,       fy2 = dragStageY + 80f;
+                // Slingshot direction = opposite of drag
+                float dvx2 = ox - fx2, dvy2 = oy - fy2;
+                float dlen2 = (float) Math.sqrt(dvx2 * dvx2 + dvy2 * dvy2);
+                batch.end();
+                Gdx.gl.glLineWidth(3f);
+                shapeR.setProjectionMatrix(renderCam.combined);
+                shapeR.begin(ShapeRenderer.ShapeType.Filled);
+                // Rubber band: button → finger
+                shapeR.setColor(0.35f, 0.80f, 1f, 0.80f);
+                shapeR.rectLine(ox, oy, fx2, fy2, 4f);
+                // Trajectory dots from button in launch direction
+                if (dlen2 > 4f) {
+                    float nx = dvx2 / dlen2, ny = dvy2 / dlen2;
+                    for (int _d2 = 1; _d2 <= 8; _d2++) {
+                        float dotX = ox + nx * _d2 * 34f;
+                        float dotY = oy + ny * _d2 * 34f;
+                        float dotR = 8f * (1f - _d2 * 0.08f);
+                        shapeR.setColor(0.35f, 0.80f, 1f, 0.80f - _d2 * 0.08f);
+                        shapeR.circle(dotX, dotY, dotR, 10);
+                    }
+                }
+                shapeR.end();
+                Gdx.gl.glLineWidth(1f);
+                batch.begin();
+                // Orb glow at button
                 float orbD = BALL_RADIUS * PPM * 5.5f;
                 batch.setColor(0.35f, 0.80f, 1f, 0.90f);
                 batch.draw(texParticle, ox - orbD * 0.5f, oy - orbD * 0.5f, orbD, orbD);
-                batch.setColor(1f, 1f, 1f, 0.80f);
+                batch.setColor(1f, 1f, 1f, 0.85f);
                 float coreD = orbD * 0.42f;
                 batch.draw(texParticleCore, ox - coreD * 0.5f, oy - coreD * 0.5f, coreD, coreD);
-                // Rubber band
-                float fx2 = dragStageX, fy2 = dragStageY + 80f;
-                float lx2 = fx2 - ox, ly2 = fy2 - oy;
-                float rLen2 = (float) Math.sqrt(lx2 * lx2 + ly2 * ly2);
-                if (rLen2 > 4f) {
-                    float ang2 = (float) Math.toDegrees(Math.atan2(ly2, lx2));
-                    batch.setColor(0.35f, 0.80f, 1f, 0.70f);
-                    batch.draw(texPixel, ox, oy - 2f, 0f, 2f, rLen2, 4f, 1f, 1f, ang2, 0, 0, 1, 1, false, false);
-                }
-                // Trajectory dots (slingshot = opposite direction)
-                float originWX2 = ox / PPM, originWY2 = oy / PPM;
-                float fx2w = fx2 / PPM, fy2w = fy2 / PPM;
-                float dvx2 = originWX2 - fx2w, dvy2 = originWY2 - fy2w;
-                float dlen2 = (float) Math.sqrt(dvx2 * dvx2 + dvy2 * dvy2);
-                if (dlen2 > 0.05f) {
-                    dvx2 /= dlen2; dvy2 /= dlen2;
-                    for (int _d2 = 1; _d2 <= 7; _d2++) {
-                        float dotWX2 = originWX2 + dvx2 * _d2 * 0.55f;
-                        float dotWY2 = originWY2 + dvy2 * _d2 * 0.55f;
-                        float dotSz2 = 12f * (1f - _d2 * 0.09f);
-                        batch.setColor(0.35f, 0.80f, 1f, 0.70f - _d2 * 0.08f);
-                        batch.draw(texParticleCore,
-                            dotWX2 * PPM - dotSz2 * 0.5f, dotWY2 * PPM - dotSz2 * 0.5f, dotSz2, dotSz2);
-                    }
-                }
                 batch.setColor(1f, 1f, 1f, 1f);
             } else if (dragMode == PLACE_BUMPER && !isFrostheim()) {
-                // Slingshot visual: bumper at button, rubber band to finger, dots show trajectory
-                float ox  = dragOriginStageX,      oy  = dragOriginStageY + 80f;
-                float bpx = ox,                    bpy = oy;  // bumper at button position
-                float sz  = BUMPER_W * 1.3f;
-                // Ghost bumper at BUTTON position
-                batch.setColor(0.35f, 1.0f, 0.90f, 0.90f);
-                batch.draw(texBumper, bpx - sz * 0.5f, bpy - sz * 0.5f, sz, sz);
-                // Rubber band from button to finger
-                float fx  = dragStageX,            fy  = dragStageY + 80f;
-                float lx  = fx - ox, ly = fy - oy;
-                float lineLen = (float) Math.sqrt(lx * lx + ly * ly);
-                if (lineLen > 4f) {
-                    float ang = (float) Math.toDegrees(Math.atan2(ly, lx));
-                    batch.setColor(1f, 0.55f, 0.15f, 0.80f);
-                    batch.draw(texPixel, ox, oy - 2f, 0f, 2f, lineLen, 4f, 1f, 1f, ang,
-                        0, 0, 1, 1, false, false);
-                }
-                // Trajectory dots: slingshot direction = opposite of drag, from button toward drum
-                float originWX = ox / PPM;
-                float originWY = oy / PPM;
-                float rawWxL   = fx / PPM;
-                float rawWyL   = fy / PPM;
-                float dvx = originWX - rawWxL;
-                float dvy = originWY - rawWyL;
+                float ox = dragOriginStageX, oy = dragOriginStageY + 80f;
+                float fx = dragStageX,       fy = dragStageY + 80f;
+                float dvx = ox - fx, dvy = oy - fy;
                 float dlen = (float) Math.sqrt(dvx * dvx + dvy * dvy);
-                if (dlen > 0.05f) {
-                    dvx /= dlen; dvy /= dlen;
-                    for (int _d = 1; _d <= 7; _d++) {
-                        float dotWX = originWX + dvx * _d * 0.55f;
-                        float dotWY = originWY + dvy * _d * 0.55f;
-                        float dotSz = 10f * (1f - _d * 0.09f);
-                        batch.setColor(0.35f, 1.0f, 0.90f, 0.75f - _d * 0.08f);
-                        batch.draw(texParticleCore,
-                            dotWX * PPM - dotSz * 0.5f, dotWY * PPM - dotSz * 0.5f, dotSz, dotSz);
+                batch.end();
+                Gdx.gl.glLineWidth(3f);
+                shapeR.setProjectionMatrix(renderCam.combined);
+                shapeR.begin(ShapeRenderer.ShapeType.Filled);
+                // Rubber band: button → finger
+                shapeR.setColor(1f, 0.55f, 0.15f, 0.80f);
+                shapeR.rectLine(ox, oy, fx, fy, 4f);
+                // Trajectory dots
+                if (dlen > 4f) {
+                    float nx = dvx / dlen, ny = dvy / dlen;
+                    for (int _d = 1; _d <= 8; _d++) {
+                        float dotX = ox + nx * _d * 34f;
+                        float dotY = oy + ny * _d * 34f;
+                        float dotR = 8f * (1f - _d * 0.08f);
+                        shapeR.setColor(0.35f, 1.0f, 0.90f, 0.80f - _d * 0.08f);
+                        shapeR.circle(dotX, dotY, dotR, 10);
                     }
                 }
+                shapeR.end();
+                Gdx.gl.glLineWidth(1f);
+                batch.begin();
+                // Ghost bumper at button
+                float sz = BUMPER_W * 1.3f;
+                batch.setColor(0.35f, 1.0f, 0.90f, 0.90f);
+                batch.draw(texBumper, ox - sz * 0.5f, oy - sz * 0.5f, sz, sz);
                 batch.setColor(1f, 1f, 1f, 1f);
             } else if (dragMode == PLACE_BUMPER && isFrostheim()) {
                 // Frostheim icicle: keep original placement ghost
