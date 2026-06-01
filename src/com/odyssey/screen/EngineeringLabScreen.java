@@ -58,6 +58,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
     private static final float BALL_RADIUS        = 0.25f;
     private static final float EMBER_BALL_RADIUS  = 0.38f;
+    // Per-type physics: radius, restitution, entry-velocity multiplier
+    private static final float[] ORB_RADIUS = {0.25f, 0.14f, 0.40f};       // SPARK, BLAZE, FROST
+    private static final float[] ORB_REST   = {0.90f, 1.25f, 0.60f};       // SPARK, BLAZE, FROST
+    private static final float[] ORB_VEL    = {0.60f, 1.00f, 0.30f};       // entry-velocity mult
     private static final float EMBER_INTERN_DRAW  = 52f;
     private static final float BALL_DENSITY        = 1.0f;
     private static final float BALL_RESTITUTION    = 0.90f;
@@ -2067,6 +2071,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
     }
 
     private void spawnBall(float x, float y) {
+        spawnBall(x, y, isEmberIV() ? EMBER_BALL_RADIUS : BALL_RADIUS, currentBallRestitution);
+    }
+
+    private void spawnBall(float x, float y, float radius, float restitution) {
         if (balls.size >= internCap()) return;
         boolean fh = isFrostheim();
 
@@ -2077,12 +2085,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
         bd.angularDamping = fh ? frostheimBallDamping : 0f;
 
         CircleShape circle = new CircleShape();
-        circle.setRadius(isEmberIV() ? EMBER_BALL_RADIUS : BALL_RADIUS);
+        circle.setRadius(radius);
 
         FixtureDef fd  = new FixtureDef();
         fd.shape       = circle;
         fd.density     = BALL_DENSITY;
-        fd.restitution = currentBallRestitution;
+        fd.restitution = restitution;
         fd.friction    = 0.2f;
         Body body = world.createBody(bd);
         body.setBullet(true);
@@ -4039,12 +4047,13 @@ public class EngineeringLabScreen extends ScreenAdapter {
             float _idx = flyingInternWX - CENTRIFUGE_CX;
             float _idy = flyingInternWY - CENTRIFUGE_CY;
             if (_idx * _idx + _idy * _idy < (CENTRIFUGE_R * 0.80f) * (CENTRIFUGE_R * 0.80f)) {
-                spawnBall(flyingInternWX, flyingInternWY);
-                // Override random kick with entry velocity; tag with selected orb type
+                int _oti = selectedOrbType.ordinal();
+                spawnBall(flyingInternWX, flyingInternWY, ORB_RADIUS[_oti], ORB_REST[_oti]);
+                // Tag with type; apply type-specific entry velocity
                 if (!balls.isEmpty()) {
                     Body _nb = balls.get(balls.size - 1);
                     _nb.setUserData("INTERN_" + selectedOrbType.name());
-                    _nb.setLinearVelocity(flyingInternVX * 0.6f, flyingInternVY * 0.6f);
+                    _nb.setLinearVelocity(flyingInternVX * ORB_VEL[_oti], flyingInternVY * ORB_VEL[_oti]);
                 }
                 internAddedNewSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
                 internAddedTimer    = INTERN_ADDED_HOLD;
@@ -7034,9 +7043,6 @@ public class EngineeringLabScreen extends ScreenAdapter {
     }
 
     private void drawInterns() {
-        float hw = INTERN_W * 0.5f, hh = INTERN_H * 0.5f;
-        float coreW = 32f, coreH = 32f, chw = coreW * 0.5f, chh = coreH * 0.5f;
-
         for (int i = 0, n = balls.size; i < n; i++) {
             Body    body  = balls.get(i);
             Vector2 pos   = body.getPosition();
@@ -7045,6 +7051,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
             boolean _blaze = _udTag.contains("BLAZE");
             boolean _frost = _udTag.contains("FROST");
             boolean _spark = !_blaze && !_frost; // includes SPARK and NORMAL
+            // Draw size scales with actual physics radius
+            float _r   = _blaze ? ORB_RADIUS[1] : _frost ? ORB_RADIUS[2] : ORB_RADIUS[0];
+            float _dSz = _r * PPM * 5.5f;
+            float hw = _dSz * 0.5f, hh = _dSz * 0.5f;
+            float coreW = _dSz * 0.42f, coreH = _dSz * 0.42f;
+            float chw = coreW * 0.5f, chh = coreH * 0.5f;
 
             float speed = vel.len();
             float px    = pos.x * PPM;
@@ -7072,7 +7084,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 else if (_blaze) batch.setColor(1.00f * glow, 0.42f * glow, 0.10f * glow, 0.65f);
                 else             batch.setColor(0.25f * glow, 0.92f * glow, 1.00f * glow, 0.65f); // frost
                 batch.draw(texParticle, px - hw, py - hh, hw, hh,
-                    INTERN_W, INTERN_H, scaleX, scaleY, drawAngle,
+                    _dSz, _dSz, scaleX, scaleY, drawAngle,
                     0, 0, texParticle.getWidth(), texParticle.getHeight(), false, false);
 
                 // Bright inner core — color by orb type
@@ -7087,7 +7099,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         // Flying intern sprite (visual slingshot phase before entering drum)
         if (flyingInternActive) {
             float _ipx = flyingInternWX * PPM, _ipy = flyingInternWY * PPM;
-            float _id  = BALL_RADIUS * PPM * 5.5f;
+            float _id  = ORB_RADIUS[selectedOrbType.ordinal()] * PPM * 5.5f;
             float[] _fc = ORB_COLORS[selectedOrbType.ordinal()];
             batch.setColor(_fc[0], _fc[1], _fc[2], 0.92f);
             batch.draw(texParticle, _ipx - _id * 0.5f, _ipy - _id * 0.5f, _id, _id);
