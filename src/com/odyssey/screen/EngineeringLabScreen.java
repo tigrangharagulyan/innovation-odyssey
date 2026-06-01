@@ -3041,14 +3041,18 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     }
                 } else if (!isEmberIV()) {
                     if (bumpers.size < maxBumpersAllowed() && sd2.spendCrystals(bumperCost())) {
+                        // Spawn at drop position (already inside drum); fire toward drum center
+                        float tvx = CENTRIFUGE_CX - wx;
+                        float tvy = CENTRIFUGE_CY - wy;
+                        float tlen = (float) Math.sqrt(tvx * tvx + tvy * tvy);
+                        // Use drag distance for power: longer drag = faster launch, cap at 8 m/s
                         float originWX = dragOriginStageX / PPM;
                         float originWY = (dragOriginStageY + 80f) / PPM;
-                        float dvx = wx - originWX;
-                        float dvy = wy - originWY;
-                        float dist = (float) Math.sqrt(dvx * dvx + dvy * dvy);
-                        float launchSpeed = Math.min(dist * 4f, 12f);
-                        if (dist > 0.01f) { dvx /= dist; dvy /= dist; }
-                        launchCurlingBumper(originWX, originWY, dvx * launchSpeed, dvy * launchSpeed);
+                        float dragDist = (float) Math.sqrt(
+                            (wx - originWX) * (wx - originWX) + (wy - originWY) * (wy - originWY));
+                        float launchSpeed = Math.min(dragDist * 3f, 8f) + 2f;
+                        if (tlen > 0.01f) { tvx /= tlen; tvy /= tlen; }
+                        launchCurlingBumper(wx, wy, tvx * launchSpeed, tvy * launchSpeed);
                     }
                 }
             }
@@ -5830,6 +5834,19 @@ public class EngineeringLabScreen extends ScreenAdapter {
             batch.draw(texBumper,
                 px - dw * 0.5f, py - dh * 0.5f,
                 dw * 0.5f, dh * 0.5f, dw, dh, 1f, 1f, -animTime * 18f,
+                0, 0, texBumper.getWidth(), texBumper.getHeight(), false, false);
+        }
+        // Draw in-flight curling bodies — cyan tint so player can see them moving
+        for (int _i = 0; _i < curlingBodies.size; _i++) {
+            com.badlogic.gdx.physics.box2d.Body _cb = curlingBodies.items[_i];
+            float _px = _cb.getPosition().x * PPM;
+            float _py = _cb.getPosition().y * PPM;
+            float _t  = curlingTimers.get(_i) / CURLING_SETTLE_TIME;
+            float _dw = BUMPER_W * (1.1f + 0.2f * (1f - _t));
+            batch.setColor(0.4f, 1.0f, 0.9f, 0.85f);
+            batch.draw(texBumper,
+                _px - _dw * 0.5f, _py - _dw * 0.5f,
+                _dw * 0.5f, _dw * 0.5f, _dw, _dw, 1f, 1f, animTime * 30f,
                 0, 0, texBumper.getWidth(), texBumper.getHeight(), false, false);
         }
         batch.setColor(1f, 1f, 1f, 1f);
