@@ -361,8 +361,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private static final float CURLING_SETTLE_SPEED = 0.3f;
     // Visual flight phase — bumper travels from button to drum before physics takes over
     private boolean flyingBumperActive = false;
-    private float   flyingBumperWX, flyingBumperWY;  // world pos
-    private float   flyingBumperVX, flyingBumperVY;  // world velocity m/s
+    private float   flyingBumperWX, flyingBumperWY;
+    private float   flyingBumperVX, flyingBumperVY;
+    // Visual flight phase — intern orb slingshot
+    private boolean flyingInternActive = false;
+    private float   flyingInternWX, flyingInternWY;
+    private float   flyingInternVX, flyingInternVY;
     private InputMultiplexer inputMux;
     private float jpsTimer         = 0f;
     private float lastJoules       = 0f;
@@ -2933,9 +2937,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 // Check capacity and affordability before starting actual drag
                 boolean normalHire  = (balls.size + pelletGroups.size) < internCap() && sd2.crystals >= internCost();
                 if (!normalHire) return tutorialStep == 1; // capture for step 1 even if not affordable
-                dragMode   = PLACE_INTERN;
-                dragStageX = event.getStageX();
-                dragStageY = event.getStageY();
+                dragMode         = PLACE_INTERN;
+                dragStageX       = event.getStageX();
+                dragStageY       = event.getStageY();
+                dragOriginStageX = event.getStageX();
+                dragOriginStageY = event.getStageY();
                 return true;
             }
             @Override
@@ -2962,13 +2968,21 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 }
                 ShipData sd2 = ShipData.get();
                 if (balls.size < internCap() && sd2.spendCrystals(internCost())) {
+                    // Slingshot: start flying intern from button toward drum
+                    float originWX = dragOriginStageX / PPM;
+                    float originWY = (dragOriginStageY + 80f) / PPM;
+                    float dvx = originWX - wx;
+                    float dvy = originWY - wy;
+                    float dragDist = (float) Math.sqrt(dvx * dvx + dvy * dvy);
+                    if (dragDist < 0.01f) { dvx = 0f; dvy = 1f; dragDist = 1f; }
+                    float launchSpeed = Math.min(dragDist * 4f, 9f) + 3f;
+                    dvx /= dragDist; dvy /= dragDist;
+                    flyingInternWX = originWX;
+                    flyingInternWY = originWY;
+                    flyingInternVX = dvx * launchSpeed;
+                    flyingInternVY = dvy * launchSpeed;
+                    flyingInternActive = true;
                     internAddedOldSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
-                    spawnBall(wx, wy);
-                    internAddedNewSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
-                    internAddedTimer    = INTERN_ADDED_HOLD;
-                    hireIdleTimer       = 0f;
-                    SoundManager.get().playHire();
-                    triggerShake(2f, 0.06f);
                     if (tutorialStep == 1 && tutorialPostDropTimer < 0f) tutorialPostDropTimer = 0f;
                 }
             }
@@ -3895,6 +3909,29 @@ public class EngineeringLabScreen extends ScreenAdapter {
             else if (flyingBumperWY > WORLD_H + 2f || flyingBumperWY < -1f
                      || flyingBumperWX < -1f || flyingBumperWX > WORLD_W + 1f) {
                 flyingBumperActive = false;
+            }
+        }
+        // Flying intern: travel from button to drum, then spawn physics ball
+        if (flyingInternActive) {
+            flyingInternWX += flyingInternVX * delta;
+            flyingInternWY += flyingInternVY * delta;
+            float _idx = flyingInternWX - CENTRIFUGE_CX;
+            float _idy = flyingInternWY - CENTRIFUGE_CY;
+            if (_idx * _idx + _idy * _idy < (CENTRIFUGE_R * 0.80f) * (CENTRIFUGE_R * 0.80f)) {
+                spawnBall(flyingInternWX, flyingInternWY);
+                // Override random kick with entry velocity
+                if (!balls.isEmpty()) {
+                    balls.get(balls.size - 1).setLinearVelocity(flyingInternVX * 0.6f, flyingInternVY * 0.6f);
+                }
+                internAddedNewSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
+                internAddedTimer    = INTERN_ADDED_HOLD;
+                hireIdleTimer       = 0f;
+                SoundManager.get().playHire();
+                triggerShake(2f, 0.06f);
+                flyingInternActive = false;
+            } else if (flyingInternWY > WORLD_H + 2f || flyingInternWY < -1f
+                       || flyingInternWX < -1f || flyingInternWX > WORLD_W + 1f) {
+                flyingInternActive = false;
             }
         }
         // Age all pulse-history entries; drop any that have fully faded
@@ -6911,6 +6948,16 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     0, 0, texParticleCore.getWidth(), texParticleCore.getHeight(), false, false);
             }
         }
+        // Flying intern sprite (visual slingshot phase before entering drum)
+        if (flyingInternActive) {
+            float _ipx = flyingInternWX * PPM, _ipy = flyingInternWY * PPM;
+            float _id  = BALL_RADIUS * PPM * 5.5f;
+            batch.setColor(0.35f, 0.85f, 1.0f, 0.92f);
+            batch.draw(texParticle, _ipx - _id * 0.5f, _ipy - _id * 0.5f, _id, _id);
+            float _ic = _id * 0.42f;
+            batch.setColor(1f, 1f, 1f, 0.88f);
+            batch.draw(texParticleCore, _ipx - _ic * 0.5f, _ipy - _ic * 0.5f, _ic, _ic);
+        }
         batch.setColor(1f, 1f, 1f, 1f);
     }
 
@@ -7567,13 +7614,40 @@ public class EngineeringLabScreen extends ScreenAdapter {
             float px = ghostWx * PPM, py = ghostWy * PPM;
 
             if (dragMode == PLACE_INTERN) {
-                // Orb glow
-                float orbD = BALL_RADIUS * PPM * 5f; // ~75px display size
-                batch.setColor(0.35f, 0.80f, 1f, alpha);
-                batch.draw(texParticle, px - orbD * 0.5f, py - orbD * 0.5f, orbD, orbD);
-                batch.setColor(1f, 1f, 1f, alpha * 0.8f);
-                float coreD = orbD * 0.45f;
-                batch.draw(texParticleCore, px - coreD * 0.5f, py - coreD * 0.5f, coreD, coreD);
+                // Slingshot: orb at button, rubber band to finger, dots toward drum
+                float ox = dragOriginStageX, oy = dragOriginStageY + 80f;
+                float orbD = BALL_RADIUS * PPM * 5.5f;
+                batch.setColor(0.35f, 0.80f, 1f, 0.90f);
+                batch.draw(texParticle, ox - orbD * 0.5f, oy - orbD * 0.5f, orbD, orbD);
+                batch.setColor(1f, 1f, 1f, 0.80f);
+                float coreD = orbD * 0.42f;
+                batch.draw(texParticleCore, ox - coreD * 0.5f, oy - coreD * 0.5f, coreD, coreD);
+                // Rubber band
+                float fx2 = dragStageX, fy2 = dragStageY + 80f;
+                float lx2 = fx2 - ox, ly2 = fy2 - oy;
+                float rLen2 = (float) Math.sqrt(lx2 * lx2 + ly2 * ly2);
+                if (rLen2 > 4f) {
+                    float ang2 = (float) Math.toDegrees(Math.atan2(ly2, lx2));
+                    batch.setColor(0.35f, 0.80f, 1f, 0.70f);
+                    batch.draw(texPixel, ox, oy - 2f, 0f, 2f, rLen2, 4f, 1f, 1f, ang2, 0, 0, 1, 1, false, false);
+                }
+                // Trajectory dots (slingshot = opposite direction)
+                float originWX2 = ox / PPM, originWY2 = oy / PPM;
+                float fx2w = fx2 / PPM, fy2w = fy2 / PPM;
+                float dvx2 = originWX2 - fx2w, dvy2 = originWY2 - fy2w;
+                float dlen2 = (float) Math.sqrt(dvx2 * dvx2 + dvy2 * dvy2);
+                if (dlen2 > 0.05f) {
+                    dvx2 /= dlen2; dvy2 /= dlen2;
+                    for (int _d2 = 1; _d2 <= 7; _d2++) {
+                        float dotWX2 = originWX2 + dvx2 * _d2 * 0.55f;
+                        float dotWY2 = originWY2 + dvy2 * _d2 * 0.55f;
+                        float dotSz2 = 12f * (1f - _d2 * 0.09f);
+                        batch.setColor(0.35f, 0.80f, 1f, 0.70f - _d2 * 0.08f);
+                        batch.draw(texParticleCore,
+                            dotWX2 * PPM - dotSz2 * 0.5f, dotWY2 * PPM - dotSz2 * 0.5f, dotSz2, dotSz2);
+                    }
+                }
+                batch.setColor(1f, 1f, 1f, 1f);
             } else if (dragMode == PLACE_BUMPER && !isFrostheim()) {
                 // Slingshot visual: bumper at button, rubber band to finger, dots show trajectory
                 float ox  = dragOriginStageX,      oy  = dragOriginStageY + 80f;
