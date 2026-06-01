@@ -4042,43 +4042,31 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 || Gdx.input.isKeyJustPressed(com.badlogic.gdx.Input.Keys.ANY_KEY);
 
         if (tutorialStep == 0 && inputHit) {
-            // Step 0 → 1: intro dismissed, physics starts, show "hire intern" callout
-            tutorialStep             = 1;
-            tutorialStepAge          = 0f;
-            tutorialEnergyBaseline   = ShipData.get().powerGenerated;
-            tutorialDone             = true;
+            tutorialStep = 1; tutorialStepAge = 0f; tutorialDone = true;
         } else if (tutorialStep == 1) {
-            // Advance only after intern is placed and 3s have passed
-            if (tutorialPostDropTimer >= 0f) {
-                tutorialPostDropTimer += delta;
-                if (tutorialPostDropTimer >= 3f) {
-                    tutorialPostDropTimer = -1f;
-                    tutorialStep          = 2;
-                    tutorialStepAge       = 0f;
-                }
-            }
+            // Advance when orb button tapped (any orb type selected) or 5s
+            tutorialStepAge += delta;
+            if (tutorialStepAge >= 5f || inputHit) { tutorialStep = 2; tutorialStepAge = 0f; }
         } else if (tutorialStep == 2) {
+            // Advance when first orb enters drum
             tutorialStepAge += delta;
-            // advance when 200J earned THIS session, or on tap
-            float earnedThisSession = ShipData.get().powerGenerated - tutorialEnergyBaseline;
-            if (earnedThisSession >= 200f || inputHit) {
-                tutorialStep    = 3;
-                tutorialStepAge = 0f;
-            }
+            if (balls.size > 0 || tutorialStepAge >= 12f) { tutorialStep = 3; tutorialStepAge = 0f; }
         } else if (tutorialStep == 3) {
+            // Show ring info — advance on tap or 5s
             tutorialStepAge += delta;
-            if (inputHit) {
-                tutorialStep    = 4;
-                tutorialStepAge = 0f;
-            }
+            if (inputHit || tutorialStepAge >= 5f) { tutorialStep = 4; tutorialStepAge = 0f; }
         } else if (tutorialStep == 4) {
+            // Skills — advance on tap or 5s
             tutorialStepAge += delta;
-            if (inputHit) {
-                tutorialStep    = 6;
-                tutorialStepAge = 0f;
-            }
+            if (inputHit || tutorialStepAge >= 5f) { tutorialStep = 5; tutorialStepAge = 0f; }
         } else if (tutorialStep == 5) {
-            tutorialStep = 6; // skip — duplicate of step 4
+            // Mana — advance on tap or 4s
+            tutorialStepAge += delta;
+            if (inputHit || tutorialStepAge >= 4f) { tutorialStep = 6; tutorialStepAge = 0f; }
+        } else if (tutorialStep == 6) {
+            // Win condition — advance on tap or 5s
+            tutorialStepAge += delta;
+            if (inputHit || tutorialStepAge >= 5f) { tutorialStep = 99; }
         }
 
         uptime   += delta;
@@ -4689,66 +4677,57 @@ public class EngineeringLabScreen extends ScreenAdapter {
     }
 
     private void drawTutorial() {
+        float btnY   = 90f;   // center Y of orb buttons
+        float drumCX = CCX_PX, drumCY = CCY_PX;
+        float skillY = 200f;  // approximate center Y of skill row
+
         if (tutorialStep == 0) {
             drawTutorialIntroOverlay();
         } else if (tutorialStep == 1) {
-            if (tutorialInternDragging || tutorialPostDropTimer >= 0f) return; // hide while dragging or waiting after drop
-            drawFingerDragHint(87f, 90f, 200f, 380f);
+            // Point to all 3 orb buttons
             drawTutorialCalloutCard(
-                "HIRE YOUR FIRST INTERN",
-                "Hold the ORB button, drag into the ring!",
-                "More orbs = faster ring = more Energy!",
-                87f, 90f,   // ADD ORB center: X=10+3+147/2, Y=10+4+3+147/2
-                true,
-                false
-            );
+                "CHOOSE YOUR ORB",
+                "Tap SPARK, BLAZE or FROST to see its skills.",
+                "Each orb plays differently — pick your style!",
+                240f, btnY, false, false);
         } else if (tutorialStep == 2) {
-            // Draw card — "SP" replaced with spaces; icon drawn inline below
-            drawTutorialCalloutCard(
-                "SPACE POINTS EARNED!",
-                "Each bounce earns    — your main currency.",
-                "Spend it on bumpers, gravity wells and more!",
-                60f, 184f,
-                false, false
-            );
-            // Inline SP coin icon: position it where the gap sits in the centered text
-            final String PREFIX = "Each bounce earns  ";
-            final String FULL   = "Each bounce earns    — your main currency.";
-            float iconSz = 16f;
-            floatFont.getData().setScale(1.18f);
-            floatLayout.setText(floatFont, FULL);
-            float startX = RENDER_W * 0.5f - floatLayout.width * 0.5f;
-            floatLayout.setText(floatFont, PREFIX);
-            float iconX = startX + floatLayout.width;
-            floatFont.getData().setScale(1f);
-            float cardBotY2 = CCY_PX + CENTRIFUGE_R * PPM + 20f;
-            float line1Y = cardBotY2 + 160f - 60f;  // matches ty in drawTutorialCalloutCard
-            batch.setColor(1f, 0.90f, 0.20f, 1f);
-            batch.draw(texIconSP, iconX, line1Y - iconSz + 1f, iconSz, iconSz);
-            batch.setColor(1f, 1f, 1f, 1f);
+            // Show drag hint + point to SPARK button
+            if (!tutorialInternDragging) {
+                drawFingerDragHint(87f, btnY, 200f, 380f);
+                drawTutorialCalloutCard(
+                    "LAUNCH YOUR ORB",
+                    "Hold a button, drag DOWN then release!",
+                    "The orb will fly into the spinning drum.",
+                    87f, btnY, true, false);
+            }
         } else if (tutorialStep == 3) {
-            // Card sits inside the ring; arrow points up to the energy bar in the top panel
-            float energyBarY = renderViewport.getWorldHeight() - 95f;
-            float cardBot3   = CCY_PX - CENTRIFUGE_R * PPM * 0.5f - 80f; // center of ring, offset down
+            // Point to drum center
             drawTutorialCalloutCard(
-                "ENERGY (E)",
-                "Ring spin generates Energy.",
-                "Energy fuels your LAUNCH to next sector!",
-                240f, energyBarY,
-                false,
-                true,   // arrowFromTop: points up to energy bar
-                false,
-                cardBot3
-            );
+                "DESTROY THE RINGS",
+                "6 rings stand between you and the center.",
+                "Each orb bounce chips away their HP!",
+                drumCX, drumCY, false, false);
         } else if (tutorialStep == 4) {
-            // Observation: ring speed — right side of stats strip
+            // Point to skill row
             drawTutorialCalloutCard(
-                "RING SPEED",
-                "More interns = faster ring = more Energy.",
-                "Watch the r/s counter climb!",
-                390f, 184f,
-                false, false
-            );
+                "USE YOUR SKILLS",
+                "Each orb has 4 active skills — tap to fire!",
+                "Skills cost MANA. Combos are powerful!",
+                240f, skillY, false, false);
+        } else if (tutorialStep == 5) {
+            // Point to mana label
+            drawTutorialCalloutCard(
+                "MANA",
+                "Skills consume mana — it regens slowly.",
+                "Manage it wisely. No mana = no skills!",
+                240f, 184f, false, false);
+        } else if (tutorialStep == 6) {
+            // Win condition
+            drawTutorialCalloutCard(
+                "WIN CONDITION",
+                "Destroy all 6 rings, then hit the center 200x.",
+                "Planet conquered = new world unlocked!",
+                drumCX, drumCY, false, false);
         }
     }
 
@@ -4851,7 +4830,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         // Title
         floatFont.getData().setScale(2.30f);
         floatFont.setColor(0.22f, 0.90f, 1.00f, 1f);
-        drawFontCentered("ENGINEERING BAY", cx, cY + cH - 16f);
+        drawFontCentered("MAZE LAB", cx, cY + cH - 16f);
 
         // Planet badge text
         floatFont.getData().setScale(1.18f);
@@ -4864,16 +4843,16 @@ public class EngineeringLabScreen extends ScreenAdapter {
         float bLh = 58f;
 
         float[][] dotCols = {
-            {0.28f, 0.88f, 1.00f},
-            {0.25f, 1.00f, 0.55f},
-            {1.00f, 0.82f, 0.20f},
-            {1.00f, 0.50f, 0.12f},
+            {0.75f, 0.20f, 1.00f},
+            {1.00f, 0.42f, 0.10f},
+            {0.25f, 0.92f, 1.00f},
+            {0.22f, 1.00f, 0.52f},
         };
         String[][] bullets = {
-            {"ORBS IN THE RING",       "Drag orbs in — they bounce and collide."},
-            {"EARN SPACE POINTS",      "Every collision earns SP currency."},
-            {"SPEND SP, GROW FASTER",  "Buy more orbs, bumpers, gravity wells."},
-            {"ENERGY -> LAUNCH",       "Ring spin builds Energy for your next jump."},
+            {"3 ORB TYPES",      "SPARK (fast), BLAZE (normal), FROST (big)."},
+            {"6 RING MAZE",      "Break all rings then hit the center to win!"},
+            {"ACTIVE SKILLS",    "Each orb has 4 skills — tap to unleash them."},
+            {"MANA SYSTEM",      "Skills cost mana — it regens slowly over time."},
         };
 
         floatFont.getData().setScale(1.22f);
