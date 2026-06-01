@@ -9142,18 +9142,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 _fBody2.setAwake(true);
                 _fBody2.setTransform(_ox, _oy, 0f);
                 _fBody2.setLinearVelocity(0f, 0f);
-                // Damage outermost alive ring every 150ms
-                frostAttachHitTimer -= delta;
-                if (frostAttachHitTimer <= 0f) {
-                    frostAttachHitTimer = 0.15f;
-                    for (int _ri = 0; _ri < 6; _ri++) {
-                        if (rings[_ri] != null && rings[_ri].getUserData() instanceof ShipData.RingHitData) {
-                            ShipData.RingHitData _ard = (ShipData.RingHitData) rings[_ri].getUserData();
-                            if (!_ard.readyToDestroy) { _ard.hitsRemaining -= 3; if (_ard.hitsRemaining <= 0) _ard.readyToDestroy = true; }
-                            break;
-                        }
-                    }
-                }
+                // No damage while attached — orb just orbits the wall
             }
             // Detach when 60s timer expires (ICE RUSH detaches in activateSkill)
             if (skillActiveTimer[2][0] <= 0f) {
