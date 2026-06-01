@@ -59,9 +59,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private static final float BALL_RADIUS        = 0.25f;
     private static final float EMBER_BALL_RADIUS  = 0.38f;
     // Per-type physics: radius, restitution, entry-velocity multiplier
-    private static final float[] ORB_RADIUS = {0.25f, 0.14f, 0.40f};       // SPARK, BLAZE, FROST
-    private static final float[] ORB_REST   = {0.90f, 1.25f, 0.60f};       // SPARK, BLAZE, FROST
-    private static final float[] ORB_VEL    = {0.60f, 1.00f, 0.30f};       // entry-velocity mult
+    private static final float[] ORB_RADIUS = {0.25f, 0.14f, 0.32f};       // SPARK, BLAZE, FROST
+    private static final float[] ORB_REST   = {0.90f, 1.25f, 0.65f};       // SPARK, BLAZE, FROST
+    private static final float[] ORB_VEL    = {0.60f, 1.00f, 0.45f};       // entry-velocity mult
     private static final float EMBER_INTERN_DRAW  = 52f;
     private static final float BALL_DENSITY        = 1.0f;
     private static final float BALL_RESTITUTION    = 0.90f;
@@ -1970,8 +1970,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         physCam.position.set(WORLD_W * 0.5f, WORLD_H * 0.5f, 0f);
 
         spawnWalls();
-        spawnBall(CENTRIFUGE_CX - CENTRIFUGE_R * 0.4f, CENTRIFUGE_CY + CENTRIFUGE_R * 0.4f);
-        spawnBall(CENTRIFUGE_CX + CENTRIFUGE_R * 0.4f, CENTRIFUGE_CY - CENTRIFUGE_R * 0.4f);
+        // Maze mode: no initial orbs — player launches via type buttons
     }
 
     /** 0=circle, -1=rectangle, 3=triangle, 4=diamond, 5=pentagon */
@@ -3924,21 +3923,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
     private void claimPendingRecruits() {
         ShipData sd = ShipData.get();
-        int n = sd.pendingNewRecruits;
-        if (n <= 0) return;
-        sd.pendingNewRecruits = 0;
-        float[][] spots = {
-            {CENTRIFUGE_CX - 0.5f, CENTRIFUGE_CY + 0.5f},
-            {CENTRIFUGE_CX + 0.5f, CENTRIFUGE_CY - 0.5f},
-            {CENTRIFUGE_CX - 0.8f, CENTRIFUGE_CY - 0.3f},
-            {CENTRIFUGE_CX + 0.8f, CENTRIFUGE_CY + 0.3f},
-        };
-        for (int i = 0; i < n && i < spots.length; i++) {
-            if (balls.size < internCap()) {
-                spawnBall(spots[i][0], spots[i][1]);
-            }
-        }
-        if (n > 0) showNotif("NEW CREW", n + " recruits from Nova Terra joined!");
+        sd.pendingNewRecruits = 0; // Maze mode: no auto-recruits
     }
 
     private void applySectorPerks() {
