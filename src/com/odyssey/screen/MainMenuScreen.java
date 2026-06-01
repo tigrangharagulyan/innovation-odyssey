@@ -230,7 +230,7 @@ public class MainMenuScreen extends ScreenAdapter {
             new Color(0.60f, 0.78f, 0.90f, 1f));
 
         addShopCard(shopOverlay,
-            "\u2666",  new Color(0.30f, 0.85f, 0.40f, 1f),
+            "\u25c6",  new Color(0.30f, 0.85f, 0.40f, 1f),
             "GEMS",    new Color(0.82f, 1.00f, 0.85f, 1f),
             "Buy hard currency packs\nto unlock lives & boosts.",
             new Color(0.60f, 0.85f, 0.65f, 1f));

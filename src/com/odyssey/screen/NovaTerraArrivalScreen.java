@@ -291,7 +291,7 @@ public class NovaTerraArrivalScreen extends ScreenAdapter {
             planet.name, planet.atmosphere));
 
         if (sd.gravityEnabled) {
-            gravityTagLabel.setText("\u25C9 GRAVITY FIELD");
+            gravityTagLabel.setText("\u25CF GRAVITY FIELD");
             gravityValueLabel.setText(String.format("%.1fG", planet.gravity));
             gravityDescLabel.setText(gDesc);
             gravityBar.setValue(planet.gravity);

@@ -31,7 +31,7 @@ public class BridgeFlightScreen extends ScreenAdapter {
     private static final String[] SECTOR_PERKS = {
         "Elastic Walls",
         "Gravity Wells + Extra Slots",
-        "Wall x3 + Coll x2 + Free Intern",
+        "Wall ×3 + Coll ×2 + Free Intern",
         "Colony Landing"
     };
     private static final String[] SECTOR_PERK_DESCS = {
