@@ -8673,6 +8673,36 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 spawnCentrifugeBumper(_fx, _fy);
             }
         }
+        // ---- Ring destruction ----
+        for (int _ri = 0; _ri < 3; _ri++) {
+            if (rings[_ri] == null) continue;
+            Object _ud = rings[_ri].getUserData();
+            if (_ud instanceof ShipData.RingHitData
+                    && ((ShipData.RingHitData) _ud).readyToDestroy) {
+                world.destroyBody(rings[_ri]);
+                rings[_ri] = null;
+                SoundManager.get().playMilestone();
+                triggerShake(4f, 0.08f);
+                showCeleb("RING DESTROYED", "Layer " + (_ri + 1) + " cleared!");
+            }
+        }
+        // ---- Center destruction → planet win ----
+        if (centerBody != null && centerBody.getUserData() instanceof ShipData.CenterHitData) {
+            if (((ShipData.CenterHitData) centerBody.getUserData()).readyToDestroy) {
+                world.destroyBody(centerBody);
+                centerBody = null;
+                triggerPlanetWin();
+            }
+        }
+    }
+
+    private void triggerPlanetWin() {
+        ShipData sd = ShipData.get();
+        sd.markArrival(0f, 0f);
+        sd.claimArrivalReward();
+        SoundManager.get().playMilestone();
+        triggerShake(6f, 0.12f);
+        game.transitionTo(com.odyssey.GameState.NOVA_TERRA_ARRIVAL);
     }
 
     private void updateJPS(float delta) {
