@@ -3813,6 +3813,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         ShipData _sk = ShipData.get();
         _sk.blazeShieldActive = false; _sk.blazeOverloadHits = 0;
         _sk.sparkMarkedRing = -1; _sk.sparkMarkerDashPending = false;
+        if (frostAttachActive) { for (int _bi=0;_bi<balls.size;_bi++) { if ("INTERN_FROST".equals(balls.get(_bi).getUserData()) && !balls.get(_bi).getFixtureList().isEmpty()) { balls.get(_bi).getFixtureList().first().setSensor(false); break; } } }
         frostAttachActive = false; frostAttachRingIdx = -1; frostBigActive = false;
         _sk.frostBigActive = false; _sk.frostGravityActive = false;
         if (orbSkillLabels != null) updateOrbSkillRow();
@@ -9178,8 +9179,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
             if (rings[0] == null && frostAttachRingIdx == 0) {
                 frostAttachActive = false; skillActiveTimer[2][0] = 0f;
                 if (_fBody2 != null) {
-                    com.badlogic.gdx.physics.box2d.Fixture _ff2 = _fBody2.getFixtureList().isEmpty() ? null : _fBody2.getFixtureList().first();
-                    if (_ff2 != null) { com.badlogic.gdx.physics.box2d.Filter _flt2 = _ff2.getFilterData(); _flt2.maskBits = MASK_DEFAULT; _ff2.setFilterData(_flt2); }
+                    if (!_fBody2.getFixtureList().isEmpty()) _fBody2.getFixtureList().first().setSensor(false);
                     float _ka = MathUtils.random(MathUtils.PI2); _fBody2.setLinearVelocity(MathUtils.cos(_ka) * 5f, MathUtils.sin(_ka) * 5f);
                 }
             }
@@ -9717,10 +9717,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
                         frostAttachRingIdx = 0;
                         frostAttachActive = true; frostAttachHitTimer = 0f;
                         // Disable ring collisions for FROST so it stays on drum wall
-                        if (_fAt != null && !_fAt.getFixtureList().isEmpty()) {
-                            com.badlogic.gdx.physics.box2d.Fixture _ff = _fAt.getFixtureList().first();
-                            com.badlogic.gdx.physics.box2d.Filter _flt = _ff.getFilterData(); _flt.maskBits = MASK_NO_RINGS; _ff.setFilterData(_flt);
-                        }
+                        // Make FROST a sensor — nothing can push it off the wall
+                        if (_fAt != null && !_fAt.getFixtureList().isEmpty())
+                            _fAt.getFixtureList().first().setSensor(true);
                     } else { mana += SKILL_MANA_COST[2][0]; skillCooldownTimer[2][0] = 0; }
                     break;
                 case 1: // ICE RUSH — detach FROST and fire inward
@@ -9731,7 +9730,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                         // Restore normal ring collisions
                         for (int _bi = 0; _bi < balls.size; _bi++) {
                             if ("INTERN_FROST".equals(balls.get(_bi).getUserData())) {
-                                if (!balls.get(_bi).getFixtureList().isEmpty()) { com.badlogic.gdx.physics.box2d.Fixture _ff3 = balls.get(_bi).getFixtureList().first(); com.badlogic.gdx.physics.box2d.Filter _flt3 = _ff3.getFilterData(); _flt3.maskBits = MASK_DEFAULT; _ff3.setFilterData(_flt3); }
+                                if (!balls.get(_bi).getFixtureList().isEmpty()) balls.get(_bi).getFixtureList().first().setSensor(false);
                                 break;
                             }
                         }
