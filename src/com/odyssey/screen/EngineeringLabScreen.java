@@ -60,8 +60,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private static final float EMBER_BALL_RADIUS  = 0.38f;
     // Per-type physics: radius, restitution, entry-velocity multiplier
     private static final float[] ORB_RADIUS = {0.25f, 0.14f, 0.32f};       // SPARK, BLAZE, FROST
-    private static final float[] ORB_REST   = {0.90f, 1.25f, 0.65f};       // SPARK, BLAZE, FROST
-    private static final float[] ORB_VEL    = {0.60f, 1.00f, 0.45f};       // entry-velocity mult
+    private static final float[] ORB_REST   = {1.10f, 1.25f, 0.65f};       // SPARK, BLAZE, FROST
+    private static final float[] ORB_VEL    = {0.90f, 1.00f, 0.28f};       // entry-velocity mult
     private static final float EMBER_INTERN_DRAW  = 52f;
     private static final float BALL_DENSITY        = 1.0f;
     private static final float BALL_RESTITUTION    = 0.90f;
@@ -349,7 +349,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         {"SLOW", "ICE SPIKE", "CRYO", "FREEZE"}
     };
     private static final float[][] ORB_COLORS = {
-        {0.35f, 0.65f, 1.00f},  // SPARK — blue
+        {0.75f, 0.20f, 1.00f},  // SPARK — purple
         {1.00f, 0.42f, 0.10f},  // BLAZE — orange
         {0.25f, 0.92f, 1.00f},  // FROST — cyan
     };
@@ -7065,7 +7065,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     0, 0, texEmberIntern.getWidth(), texEmberIntern.getHeight(), false, false);
             } else {
                 // Outer glow layer — color by orb type
-                if (_spark)      batch.setColor(0.35f * glow, 0.65f * glow, 1.00f * glow, 0.65f);
+                if (_spark)      batch.setColor(0.75f * glow, 0.20f * glow, 1.00f * glow, 0.65f); // purple
                 else if (_blaze) batch.setColor(1.00f * glow, 0.42f * glow, 0.10f * glow, 0.65f);
                 else             batch.setColor(0.25f * glow, 0.92f * glow, 1.00f * glow, 0.65f); // frost
                 batch.draw(texParticle, px - hw, py - hh, hw, hh,
@@ -7073,7 +7073,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     0, 0, texParticle.getWidth(), texParticle.getHeight(), false, false);
 
                 // Bright inner core — color by orb type
-                if (_spark)      batch.setColor(0.70f, 0.88f, 1.00f, 0.90f);
+                if (_spark)      batch.setColor(0.88f, 0.55f, 1.00f, 0.90f); // purple core
                 else if (_blaze) batch.setColor(1.00f, 0.85f, 0.45f, 0.90f);
                 else             batch.setColor(0.85f, 0.98f, 1.00f, 0.90f); // frost
                 batch.draw(texParticleCore, px - chw, py - chh, chw, chh,
