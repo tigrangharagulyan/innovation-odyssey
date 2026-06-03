@@ -348,8 +348,9 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private TextButton[] perkButtons;
     private Label[]      perkDescLabels;
     private Table        rightPerksTable;
-    private enum OrbType { SPARK, BLAZE, FROST }
-    private OrbType selectedOrbType = OrbType.SPARK;
+    // Orb selection is now a registry index (0-based). Replaces the old OrbType enum.
+    private static final int ORB_SPARK = 0, ORB_BLAZE = 1, ORB_FROST = 2;
+    private int selectedOrbIndex = ORB_SPARK;
     private Label[]      orbSkillLabels;
     private TextButton[] skillBtns;
     private int   skillHoldSlot  = -1;   // which slot is being held (-1=none)
@@ -3210,10 +3211,10 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 // During step 1: always capture touch so card hides immediately
                 if (tutorialStep == 1) tutorialInternDragging = true;
                 // Check capacity and affordability before starting actual drag
-                selectedOrbType = OrbType.SPARK;
+                selectedOrbIndex = ORB_SPARK;
                 if (orbSkillLabels != null) updateOrbSkillRow();
                 boolean normalHire  = (balls.size + pelletGroups.size) < internCap() && sd2.crystals >= internCost()
-                        && countOrbType(OrbType.SPARK) < 1 && mana >= MANA_LAUNCH_COST;
+                        && countOrbType(ORB_SPARK) < 1 && mana >= MANA_LAUNCH_COST;
                 if (!normalHire) return tutorialStep == 1; // capture for step 1 even if not affordable
                 dragMode         = PLACE_INTERN;
                 dragStageX       = event.getStageX();
@@ -3245,7 +3246,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     wy = CENTRIFUGE_CY + ddy / dist * internSafeR;
                 }
                 ShipData sd2 = ShipData.get();
-                if (balls.size < internCap() && countOrbType(OrbType.SPARK) < 1 && mana >= MANA_LAUNCH_COST && sd2.spendCrystals(internCost())) {
+                if (balls.size < internCap() && countOrbType(ORB_SPARK) < 1 && mana >= MANA_LAUNCH_COST && sd2.spendCrystals(internCost())) {
                     mana -= MANA_LAUNCH_COST;
                     // Slingshot: use RAW (pre-clamp) stage coords for direction
                     float originWX = dragOriginStageX / PPM;
@@ -3274,11 +3275,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
                                      float x, float y, int pointer, int button) {
                 if (button != 0) return false;
                 // Always select BLAZE type (shows skills even if can't afford)
-                selectedOrbType = OrbType.BLAZE;
+                selectedOrbIndex = ORB_BLAZE;
                 if (orbSkillLabels != null) updateOrbSkillRow();
                 // Start drag only if can launch
                 ShipData sd2 = ShipData.get();
-                if (countOrbType(OrbType.BLAZE) < 1 && mana >= MANA_LAUNCH_COST
+                if (countOrbType(ORB_BLAZE) < 1 && mana >= MANA_LAUNCH_COST
                         && sd2.crystals >= internCost() && (balls.size + pelletGroups.size) < internCap()) {
                     dragMode         = PLACE_INTERN;
                     dragStageX       = event.getStageX();
@@ -3303,7 +3304,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 // Maze mode: BLAZE orb launch
                 if (dm == PLACE_INTERN) {
                     ShipData sd2b = ShipData.get();
-                    if ((balls.size + pelletGroups.size) < internCap() && countOrbType(OrbType.BLAZE) < 1
+                    if ((balls.size + pelletGroups.size) < internCap() && countOrbType(ORB_BLAZE) < 1
                             && mana >= MANA_LAUNCH_COST && sd2b.spendCrystals(internCost())) {
                         mana -= MANA_LAUNCH_COST;
                         float _oWX = dragOriginStageX / PPM, _oWY = (dragOriginStageY + 80f) / PPM;
@@ -3376,11 +3377,11 @@ public class EngineeringLabScreen extends ScreenAdapter {
                                      float x, float y, int pointer, int button) {
                 if (button != 0) return false;
                 // Always select FROST type (shows skills even if can't afford)
-                selectedOrbType = OrbType.FROST;
+                selectedOrbIndex = ORB_FROST;
                 if (orbSkillLabels != null) updateOrbSkillRow();
                 // Start drag only if can launch
                 ShipData sd2 = ShipData.get();
-                if (countOrbType(OrbType.FROST) < 1 && mana >= MANA_LAUNCH_COST
+                if (countOrbType(ORB_FROST) < 1 && mana >= MANA_LAUNCH_COST
                         && sd2.crystals >= internCost() && (balls.size + pelletGroups.size) < internCap()) {
                     dragMode         = PLACE_INTERN;
                     dragStageX       = event.getStageX();
@@ -3405,7 +3406,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                 // Maze mode: FROST orb launch
                 if (_dmG == PLACE_INTERN) {
                     ShipData sd2g = ShipData.get();
-                    if ((balls.size + pelletGroups.size) < internCap() && countOrbType(OrbType.FROST) < 1
+                    if ((balls.size + pelletGroups.size) < internCap() && countOrbType(ORB_FROST) < 1
                             && mana >= MANA_LAUNCH_COST && sd2g.spendCrystals(internCost())) {
                         mana -= MANA_LAUNCH_COST;
                         float _oWX = dragOriginStageX / PPM, _oWY = (dragOriginStageY + 80f) / PPM;
@@ -3942,7 +3943,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         // Suppress all one-shot hints
         launchHintShown = true; bumperHintShown = true; gravityHintShown = true; perkIconHintShown = true;
         // Maze mode — orb type buttons visible, flight/placement buttons hidden
-        selectedOrbType = OrbType.SPARK;
+        selectedOrbIndex = ORB_SPARK;
         mana = MAX_MANA;
         for (int _ti = 0; _ti < 3; _ti++) { java.util.Arrays.fill(skillCooldownTimer[_ti], 0); java.util.Arrays.fill(skillActiveTimer[_ti], 0); }
         blazeMagnetActive = false; blazeRallyFlash = 0f; blazeOverloadFlash = 0f; blazeShieldAngle = 0f;
@@ -4278,12 +4279,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
             float _idx = flyingInternWX - CENTRIFUGE_CX;
             float _idy = flyingInternWY - CENTRIFUGE_CY;
             if (_idx * _idx + _idy * _idy < (CENTRIFUGE_R * 0.80f) * (CENTRIFUGE_R * 0.80f)) {
-                int _oti = selectedOrbType.ordinal();
+                int _oti = selectedOrbIndex;
                 spawnBall(flyingInternWX, flyingInternWY, ORB_RADIUS[_oti], ORB_REST[_oti]);
                 // Tag with type; apply type-specific entry velocity
                 if (!balls.isEmpty()) {
                     Body _nb = balls.get(balls.size - 1);
-                    _nb.setUserData("INTERN_" + selectedOrbType.name());
+                    _nb.setUserData("INTERN_" + OrbRegistry.get(selectedOrbIndex).id);
                     _nb.setLinearVelocity(flyingInternVX * ORB_VEL[_oti], flyingInternVY * ORB_VEL[_oti]);
                 }
                 internAddedNewSpeed = Math.min(CENTRIFUGE_RPM_BASE + balls.size * 0.75f, centrifugeRpmMax);
@@ -4539,7 +4540,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // ---- ADD ORB → SPARK orb button text ----
         {
-            int _sparkC = countOrbType(OrbType.SPARK);
+            int _sparkC = countOrbType(ORB_SPARK);
             btnAdd.setText(_sparkC >= 1
                 ? "SPARK\nIN DRUM"
                 : String.format("SPARK\n%.0f SP", internCost()));
@@ -4547,7 +4548,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // ---- Bumper → BLAZE orb button ----
         {
-            int _blazeC = countOrbType(OrbType.BLAZE);
+            int _blazeC = countOrbType(ORB_BLAZE);
             btnBumper.setText(_blazeC >= 1
                 ? "BLAZE\nIN DRUM"
                 : String.format("BLAZE\n%.0f SP", internCost()));
@@ -4555,7 +4556,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
         // ---- GravityWell → FROST orb button ----
         {
-            int _frostC = countOrbType(OrbType.FROST);
+            int _frostC = countOrbType(ORB_FROST);
             btnGravityWell.setText(_frostC >= 1
                 ? "FROST\nIN DRUM"
                 : String.format("FROST\n%.0f SP", internCost()));
@@ -4589,17 +4590,17 @@ public class EngineeringLabScreen extends ScreenAdapter {
         // ---- Button tints ----
         // ADD ORB → SPARK type tint
         {
-            int _sparkC = countOrbType(OrbType.SPARK);
+            int _sparkC = countOrbType(ORB_SPARK);
             boolean _sparkFull = _sparkC >= 1 || (balls.size + pelletGroups.size) >= cap;
             btnAdd.setStyle(_sparkFull ? LOCK : orbCanBuy ? CORAL : NORM);
         }
 
         // Maze mode: BLAZE / FROST type tints
         {
-            int _blazeC = countOrbType(OrbType.BLAZE);
+            int _blazeC = countOrbType(ORB_BLAZE);
             boolean _blazeOk = _blazeC < 1 && sd.crystals >= internCost() && (balls.size + pelletGroups.size) < internCap();
             btnBumper.setStyle(_blazeC >= 1 ? LOCK : _blazeOk ? CORAL : NORM);
-            int _frostC = countOrbType(OrbType.FROST);
+            int _frostC = countOrbType(ORB_FROST);
             boolean _frostOk = _frostC < 1 && sd.crystals >= internCost() && (balls.size + pelletGroups.size) < internCap();
             btnGravityWell.setStyle(_frostC >= 1 ? LOCK : _frostOk ? CORAL : NORM);
         }
@@ -5540,8 +5541,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
     }
 
     private void drawSelectedOrbGlow() {
-        TextButton _sel = selectedOrbType == OrbType.SPARK ? btnAdd
-                        : selectedOrbType == OrbType.BLAZE ? btnBumper : btnGravityWell;
+        TextButton _sel = selectedOrbIndex == ORB_SPARK ? btnAdd
+                        : selectedOrbIndex == ORB_BLAZE ? btnBumper : btnGravityWell;
         if (_sel == null) return;
         com.badlogic.gdx.math.Vector2 _p = _sel.localToStageCoordinates(new com.badlogic.gdx.math.Vector2(0f, 0f));
         float _x = _p.x, _y = _p.y, _w = _sel.getWidth(), _h = _sel.getHeight();
@@ -5571,7 +5572,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         float _cx = _pos.x + _btn.getWidth() * 0.5f;
         float _cy = _pos.y + _btn.getHeight() * 0.5f;
         float _r  = Math.min(_btn.getWidth(), _btn.getHeight()) * 0.5f - 2f;
-        int _ti = selectedOrbType.ordinal();
+        int _ti = selectedOrbIndex;
         float[] _fc = ORB_COLORS[_ti];
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
@@ -7530,8 +7531,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
         // Flying intern sprite (visual slingshot phase before entering drum)
         if (flyingInternActive) {
             float _ipx = flyingInternWX * PPM, _ipy = flyingInternWY * PPM;
-            float _id  = ORB_RADIUS[selectedOrbType.ordinal()] * PPM * 3.2f;
-            float[] _fc = ORB_COLORS[selectedOrbType.ordinal()];
+            float _id  = ORB_RADIUS[selectedOrbIndex] * PPM * 3.2f;
+            float[] _fc = ORB_COLORS[selectedOrbIndex];
             batch.setColor(_fc[0], _fc[1], _fc[2], 0.92f);
             batch.draw(texParticle, _ipx - _id * 0.5f, _ipy - _id * 0.5f, _id, _id);
             float _ic = _id * 0.42f;
@@ -9965,8 +9966,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
         }
     };
 
-    private int countOrbType(OrbType t) {
-        String _tag = "INTERN_" + t.name();
+    private int countOrbType(int orbIndex) {
+        String _tag = "INTERN_" + OrbRegistry.get(orbIndex).id;
         int _c = 0;
         for (int _i = 0; _i < balls.size; _i++) {
             if (_tag.equals(balls.get(_i).getUserData())) _c++;
@@ -9985,7 +9986,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
     private void updateOrbSkillRow() {
         if (skillBtns == null) return;
-        int _ti = selectedOrbType.ordinal();
+        int _ti = selectedOrbIndex;
         float[] _fc = ORB_COLORS[_ti];
         com.badlogic.gdx.graphics.Color _active = new com.badlogic.gdx.graphics.Color(_fc[0], _fc[1], _fc[2], 1f);
         com.badlogic.gdx.graphics.Color _cd     = new com.badlogic.gdx.graphics.Color(0.5f, 0.5f, 0.5f, 1f);
@@ -10014,7 +10015,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
     }
 
     private void upgradeSkill(int slot) {
-        int _ti = selectedOrbType.ordinal();
+        int _ti = selectedOrbIndex;
         ShipData _sd = ShipData.get();
         int _rank = _sd.skillRank[_ti][slot];
         if (_rank >= 3) { showNotif(ORB_SKILLS[_ti][slot] + " MASTERED", "Already at max rank ●●●"); return; }
@@ -10032,13 +10033,13 @@ public class EngineeringLabScreen extends ScreenAdapter {
     }
 
     private void activateSkill(int slot) {
-        int _ti = selectedOrbType.ordinal();
+        int _ti = selectedOrbIndex;
         ShipData _sd = ShipData.get();
         int _rank = Math.max(1, _sd.skillRank[_ti][slot]); // always at least rank 1
         if (skillCooldownTimer[_ti][slot] > 0) return;
         float _cost = SKILL_MANA_COST[_ti][slot];
         if (mana < _cost) return;
-        if (countOrbType(selectedOrbType) == 0) return;
+        if (countOrbType(selectedOrbIndex) == 0) return;
         mana = Math.max(0, mana - _cost);
         float _rankCdMult = (_rank == 3) ? RANK3_CD_MULT : 1f;
         skillCooldownTimer[_ti][slot] = SKILL_COOLDOWN[_ti][slot] * _rankCdMult;
@@ -10046,7 +10047,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         float _durBonus = 0f;
         if (slot == 2 || slot == 3) _durBonus = RANK_SPARK_DUR_BONUS[_ri]; // OVERDRIVE/SPLIT for SPARK
         skillActiveTimer[_ti][slot] = SKILL_DURATION[_ti][slot] + (_ti == 0 ? _durBonus : 0f);
-        if (selectedOrbType == OrbType.SPARK) {
+        if (selectedOrbIndex == ORB_SPARK) {
             switch (slot) {
                 case 0: sparkDashPending = true; break; // DASH — speed applied in tick
                 case 1: // MARKER — next wall hit by SPARK spawns a bumper at contact point
@@ -10082,7 +10083,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
                     triggerShake(3f, 0.07f);
                     break;
             }
-        } else if (selectedOrbType == OrbType.BLAZE) {
+        } else if (selectedOrbIndex == ORB_BLAZE) {
             switch (slot) {
                 case 0: break; // SHIELD — flag set in tick
                 case 1: blazeMagnetActive = true; break;
