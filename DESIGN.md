@@ -29,6 +29,53 @@ Pre-planet: SETUP/LOADOUT screen — pick N orbs, see planet modifier, adapt
 - **Planet modifier must drive loadout** (e.g. high gravity -> bring heavy FROST), else setup is cosmetic.
 - **Concern:** 1-orb start may feel empty -> make orb #1 skills instantly fun (DASH), unlock orb #2 *fast* (planet 1 clear).
 
+## Onboarding Flow (continuous model — first 10 minutes)
+"Hook, Loop, Progress." Strip all late-game clutter at start: one orb, one skill, one choice. Reveal complexity slowly.
+
+**Phase 1 — Humble beginning (Planet 1, min 1)**
+- Screen opens: **1 orb already bouncing** in the drum (continuous, no launch).
+- Bottom deck empty except **one flashing button: [DASH]** (punchy starter, NOT a defensive skill).
+- Other 3 skill slots + rest of roster = locked / greyed with lock icon.
+- Player taps DASH -> orb rockets forward, plows rings/bumpers, **SP scatters**.
+- Mana refills -> tap again. They learn: *tap = power spike*.
+
+**Phase 2 — First taste (the hook)**
+- Switch to Upgrades tab, ~120 SP collected.
+- **Only option:** DASH Rank 1->2 for 100 SP. Buy.
+- Back in drum: DASH faster, bigger impact, ~2x income on tap. *Felt* the upgrade.
+
+**Phase 3 — Crossroads (~350 SP)**
+- Upgrades tab evolved. Brutal choice (same currency = it stings):
+  - **Go Tall:** DASH R3, or unlock 2nd skill OVERLOAD (~300 SP)
+  - **Go Wide:** unlock 2nd orb SPARK (diff weight/skill) + 1 orb slot (~350 SP)
+- Wide = new toy immediately bouncing alongside. Tall = workhorse becomes a monster.
+
+**Continuous-model notes:**
+- Income comes from continuous bouncing; **tap = burst multiplier on top**, not the only income.
+- Starter skill must be punchy (DASH / drill), never defensive Shield — first taste = power.
+- "Add slot" = more orbs in the drum (not more launches).
+
+## The 30s Rhythm Fix (continuous = passive risk)
+- Mana refills every ~5–8s -> tap that often.
+- **Each tap = visible SP burst** (number pops, combo meter).
+- Choice each window: tap small skill now, or bank mana for OVERLOAD combo.
+
+## Screen Structure — Two Tabs
+```
+[ ARENA tab ]            [ UPGRADES tab ]
+orbs bounce in drum      shop / progression
+tap skills               spend SP / crystals
+watch SP tick            Tall vs Wide choices
+```
+**Upgrades tab sections** (unlock progressively so minute-1 isn't overwhelming):
+1. **Skills** — per equipped orb, rank 1->3, SP cost (Go Tall)
+2. **Roster** — locked/unlocked orbs, crystal cost to unlock (Go Wide)
+3. **Slots** — buy extra orb slots (crystals)
+4. **Loadout** — pick which N orbs go in drum; pre-planet setup lives here
+5. **Perks** — view earned center-break perks (read-only)
+
+Early game shows only **Skills**; other sections reveal as unlocked.
+
 ## Upgrade Dimensions (5, mapped to 3 currencies)
 | Currency | Buys | Dimension |
 |----------|------|-----------|
