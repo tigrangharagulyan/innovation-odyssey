@@ -275,7 +275,13 @@ public final class ShipData {
 
     // Skill rank upgrades: [orbType 0=SPARK,1=BLAZE,2=FROST][slot 0-3]
     // 1=basic, 2=enhanced, 3=mastered
-    public int[][] skillRank = {{1,1,1,1},{1,1,1,1},{1,1,1,1}};
+    public int[][] skillRank = buildDefaultSkillRanks();
+    private static int[][] buildDefaultSkillRanks() {
+        int n = com.odyssey.orb.OrbRegistry.count();
+        int[][] r = new int[n][4];
+        for (int i = 0; i < n; i++) for (int j = 0; j < 4; j++) r[i][j] = 1;
+        return r;
+    }
 
     public static final float SOLARA_GRAVITY  = 1.0f;
     public static final float SOLARA_DISTANCE = 1000f;
@@ -650,7 +656,7 @@ public final class ShipData {
         p.putBoolean("emHeavy", savedEmberHeavyChassis);
         p.putBoolean("emMag",   savedEmberMagneticRim);
         p.putInteger("hubTier", savedHubUpgradeTier);
-        for (int _r = 0; _r < 3; _r++)
+        for (int _r = 0; _r < skillRank.length; _r++)
             for (int _s = 0; _s < 4; _s++)
                 p.putInteger("skillRank_" + _r + "_" + _s, skillRank[_r][_s]);
         p.putInteger("ballCount", savedBallCount);
@@ -771,7 +777,7 @@ public final class ShipData {
         savedEmberHeavyChassis     = p.getBoolean("emHeavy", false);
         savedEmberMagneticRim      = p.getBoolean("emMag",   false);
         savedHubUpgradeTier        = p.getInteger("hubTier", 0);
-        for (int _r = 0; _r < 3; _r++)
+        for (int _r = 0; _r < skillRank.length; _r++)
             for (int _s = 0; _s < 4; _s++)
                 skillRank[_r][_s] = p.getInteger("skillRank_" + _r + "_" + _s, 1);
         savedBallCount             = p.getInteger("ballCount", 0);

@@ -34,6 +34,7 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.odyssey.GameState;
 import com.odyssey.OdysseyGame;
+import com.odyssey.orb.OrbRegistry;
 import com.odyssey.OdysseyTheme;
 import com.odyssey.SoundManager;
 import com.odyssey.ShipData;
@@ -58,9 +59,19 @@ public class EngineeringLabScreen extends ScreenAdapter {
 
     private static final float BALL_RADIUS        = 0.25f;
     private static final float EMBER_BALL_RADIUS  = 0.38f;
-    // Per-type physics: radius, restitution, entry-velocity multiplier
-    private static final float[] ORB_RADIUS = {0.14f, 0.25f, 0.32f};       // SPARK(fast/small), BLAZE(normal), FROST(big/slow)
-    private static final float[] ORB_REST   = {1.25f, 0.90f, 0.65f};       // SPARK, BLAZE, FROST
+    // Per-type physics — derived from OrbRegistry (single source of truth)
+    private static final float[] ORB_RADIUS = buildOrbRadius();
+    private static final float[] ORB_REST   = buildOrbRest();
+    private static float[] buildOrbRadius() {
+        float[] a = new float[OrbRegistry.count()];
+        for (int i = 0; i < a.length; i++) a[i] = OrbRegistry.get(i).radius;
+        return a;
+    }
+    private static float[] buildOrbRest() {
+        float[] a = new float[OrbRegistry.count()];
+        for (int i = 0; i < a.length; i++) a[i] = OrbRegistry.get(i).restitution;
+        return a;
+    }
     private static final float[] ORB_VEL    = {1.00f, 0.60f, 0.28f};       // entry-velocity mult
     private static final float EMBER_INTERN_DRAW  = 52f;
     private static final float BALL_DENSITY        = 1.0f;
@@ -353,30 +364,32 @@ public class EngineeringLabScreen extends ScreenAdapter {
     // SPARK: DASH=0, OVERDRIVE=1, CHAIN=2, STATIC=3
     // BLAZE: SHIELD=0, MAGNET=1, OVERLOAD=2, RALLY=3
     // FROST: SLOW=0, ICE SPIKE=1, CRYO=2, FREEZE=3
-    private static final float[][] SKILL_MANA_COST = {
-        {10f, 20f, 30f, 50f},  // SPARK: DASH, MARKER, OVERDRIVE, SPLIT
-        {20f, 20f, 25f,  0f},  // BLAZE: SHIELD, MAGNET, OVERLOAD, RALLY
-        {20f, 25f, 30f, 40f},  // FROST: ATTACH, ICE RUSH, BIG, GRAVITY
-    };
-    private static final float[][] SKILL_COOLDOWN = {
-        { 6f, 12f, 14f, 25f},  // SPARK: DASH, MARKER, OVERDRIVE, SPLIT
-        {14f, 12f, 16f, 18f},  // BLAZE
-        {14f,  8f, 14f, 22f},  // FROST
-    };
-    private static final float[][] SKILL_DURATION = {
-        { 0f,  0f,  6f,  6f},  // SPARK: DASH instant, MARKER until-hit, OVERDRIVE 6s, SPLIT 6s
-        { 6f,  6f,  8f,  0f},  // BLAZE
-        {60f,  0f,  6f, 10f},  // FROST: ATTACH holds until ICE RUSH, BIG 6s, GRAVITY 10s
-    };
-    // SP cost to unlock rank 1, upgrade to rank 2, upgrade to rank 3 — per skill [orbType][slot]
-    private static final float[][][] SKILL_RANK_SP_COST = {
-        // SPARK: DASH, MARKER, OVERDRIVE, SPLIT
-        {{ 500f, 1500f, 4000f}, { 750f, 2000f, 5500f}, {1000f, 2500f, 6000f}, {1000f, 3000f, 8000f}},
-        // BLAZE: SHIELD, MAGNET, OVERLOAD, RALLY
-        {{ 500f, 1500f, 4000f}, { 750f, 2000f, 5500f}, {1000f, 3000f, 8000f}, { 500f, 1500f, 4000f}},
-        // FROST: ATTACH, ICE RUSH, BIG, GRAVITY
-        {{ 750f, 2000f, 5500f}, { 750f, 2000f, 5500f}, { 500f, 1500f, 4000f}, {1000f, 3000f, 8000f}},
-    };
+    // Per-skill data — derived from OrbRegistry
+    private static final float[][]   SKILL_MANA_COST   = buildSkillFloat(0);
+    private static final float[][]   SKILL_COOLDOWN    = buildSkillFloat(1);
+    private static final float[][]   SKILL_DURATION    = buildSkillFloat(2);
+    private static final float[][][] SKILL_RANK_SP_COST = buildSkillRankCost();
+    /** field: 0=manaCost, 1=cooldown, 2=duration */
+    private static float[][] buildSkillFloat(int field) {
+        int n = OrbRegistry.count();
+        float[][] out = new float[n][4];
+        for (int t = 0; t < n; t++) {
+            OrbRegistry.OrbDef d = OrbRegistry.get(t);
+            for (int s = 0; s < 4; s++) {
+                OrbRegistry.SkillDef sk = d.skills[s];
+                out[t][s] = field == 0 ? sk.manaCost : field == 1 ? sk.cooldown : sk.duration;
+            }
+        }
+        return out;
+    }
+    private static float[][][] buildSkillRankCost() {
+        int n = OrbRegistry.count();
+        float[][][] out = new float[n][4][];
+        for (int t = 0; t < n; t++)
+            for (int s = 0; s < 4; s++)
+                out[t][s] = OrbRegistry.get(t).skills[s].rankSpCost;
+        return out;
+    }
     // Rank-scaled effect values per skill (rank 1/2/3) — used in activateSkill
     // SPARK DASH impulse speed
     private static final float[] RANK_DASH_SPEED      = {8f, 12f, 16f};
@@ -429,21 +442,30 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private boolean frostBigActive       = false;  // slot 2: 2× draw size
     private boolean frostBigWasActive   = false;
     private boolean frostIceCharged      = false;  // ICE RUSH fired from ATTACH = charged strike
-    private static final String[][] ORB_SKILLS = {
-        {"DASH", "MARKER", "OVERDRIVE", "SPLIT"},
-        {"SHIELD", "MAGNET", "OVERLOAD", "REV POL"},
-        {"ATTACH", "ICE RUSH", "BIG", "GRAVITY"}
-    };
-    private static final String[][] ORB_SKILL_DESC = {
-        {"Burst fwd\ninstant", "Wall hit\nspawns bumper", "6s min\nspd 8m/s", "6s split\n3 orbs"},
-        {"3x ring\nhit rate", "Pull orbs\nto BLAZE", "Horn push\nwall=speed", "Pull ALL\nto center"},
-        {"Park+spin\nwall", "Detach\nrush 4x", "3x size\n3x dmg", "Snow wave\nspin all"},
-    };
-    private static final float[][] ORB_COLORS = {
-        {0.75f, 0.20f, 1.00f},  // SPARK — purple
-        {1.00f, 0.42f, 0.10f},  // BLAZE — orange
-        {0.25f, 0.92f, 1.00f},  // FROST — cyan
-    };
+    // Skill names/descriptions/colors — derived from OrbRegistry
+    private static final String[][] ORB_SKILLS      = buildSkillNames();
+    private static final String[][] ORB_SKILL_DESC  = buildSkillDescs();
+    private static final float[][]  ORB_COLORS      = buildOrbColors();
+    private static String[][] buildSkillNames() {
+        int n = OrbRegistry.count();
+        String[][] out = new String[n][4];
+        for (int t = 0; t < n; t++)
+            for (int s = 0; s < 4; s++) out[t][s] = OrbRegistry.get(t).skills[s].name;
+        return out;
+    }
+    private static String[][] buildSkillDescs() {
+        int n = OrbRegistry.count();
+        String[][] out = new String[n][4];
+        for (int t = 0; t < n; t++)
+            for (int s = 0; s < 4; s++) out[t][s] = OrbRegistry.get(t).skills[s].desc;
+        return out;
+    }
+    private static float[][] buildOrbColors() {
+        int n = OrbRegistry.count();
+        float[][] out = new float[n][];
+        for (int t = 0; t < n; t++) out[t] = OrbRegistry.get(t).color;
+        return out;
+    }
 
     // Bookkeeping
     private final Array<Body>            balls           = new Array<>();
@@ -659,7 +681,8 @@ public class EngineeringLabScreen extends ScreenAdapter {
     private Texture texBlade3;   // Variation C — Reinforced Diamond-Cleaver
     private Texture texRocket;
     private Texture texLock;
-    private Texture texOrbSpark, texOrbBlaze, texOrbFrost;
+    private Texture[] orbTextures;                    // indexed by OrbRegistry order
+    private Texture texOrbSpark, texOrbBlaze, texOrbFrost;  // aliases for orbTextures[0..2]
     private Texture texOverloadHorn;
     private Texture texOverloadDrill;
 
@@ -730,9 +753,12 @@ public class EngineeringLabScreen extends ScreenAdapter {
         texBlade3       = genBladeTextureC(96);
         texRocket       = genRocketTexture(56);
         texHandDrag     = new Texture(Gdx.files.internal("ui/hand_drag.png"));
-        texOrbSpark     = new Texture(Gdx.files.internal("ui/orb_spark.png"));
-        texOrbBlaze     = new Texture(Gdx.files.internal("ui/orb_blaze.png"));
-        texOrbFrost     = new Texture(Gdx.files.internal("ui/orb_frost.png"));
+        orbTextures     = new Texture[OrbRegistry.count()];
+        for (int _oi = 0; _oi < orbTextures.length; _oi++)
+            orbTextures[_oi] = new Texture(Gdx.files.internal(OrbRegistry.get(_oi).textureKey));
+        texOrbSpark     = orbTextures[0];
+        texOrbBlaze     = orbTextures[1];
+        texOrbFrost     = orbTextures[2];
         texOverloadHorn  = new Texture(Gdx.files.internal("ui/skill_overload_horn.png"));
         texOverloadDrill = new Texture(Gdx.files.internal("ui/skill_overload_drill.png"));
         texLock         = genLockTexture(28);
@@ -9891,9 +9917,7 @@ public class EngineeringLabScreen extends ScreenAdapter {
         texRocket.dispose();
         texHandDrag.dispose();
         texLock.dispose();
-        if (texOrbSpark != null) texOrbSpark.dispose();
-        if (texOrbBlaze != null) texOrbBlaze.dispose();
-        if (texOrbFrost != null) texOrbFrost.dispose();
+        if (orbTextures != null) for (Texture _ot : orbTextures) if (_ot != null) _ot.dispose();
         if (texOverloadHorn  != null) texOverloadHorn.dispose();
         if (texOverloadDrill != null) texOverloadDrill.dispose();
         texPerkSpeed.dispose();
