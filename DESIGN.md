@@ -2,95 +2,112 @@
 
 > Living design doc for the reimagined idle game on branch `feat/active-lab-mechanics`.
 
-## Core Identity
-Physics-bounce idle + **active Dota-style skills** + persistent meta growth. Unique hook: **spinning centrifuge drum** (centrifugal force as a mechanic) + active skills on Box2D orbs. The individual parts are borrowed; the *combination* is fresh.
+## Core Identity — PURE IDLE (pivot 2026-06-03)
+Physics-bounce **pure idle** + persistent meta growth. Unique hook: **spinning centrifuge drum** (centrifugal force as a mechanic) on real Box2D orbs. **No active skills, no tapping in the arena.** Each orb has ONE always-on **passive** that defines it. The arena is a satisfying screensaver that pays out; the *game* is the build (loadout + upgrades + synergies).
+
+> PIVOT NOTE: earlier this branch had active Dota-style skills (DASH, OVERLOAD, REV POL, SNOW WAVE) + mana. Those are being removed. The cool visuals (drill, snow wave) survive as **auto-firing passive effects on a timer**, not tap skills. Mana system deleted.
 
 Closest references:
-- **Ballionaire** (PC) — physics objects + draft synergies + run meta
-- **Archero / Survivor.io** (mobile) — loadout + draft + meta perks
-- **Idle Breakout** (mobile) — orb economy, buy more balls
+- **Idle Breakout** (mobile) — orb economy, buy more balls, pure idle
+- **Ballionaire** (PC) — physics + synergy builds + run meta
+- **Spinner / centrifuge idle** clones — passive payout from physics
 
-## The 30-Second Loop (the thing that must feel good)
-- **Risk:** currently likely "watch 90%, tap 10%" = idler, not active game.
-- **Fix direction:** mana refills fast enough to tap every ~5–8s; each tap visibly spikes income; real choice = "spend mana now (small gain) or save for OVERLOAD combo (big gain)."
-- **Test:** when playtesting, am I *tapping* or *staring*? Staring = loop is broken.
+## Where Engagement Lives (no arena tapping)
+- **In-arena interaction: zero.** Watch orbs bounce, passives auto-fire.
+- **Build interaction: everything.** Pick orbs (loadout), upgrade passive ranks, unlock orbs, chase passive synergies, draft center-break perks.
+- The "is it fun?" test moves from "am I tapping?" to **"is the next upgrade/unlock decision tempting?"**
+
+## Passive System (replaces active skills)
+- **Each orb = 1 unique always-on passive** (its identity).
+- **SP upgrades the passive rank 1->3** (keeps the tall/wide economy intact).
+- **No mana, no cooldowns, no buttons.**
+- Passive draft per orb (current identities converted):
+
+| Orb | Passive (always on) | Rank scales |
+|-----|--------------------|-------------|
+| **SPARK** | Fast & charged — every hit +energy; periodic auto-dash burst | dash freq / energy % |
+| **BLAZE** | Overload aura — periodically grows drill, shoves nearby orbs; wall hit = self speed boost | aura freq / push force |
+| **FROST** | Cryo field — slows nearby orbs + heavier hits (more energy per collision) | slow radius / mass |
 
 ## Progression Structure
 ```
 Start: 1 orb
 Earn money -> SPEND CHOICE (same currency = real tension):
-   - upgrade existing skill (TALL / deep)
-   - unlock new orb         (WIDE / broad)
+   - upgrade existing orb's PASSIVE rank (TALL / deep)
+   - unlock new orb                      (WIDE / broad)
 Planets 1-5: collect orbs (the "campaign")
-Pre-planet: SETUP/LOADOUT screen — pick N orbs, see planet modifier, adapt
+Pre-planet: SETUP/LOADOUT confirm — pick N orbs, see planet modifier, adapt
 ```
 - **Tall vs Wide tension** drives engagement — but only if money is **scarce** enough that choosing one stings.
-- **Same currency for skill-vs-orb** = every coin is a choice.
+- **Same currency for passive-vs-orb** = every coin is a choice.
 - **Planet modifier must drive loadout** (e.g. high gravity -> bring heavy FROST), else setup is cosmetic.
-- **Concern:** 1-orb start may feel empty -> make orb #1 skills instantly fun (DASH), unlock orb #2 *fast* (planet 1 clear).
+- **Concern:** 1-orb start may feel empty -> make orb #1 passive instantly satisfying, unlock orb #2 *fast* (planet 1 clear).
 
-## Onboarding Flow (continuous model — first 10 minutes)
-"Hook, Loop, Progress." Strip all late-game clutter at start: one orb, one skill, one choice. Reveal complexity slowly.
+## Spawn & Loadout Model
+- **Auto-spawn, no slingshot.** Equipped orbs appear in the drum on planet entry and bounce forever. Drag-to-launch removed (legacy from the old placement game).
+- **Loadout editable in two places:** a Loadout section in the Upgrades tab (swap anytime) AND a pre-planet confirm step that shows the planet modifier + current loadout before entry.
+- **Slots** = how many orbs you field at once (1 -> 5), grown via crystals/perks.
+
+## Onboarding Flow (pure idle — first 10 minutes)
+"Hook, Loop, Progress." Strip all late-game clutter at start: one orb, one passive, one choice. Reveal complexity slowly. The hook is the *upgrade*, not a tap.
 
 **Phase 1 — Humble beginning (Planet 1, min 1)**
-- Screen opens: **1 orb already bouncing** in the drum (continuous, no launch).
-- Bottom deck empty except **one flashing button: [DASH]** (punchy starter, NOT a defensive skill).
-- Other 3 skill slots + rest of roster = locked / greyed with lock icon.
-- Player taps DASH -> orb rockets forward, plows rings/bumpers, **SP scatters**.
-- Mana refills -> tap again. They learn: *tap = power spike*.
+- Screen opens: **1 orb already bouncing** in the drum, its passive visibly firing on a timer (e.g. SPARK auto-dash burst).
+- No skill buttons. Bottom shows only **SP ticking up** + a pulsing "Upgrades" tab badge.
+- Player watches energy scatter, gets pulled to the Upgrades tab.
 
 **Phase 2 — First taste (the hook)**
 - Switch to Upgrades tab, ~120 SP collected.
-- **Only option:** DASH Rank 1->2 for 100 SP. Buy.
-- Back in drum: DASH faster, bigger impact, ~2x income on tap. *Felt* the upgrade.
+- **Only option:** upgrade SPARK passive Rank 1->2 for 100 SP. Buy.
+- Back in drum: dashes fire more often / harder, ~2x income. *Felt* the upgrade — the passive visibly leveled.
 
 **Phase 3 — Crossroads (~350 SP)**
 - Upgrades tab evolved. Brutal choice (same currency = it stings):
-  - **Go Tall:** DASH R3, or unlock 2nd skill OVERLOAD (~300 SP)
-  - **Go Wide:** unlock 2nd orb SPARK (diff weight/skill) + 1 orb slot (~350 SP)
-- Wide = new toy immediately bouncing alongside. Tall = workhorse becomes a monster.
+  - **Go Tall:** SPARK passive R3 (~300 SP) — workhorse becomes a monster
+  - **Go Wide:** unlock 2nd orb BLAZE (diff weight + diff passive) + 1 orb slot (~350 SP)
+- Wide = new orb immediately bouncing alongside, its passive auto-firing too. Tall = one orb dominates.
 
-**Continuous-model notes:**
-- Income comes from continuous bouncing; **tap = burst multiplier on top**, not the only income.
-- Starter skill must be punchy (DASH / drill), never defensive Shield — first taste = power.
-- "Add slot" = more orbs in the drum (not more launches).
+**Pure-idle notes:**
+- All income is continuous bouncing + passive auto-effects. No taps, no bursts-on-demand.
+- First passive must be *visibly* satisfying (SPARK auto-dash, sparks fly) so minute-1 reads as "alive".
+- "Add slot" = more orbs in the drum.
 
-## The 30s Rhythm Fix (continuous = passive risk)
-- Mana refills every ~5–8s -> tap that often.
-- **Each tap = visible SP burst** (number pops, combo meter).
-- Choice each window: tap small skill now, or bank mana for OVERLOAD combo.
+## The Idle Engagement Check (no tapping = build must carry it)
+- Every ~30-60s the player should have a **tempting upgrade decision** waiting (SP banked toward next rank, or crystals toward next orb).
+- **Each upgrade visibly changes the arena** (passive bigger/faster/brighter) so progress is *seen*, not just a number.
+- The hook is "one more upgrade", not "one more tap". Pace SP/crystal income so a decision is always ~near.
 
 ## Screen Structure — Two Tabs
 ```
 [ ARENA tab ]            [ UPGRADES tab ]
 orbs bounce in drum      shop / progression
-tap skills               spend SP / crystals
+passives auto-fire       spend SP / crystals
 watch SP tick            Tall vs Wide choices
 ```
 **Upgrades tab sections** (unlock progressively so minute-1 isn't overwhelming):
-1. **Skills** — per equipped orb, rank 1->3, SP cost (Go Tall)
+1. **Passives** — per equipped orb, rank 1->3, SP cost (Go Tall)
 2. **Roster** — locked/unlocked orbs, crystal cost to unlock (Go Wide)
 3. **Slots** — buy extra orb slots (crystals)
-4. **Loadout** — pick which N orbs go in drum; pre-planet setup lives here
+4. **Loadout** — pick which N orbs go in drum; mirrored in pre-planet confirm
 5. **Perks** — view earned center-break perks (read-only)
 
-Early game shows only **Skills**; other sections reveal as unlocked.
+Early game shows only **Passives**; other sections reveal as unlocked.
 
 ## Upgrade Dimensions (5, mapped to 3 currencies)
 | Currency | Buys | Dimension |
 |----------|------|-----------|
 | **Joules** (soft) | fuel/numbers, nothing permanent | — |
-| **SP** | skill ranks (1->3) | 1. Skill Rank |
+| **SP** | passive ranks (1->3) | 1. Passive Rank |
 | **Crystals** (hard) | orb unlocks + orb slots | 2. Roster, 3. Slots |
 | **Perks** (earned) | center-break draft | 4. Meta Perks |
 | Planets gate all | clear to advance | 5. World |
 
-Keep readable: **SP->skills, Crystals->orbs/slots, Perks->meta, Planets->gates.** Idle games die with too many currencies.
+Keep readable: **SP->passives, Crystals->orbs/slots, Perks->meta, Planets->gates.** Idle games die with too many currencies.
 
 ## Orb Roster
 - **12 orbs total**, ~9 locked at start, unlock over planets 1–5 as collection.
 - **Loadout system** (pick 3–4 of 12), NOT all-at-once (chaos / perf / clutter).
-- Each orb = id, color, radius, 4 skills, unlock cost (data-driven registry — current 3-type hardcode must become a table).
+- Each orb = id, color, radius, **1 passive** (rank 1->3), unlock cost (data-driven OrbRegistry — DONE for data; passive field TBD).
 
 ## Center-Break Perks (PERSISTENT — cozy idle growth)
 Draft **1 of 3** each center break. ~24 perk pool.
@@ -103,9 +120,9 @@ Draft **1 of 3** each center break. ~24 perk pool.
 
 **Orb power**
 - Twin Core — +1 orb slot (RARE)
-- Skill Surge — all skills -20% mana cost
-- Quick Charge — mana regen +30%
-- Rank Boost — all skills +1 effective rank (capped 3)
+- Passive Boost — all orb passives +1 effective rank (capped 3)
+- Rapid Pulse — all passive auto-timers fire 25% faster
+- Wider Field — passive effect radii +30%
 
 **Physics / feel**
 - Hyperspin — drum +20% spin (more centrifugal energy)
@@ -113,11 +130,11 @@ Draft **1 of 3** each center break. ~24 perk pool.
 - Heavy Core — orbs +30% mass (harder hits, slower)
 - Low-G Mastery — gravity effect -25% (longer airtime)
 
-**Skill-specific (build-defining)**
-- Marked Field — MARKER bumpers permanent, no hit limit
-- Drill Master — OVERLOAD drill always on, no mana
-- Frostbite — FROST GRAVITY pulls 50% stronger
-- Echo — every skill activates twice
+**Passive-specific (build-defining)**
+- Marked Field — SPARK auto-markers become permanent bumpers
+- Drill Master — BLAZE overload aura always at max
+- Frostbite — FROST cryo field slows 50% more + bigger radius
+- Echo — every passive auto-effect fires twice
 
 **Meta / risk**
 - Glass Cannon — +40% joules, but -1 orb slot
@@ -133,13 +150,20 @@ Draft **1 of 3** each center break. ~24 perk pool.
 4. **Each planet = NEW mechanic wall** perks don't auto-solve (P6: energy decays unless fast; P7: only bumper hits count) -> power isn't the only answer.
 5. **Lean into crushing old planets** -> they become auto-farm income while you push frontier. That's the idle reward, not a bug.
 
-## Current Skills (implemented)
-- **SPARK** (purple): DASH (burst fwd), MARKER (wall hit -> volcano bumper), OVERDRIVE (min speed), SPLIT (extra orbs)
-- **BLAZE** (orange): SHIELD, MAGNET (pull orbs), OVERLOAD (spinning drill, wall hit = speed boost), REV POL (multi-pulse pull to center)
-- **FROST** (cyan): ATTACH (park+spin wall), ICE RUSH (detach charged strike), BIG (2x physics size + dmg), SNOW WAVE (spiral inward pull)
+## Legacy Active Skills (being removed in pivot)
+These were built earlier this branch as TAP skills + mana. The pivot converts each orb's identity into ONE auto-firing passive; the rest are dropped. Visuals (drill, snow wave, volcano) are reused as passive effects.
+- **SPARK**: DASH, MARKER (volcano bumper), OVERDRIVE, SPLIT
+- **BLAZE**: SHIELD, MAGNET, OVERLOAD (spinning drill), REV POL
+- **FROST**: ATTACH, ICE RUSH, BIG, SNOW WAVE (spiral pull)
+
+## Implementation Status
+- [x] Phase 1 — OrbRegistry data-driven (stats/skills/costs/textures)
+- [x] Phase 2A — OrbType enum -> registry index
+- [ ] Phase 2B — DROPPED (was dynamic roster UI on legacy buttons)
+- [ ] PIVOT build (current): delete active skills + mana; add 1 passive/orb (auto-fire, rank 1-3); SP upgrades passive; auto-spawn loadout; Upgrades tab (Passives/Roster/Slots/Loadout/Perks); pre-planet confirm
 
 ## Open Questions / Next Steps
+- Lock the 3 starter passives' exact behavior + rank scaling numbers
 - Draft planet-cost curve numbers
 - Design the "new wall per planet" mechanics
-- Pick the 12-orb roster + their skills
-- Refactor 3-type hardcode -> data-driven orb registry (big code task)
+- Pick the 12-orb roster + their passives
