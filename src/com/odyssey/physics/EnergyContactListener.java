@@ -51,7 +51,7 @@ public class EnergyContactListener implements ContactListener {
                 boolean _isFrost = (_aInt && "INTERN_FROST".equals(bodyA.getUserData()))
                                 || (_bInt && "INTERN_FROST".equals(bodyB.getUserData()));
                 int _dmg = 1;
-                if (_isBlaze && _sd0.blazeOverloadHits > 0) { _dmg = 3; _sd0.blazeOverloadHits--; }
+                if (_isBlaze && _sd0.blazeOverloadHits > 0) { _dmg = _sd0.blazeOverloadMult; _sd0.blazeOverloadHits--; }
                 if (_isFrost && _sd0.frostBigActive) _dmg = Math.max(_dmg, 3);
                 boolean _frostRingHit = _isFrost && (aIsRing || bIsRing);
                 if (_frostRingHit && _sd0.frostChargedHits > 0) { _dmg = Math.max(_dmg, 4); _sd0.frostChargedHits--; }
@@ -63,10 +63,6 @@ public class EnergyContactListener implements ContactListener {
                         _rhd.hitsRemaining -= _dmg;
                         if (_rhd.hitsRemaining <= 0) _rhd.readyToDestroy = true;
                         if (_bInt && !_skipSlow) { Vector2 _sv = bodyB.getLinearVelocity(); bodyB.setLinearVelocity(_sv.x * 0.60f, _sv.y * 0.60f); }
-                        // MARKER: if SPARK hits its marked ring, trigger dash
-                        if ("INTERN_SPARK".equals(bodyB.getUserData()) && _sd0.sparkMarkedRing == _rhd.ringIndex) {
-                            _sd0.sparkMarkedRing = -1; _sd0.sparkMarkerDashPending = true;
-                        }
                     }
                 }
                 if (bIsRing) {
@@ -76,9 +72,6 @@ public class EnergyContactListener implements ContactListener {
                         _rhd.hitsRemaining -= _dmg;
                         if (_rhd.hitsRemaining <= 0) _rhd.readyToDestroy = true;
                         if (_aInt && !_skipSlow) { Vector2 _sv = bodyA.getLinearVelocity(); bodyA.setLinearVelocity(_sv.x * 0.60f, _sv.y * 0.60f); }
-                        if ("INTERN_SPARK".equals(bodyA.getUserData()) && _sd0.sparkMarkedRing == _rhd.ringIndex) {
-                            _sd0.sparkMarkedRing = -1; _sd0.sparkMarkerDashPending = true;
-                        }
                     }
                 }
                 if (aIsCenter) {
@@ -201,6 +194,22 @@ public class EnergyContactListener implements ContactListener {
             sd.pendingCollisionSounds++;
             queueFloatNum(contact, bodyA, bodyB, sparks, 1, sd);
 
+            // FROST ATTACH: wall-pinned FROST acts as a power bumper — blast the other orb away hard
+            boolean aIsFrostAttach = sd.frostAttachWallActive && "INTERN_FROST".equals(bodyA.getUserData());
+            boolean bIsFrostAttach = sd.frostAttachWallActive && "INTERN_FROST".equals(bodyB.getUserData());
+            if (aIsFrostAttach || bIsFrostAttach) {
+                Body _otherBody = aIsFrostAttach ? bodyB : bodyA;
+                // Pull toward drum center
+                float _ocx = _otherBody.getPosition().x - 4.0f; // CENTRIFUGE_CX
+                float _ocy = _otherBody.getPosition().y - 9.5f; // CENTRIFUGE_CY
+                float _ol = (float) Math.sqrt(_ocx*_ocx + _ocy*_ocy);
+                if (_ol > 0.01f) {
+                    _otherBody.applyLinearImpulse(-_ocx/_ol * 14f, -_ocy/_ol * 14f,
+                        _otherBody.getPosition().x, _otherBody.getPosition().y, true);
+                }
+                return;
+            }
+
             // Mutual separation impulse keeps the chaos alive
             normVec.set(bodyB.getPosition()).sub(bodyA.getPosition());
             if (normVec.len2() > 0.0001f) {
@@ -235,11 +244,13 @@ public class EnergyContactListener implements ContactListener {
             if (aIsIntern || bIsIntern) {
                 if (aIsStdBumper) {
                     ShipData.BumperHitData bhd = (ShipData.BumperHitData) bodyA.getUserData();
-                    if (!bhd.harvestPending && ++bhd.hitCount >= 10) bhd.harvestPending = true;
+                    if (bhd.isMarkerBumper) { if (--bhd.markerHitsLeft <= 0) bhd.harvestPending = true; }
+                    else if (!bhd.harvestPending && ++bhd.hitCount >= 10) bhd.harvestPending = true;
                 }
                 if (bIsStdBumper) {
                     ShipData.BumperHitData bhd = (ShipData.BumperHitData) bodyB.getUserData();
-                    if (!bhd.harvestPending && ++bhd.hitCount >= 10) bhd.harvestPending = true;
+                    if (bhd.isMarkerBumper) { if (--bhd.markerHitsLeft <= 0) bhd.harvestPending = true; }
+                    else if (!bhd.harvestPending && ++bhd.hitCount >= 10) bhd.harvestPending = true;
                 }
                 if (attractorHit) {
                     if (bodyA.getUserData() instanceof ShipData.AttractorHitData) {
@@ -255,6 +266,16 @@ public class EnergyContactListener implements ContactListener {
 
         } else if (aIsIntern || bIsIntern) {
             // ---- Wall / ring contact ----
+            // MARKER: on next SPARK wall hit, queue a bumper spawn at contact point (colorType=10)
+            boolean _sparkWall = (aIsIntern && "INTERN_SPARK".equals(bodyA.getUserData()))
+                               || (bIsIntern && "INTERN_SPARK".equals(bodyB.getUserData()));
+            if (_sparkWall && sd.sparkMarkedRing >= 0) {
+                sd.sparkMarkedRing = -1;
+                WorldManifold _wm = contact.getWorldManifold();
+                float _cx = _wm.getNumberOfContactPoints() > 0 ? _wm.getPoints()[0].x : bodyA.getPosition().x;
+                float _cy = _wm.getNumberOfContactPoints() > 0 ? _wm.getPoints()[0].y : bodyA.getPosition().y;
+                sd.pendingContactEvents.add(new float[]{_cx, _cy, 0f, 10f});
+            }
             float wallGain = SPARK_WALL * sd.wallEnergyMult;
             if (wallGain > 0f) {
                 sd.addCrystals(wallGain);

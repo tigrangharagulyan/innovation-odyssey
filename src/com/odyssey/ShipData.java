@@ -17,6 +17,8 @@ public final class ShipData {
 
         public boolean isArmBumper    = false;
         public boolean isValleyBlade  = false;
+        public boolean isMarkerBumper = false;
+        public int     markerHitsLeft = 0;    // for marker bumpers: remaining hits before despawn
         public long    lastHitMs      = 0L;
         public int     hitCount       = 0;    // counts intern contacts; caps at 10
         public boolean harvestPending = false; // true when hitCount reached 10
@@ -248,13 +250,15 @@ public final class ShipData {
     public boolean blazeDoubleDamage  = false;  // legacy — kept for OVERLOAD reuse
     public boolean blazeBurnActive    = false;  // legacy — kept
     public boolean blazeShieldActive  = false;  // skill 0: SHIELD — fast ring hits
-    public int     blazeOverloadHits  = 0;      // skill 2: OVERLOAD — hits left at 3×
+    public int     blazeOverloadHits  = 0;      // skill 2: OVERLOAD — hits remaining
+    public int     blazeOverloadMult  = 3;      // skill 2: OVERLOAD — damage multiplier (rank-scaled)
     // SPARK active skill flags
     public boolean sparkChainActive      = false;  // legacy
     public int     sparkChainPendingRing = -1;     // legacy
     public int     sparkMarkedRing       = -1;     // MARKER: which ring is marked (-1=none)
     public boolean sparkMarkerDashPending = false; // set true when marked ring is hit
     // FROST active skill flags
+    public boolean frostAttachWallActive = false;   // FROST ATTACH: pinned to wall — bounces are powerful
     public boolean frostBigActive       = false;   // FROST slot 2: BIG — 2× damage
     public int     frostChargedHits     = 0;       // ICE RUSH from ATTACH: next N hits deal 4× damage
     public boolean frostGravityActive  = false;   // FROST slot 3: GRAVITY — pull/push
@@ -268,6 +272,10 @@ public final class ShipData {
     public boolean frostFreezeActive  = false;
     public int pendingBumperSounds    = 0;
     public int pendingCollisionSounds = 0;
+
+    // Skill rank upgrades: [orbType 0=SPARK,1=BLAZE,2=FROST][slot 0-3]
+    // 1=basic, 2=enhanced, 3=mastered
+    public int[][] skillRank = {{1,1,1,1},{1,1,1,1},{1,1,1,1}};
 
     public static final float SOLARA_GRAVITY  = 1.0f;
     public static final float SOLARA_DISTANCE = 1000f;
@@ -642,6 +650,9 @@ public final class ShipData {
         p.putBoolean("emHeavy", savedEmberHeavyChassis);
         p.putBoolean("emMag",   savedEmberMagneticRim);
         p.putInteger("hubTier", savedHubUpgradeTier);
+        for (int _r = 0; _r < 3; _r++)
+            for (int _s = 0; _s < 4; _s++)
+                p.putInteger("skillRank_" + _r + "_" + _s, skillRank[_r][_s]);
         p.putInteger("ballCount", savedBallCount);
         p.putInteger("kineticBladeCount",  savedKineticBladeCount);
         p.putInteger("fhDecision",         savedFrostheimDecision);
@@ -760,6 +771,9 @@ public final class ShipData {
         savedEmberHeavyChassis     = p.getBoolean("emHeavy", false);
         savedEmberMagneticRim      = p.getBoolean("emMag",   false);
         savedHubUpgradeTier        = p.getInteger("hubTier", 0);
+        for (int _r = 0; _r < 3; _r++)
+            for (int _s = 0; _s < 4; _s++)
+                skillRank[_r][_s] = p.getInteger("skillRank_" + _r + "_" + _s, 1);
         savedBallCount             = p.getInteger("ballCount", 0);
         savedKineticBladeCount           = p.getInteger("kineticBladeCount",  0);
         savedFrostheimDecision           = p.getInteger("fhDecision",         0);
